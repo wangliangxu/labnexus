@@ -348,6 +348,70 @@ pub async fn jupyter_set_active(
     Ok(())
 }
 
+/// Restart a stopped JupyterHub server from a Hub spawn URL and reconnect.
+#[tauri::command]
+pub async fn jupyter_restart_hub_server(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    server_id: String,
+    restart_url: String,
+) -> Result<ServerConnection, AppError> {
+    let config = {
+        let connections = state.connections.read().await;
+        connections
+            .get(&server_id)
+            .map(|connection| connection.config.clone())
+            .ok_or_else(|| AppError::ServerNotFound(server_id.clone()))?
+    };
+    let token = config.token.clone().ok_or_else(|| {
+        AppError::JupyterAuth("Restarting a JupyterHub server requires a saved token".to_string())
+    })?;
+    let target = parse_hub_spawn_target(&restart_url)?;
+    let http = crate::jupyter::client::build_http_client(config.proxy.as_ref())?;
+
+    let _ = app.emit(
+        "jupyter:connection",
+        serde_json::json!({
+            "server_id": &server_id,
+            "status": "connecting",
+            "message": "Restarting JupyterHub server..."
+        }),
+    );
+
+    let spawn_res = http
+        .post(target.spawn_api_url())
+        .header("Authorization", format!("token {}", token))
+        .send()
+        .await
+        .map_err(|e| AppError::JupyterConnection(format!("Failed to restart server: {}", e)))?;
+    let spawn_status = spawn_res.status();
+    if !spawn_status.is_success()
+        && spawn_status != reqwest::StatusCode::BAD_REQUEST
+        && spawn_status != reqwest::StatusCode::CONFLICT
+    {
+        let body = spawn_res
+            .text()
+            .await
+            .unwrap_or_else(|_| "Unknown error".to_string());
+        return Err(AppError::JupyterConnection(format!(
+            "Failed to restart server (HTTP {}): {}",
+            spawn_status.as_u16(),
+            body
+        )));
+    }
+
+    for _ in 0..30 {
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        if hub_server_is_ready(&http, &target, &token).await {
+            return jupyter_connect(state, app, config).await;
+        }
+    }
+
+    Err(AppError::JupyterConnection(
+        "Timed out waiting for JupyterHub server to restart".to_string(),
+    ))
+}
+
 // ─── Contents API Commands ─────────────────────────────────────────────
 
 /// List files and directories at a given path.
@@ -678,6 +742,109 @@ pub async fn jupyter_disconnect_terminal(
 
 // ─── Helpers ───────────────────────────────────────────────────────────
 
+#[derive(Debug, PartialEq)]
+struct HubSpawnTarget {
+    base_url: String,
+    username: String,
+    server_name: Option<String>,
+}
+
+impl HubSpawnTarget {
+    fn user_api_url(&self) -> String {
+        format!("{}/hub/api/users/{}", self.base_url, self.username)
+    }
+
+    fn spawn_api_url(&self) -> String {
+        match &self.server_name {
+            Some(server_name) => format!(
+                "{}/hub/api/users/{}/servers/{}",
+                self.base_url, self.username, server_name
+            ),
+            None => format!("{}/hub/api/users/{}/servers/", self.base_url, self.username),
+        }
+    }
+}
+
+fn parse_hub_spawn_target(restart_url: &str) -> Result<HubSpawnTarget, AppError> {
+    let parsed = url::Url::parse(restart_url)
+        .map_err(|e| AppError::JupyterConnection(format!("Invalid restart URL: {}", e)))?;
+    let base_url = format!(
+        "{}://{}",
+        parsed.scheme(),
+        parsed
+            .host_str()
+            .ok_or_else(|| AppError::JupyterConnection("Restart URL missing host".to_string()))?
+    );
+    let base_url = match parsed.port() {
+        Some(port) => format!("{}:{}", base_url, port),
+        None => base_url,
+    };
+    let segments: Vec<_> = parsed
+        .path_segments()
+        .ok_or_else(|| AppError::JupyterConnection("Restart URL missing path".to_string()))?
+        .collect();
+    let spawn_index = segments
+        .windows(2)
+        .position(|window| window == ["hub", "spawn"])
+        .ok_or_else(|| {
+            AppError::JupyterConnection("Restart URL is not a JupyterHub spawn URL".to_string())
+        })?;
+    let username = segments
+        .get(spawn_index + 2)
+        .filter(|segment| !segment.is_empty())
+        .ok_or_else(|| AppError::JupyterConnection("Restart URL missing username".to_string()))?
+        .to_string();
+    let server_name = segments
+        .get(spawn_index + 3)
+        .filter(|segment| !segment.is_empty())
+        .map(|segment| segment.to_string());
+
+    Ok(HubSpawnTarget {
+        base_url,
+        username,
+        server_name,
+    })
+}
+
+async fn hub_server_is_ready(
+    http: &reqwest::Client,
+    target: &HubSpawnTarget,
+    token: &str,
+) -> bool {
+    let Ok(response) = http
+        .get(target.user_api_url())
+        .header("Authorization", format!("token {}", token))
+        .send()
+        .await
+    else {
+        return false;
+    };
+    if !response.status().is_success() {
+        return false;
+    }
+
+    let Ok(user_data) = response.json::<serde_json::Value>().await else {
+        return false;
+    };
+    let Some(servers) = user_data.get("servers").and_then(|value| value.as_object()) else {
+        return false;
+    };
+
+    match &target.server_name {
+        Some(server_name) => servers
+            .get(server_name)
+            .and_then(|server| server.get("ready"))
+            .and_then(|ready| ready.as_bool())
+            == Some(true),
+        None => servers.values().any(|server| {
+            server
+                .get("ready")
+                .and_then(|ready| ready.as_bool())
+                == Some(true)
+        }),
+    }
+}
+
 /// Get a client for the specified server, or the active server if unspecified.
 async fn get_client(state: &AppState, server_id: Option<&str>) -> Result<JupyterClient, AppError> {
     match server_id {
@@ -686,5 +853,28 @@ async fn get_client(state: &AppState, server_id: Option<&str>) -> Result<Jupyter
             .await
             .ok_or_else(|| AppError::ServerNotFound(id.to_string())),
         None => state.active_client().await.ok_or(AppError::NotConnected),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hub_spawn_url_converts_to_default_server_api_paths() {
+        let target = parse_hub_spawn_target("https://ius16.dataincity.com/hub/spawn/wlx")
+            .expect("spawn URL should parse");
+
+        assert_eq!(target.base_url, "https://ius16.dataincity.com");
+        assert_eq!(target.username, "wlx");
+        assert_eq!(target.server_name, None);
+        assert_eq!(
+            target.user_api_url(),
+            "https://ius16.dataincity.com/hub/api/users/wlx"
+        );
+        assert_eq!(
+            target.spawn_api_url(),
+            "https://ius16.dataincity.com/hub/api/users/wlx/servers/"
+        );
     }
 }

@@ -17,6 +17,7 @@ import {
   jupyterDisconnect,
   jupyterListServers,
   jupyterSetActive,
+  jupyterRestartHubServer,
 } from '../services/tauriIpc';
 import {
   forgetServerConfig,
@@ -24,6 +25,11 @@ import {
   saveServerConfig,
   toDisconnectedConnections,
 } from './jupyterServerStorage';
+import { markServerConnectionError } from './jupyterConnectionState';
+import {
+  getJupyterConnectionErrorRecovery,
+  normalizeJupyterConnectionErrorMessage,
+} from '../jupyterConnectionErrors';
 
 interface UseJupyterReturn {
   /** All server connections */
@@ -46,6 +52,10 @@ interface UseJupyterReturn {
   forget: (serverId: string) => void;
   /** Set the active server */
   setActive: (serverId: string) => Promise<void>;
+  /** Mark a server as errored after a connection-level operation fails */
+  markServerError: (serverId: string, message: string) => void;
+  /** Restart a stopped JupyterHub server and reconnect */
+  restartHubServer: (serverId: string, restartUrl: string) => Promise<void>;
   /** Refresh the server list */
   refresh: () => Promise<void>;
   /** Clear the error */
@@ -118,11 +128,15 @@ export function useJupyter(): UseJupyterReturn {
           setActiveServerId(config.id);
         }
       } catch (e: unknown) {
-        const msg =
+        const rawMsg =
           typeof e === 'object' && e !== null && 'message' in e
             ? (e as { message: string }).message
             : String(e);
+        const msg = normalizeJupyterConnectionErrorMessage(rawMsg);
         setError(msg);
+        if (getJupyterConnectionErrorRecovery(rawMsg).canReconnect) {
+          setServers((prev) => markServerConnectionError(prev, config.id, msg));
+        }
       } finally {
         setIsConnecting(false);
       }
@@ -150,10 +164,11 @@ export function useJupyter(): UseJupyterReturn {
           setActiveServerId(connection.config.id);
         }
       } catch (e: unknown) {
-        const msg =
+        const rawMsg =
           typeof e === 'object' && e !== null && 'message' in e
             ? (e as { message: string }).message
             : String(e);
+        const msg = normalizeJupyterConnectionErrorMessage(rawMsg);
         setError(msg);
       } finally {
         setIsConnecting(false);
@@ -217,6 +232,41 @@ export function useJupyter(): UseJupyterReturn {
 
   const clearError = useCallback(() => setError(null), []);
 
+  const markServerError = useCallback((serverId: string, message: string) => {
+    setServers((prev) => markServerConnectionError(prev, serverId, message));
+  }, []);
+
+  const restartHubServer = useCallback(
+    async (serverId: string, restartUrl: string) => {
+      setIsConnecting(true);
+      setError(null);
+      try {
+        const connection = await jupyterRestartHubServer(serverId, restartUrl);
+        setServers((prev) => {
+          const existing = prev.findIndex((server) => server.config.id === serverId);
+          if (existing >= 0) {
+            const updated = [...prev];
+            updated[existing] = connection;
+            return updated;
+          }
+          return [...prev, connection];
+        });
+        setActiveServerId(serverId);
+      } catch (e: unknown) {
+        const rawMsg =
+          typeof e === 'object' && e !== null && 'message' in e
+            ? (e as { message: string }).message
+            : String(e);
+        const msg = normalizeJupyterConnectionErrorMessage(rawMsg);
+        setError(msg);
+        setServers((prev) => markServerConnectionError(prev, serverId, msg));
+      } finally {
+        setIsConnecting(false);
+      }
+    },
+    []
+  );
+
   return {
     servers,
     activeServerId,
@@ -228,6 +278,8 @@ export function useJupyter(): UseJupyterReturn {
     reconnect,
     forget,
     setActive,
+    markServerError,
+    restartHubServer,
     refresh,
     clearError,
   };

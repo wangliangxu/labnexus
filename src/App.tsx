@@ -19,6 +19,10 @@ import type { AgentChatContext } from './types/agent';
 import { useJupyter } from './hooks/useJupyter';
 import { jupyterCreateTerminal } from './services/tauriIpc';
 import { resolveServerSelectionViewMode, type ViewMode } from './appViewMode';
+import {
+  getJupyterConnectionErrorRecovery,
+  normalizeJupyterConnectionErrorMessage,
+} from './jupyterConnectionErrors';
 import './index.css';
 import './components/agent/Agent.css';
 
@@ -34,6 +38,8 @@ function App() {
     reconnect,
     forget,
     setActive,
+    markServerError,
+    restartHubServer,
   } = useJupyter();
 
   const [viewMode, setViewMode] = useState<ViewMode>('connect');
@@ -47,6 +53,10 @@ function App() {
     () => servers.find((s) => s.config.id === activeServerId) ?? null,
     [servers, activeServerId]
   );
+  const appErrorRecovery = getJupyterConnectionErrorRecovery(error);
+  const appErrorMessage = error
+    ? normalizeJupyterConnectionErrorMessage(error)
+    : null;
 
   // Auto-switch to explorer view after connection
   const handleConnect = async (config: Parameters<typeof connect>[0]) => {
@@ -246,7 +256,25 @@ function App() {
               isConnecting={isConnecting}
             />
           ) : (
-            <FileExplorer activeServer={activeServer} onFileOpen={handleFileOpen} />
+            <FileExplorer
+              activeServer={activeServer}
+              onFileOpen={handleFileOpen}
+              onReconnect={
+                activeServer ? () => reconnect(activeServer.config.id) : undefined
+              }
+              onRestartServer={
+                activeServer
+                  ? (restartUrl) =>
+                      restartHubServer(activeServer.config.id, restartUrl)
+                  : undefined
+              }
+              onConnectionLost={
+                activeServer
+                  ? (message) => markServerError(activeServer.config.id, message)
+                  : undefined
+              }
+              isReconnecting={isConnecting}
+            />
           )}
         </div>
 
@@ -260,9 +288,24 @@ function App() {
               background: 'var(--color-error-subtle)',
               borderTop: '1px solid var(--border-subtle)',
               flexShrink: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
             }}
           >
-            ⚠️ {error}
+            <span>⚠️ {appErrorMessage}</span>
+            {appErrorRecovery.restartUrl && activeServer && (
+              <button
+                className="btn btn-sm btn-ghost"
+                onClick={() =>
+                  restartHubServer(activeServer.config.id, appErrorRecovery.restartUrl!)
+                }
+                disabled={isConnecting}
+                type="button"
+              >
+                {isConnecting ? 'Restarting...' : 'Restart server'}
+              </button>
+            )}
           </div>
         )}
       </div>

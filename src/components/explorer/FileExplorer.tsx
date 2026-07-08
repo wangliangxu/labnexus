@@ -5,18 +5,35 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { ContentItem, ServerConnection } from '../../types/jupyter';
 import { jupyterListContents } from '../../services/tauriIpc';
+import {
+  getExplorerErrorRecovery,
+  normalizeExplorerErrorMessage,
+} from './fileExplorerErrors';
 import { normalizeContentItems, type TreeNode } from './fileExplorerTree';
 import './FileExplorer.css';
 
 interface FileExplorerProps {
   activeServer: ServerConnection | null;
   onFileOpen: (path: string, type: string) => void;
+  onReconnect?: () => Promise<void> | void;
+  onRestartServer?: (restartUrl: string) => Promise<void> | void;
+  onConnectionLost?: (message: string) => void;
+  isReconnecting?: boolean;
 }
 
-export function FileExplorer({ activeServer, onFileOpen }: FileExplorerProps) {
+export function FileExplorer({
+  activeServer,
+  onFileOpen,
+  onReconnect,
+  onRestartServer,
+  onConnectionLost,
+  isReconnecting = false,
+}: FileExplorerProps) {
   const [tree, setTree] = useState<TreeNode[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const errorRecovery = getExplorerErrorRecovery(error);
+  const errorMessage = error ? normalizeExplorerErrorMessage(error) : null;
 
   // Load root directory when server connects
   useEffect(() => {
@@ -65,12 +82,31 @@ export function FileExplorer({ activeServer, onFileOpen }: FileExplorerProps) {
           msg = String(e);
         }
         setError(msg);
+        if (getExplorerErrorRecovery(msg).canReconnect) {
+          onConnectionLost?.(normalizeExplorerErrorMessage(msg));
+        }
       } finally {
         setIsLoading(false);
       }
     },
-    [activeServer]
+    [activeServer, onConnectionLost]
   );
+
+  const handleReconnect = useCallback(async () => {
+    if (!onReconnect) return;
+
+    setError(null);
+    await onReconnect();
+    await loadDirectory('');
+  }, [loadDirectory, onReconnect]);
+
+  const handleRestartServer = useCallback(async () => {
+    if (!errorRecovery.restartUrl || !onRestartServer) return;
+
+    setError(null);
+    await onRestartServer(errorRecovery.restartUrl);
+    await loadDirectory('');
+  }, [errorRecovery.restartUrl, loadDirectory, onRestartServer]);
 
   const updateTreeNode = (
     nodes: TreeNode[],
@@ -236,7 +272,11 @@ export function FileExplorer({ activeServer, onFileOpen }: FileExplorerProps) {
       </div>
 
       <div className="file-explorer__server">
-        <span className="status-dot connected" />
+        <span
+          className={`status-dot ${
+            errorRecovery.canReconnect ? 'error' : activeServer.status
+          }`}
+        />
         <span className="file-explorer__server-name truncate">
           {activeServer.config.name}
         </span>
@@ -244,7 +284,29 @@ export function FileExplorer({ activeServer, onFileOpen }: FileExplorerProps) {
 
       {error && (
         <div className="file-explorer__error">
-          <span>⚠️ {error}</span>
+          <span>⚠️ {errorMessage}</span>
+          {errorRecovery.canReconnect && onReconnect && (
+            <div className="file-explorer__error-actions">
+              <button
+                className="btn btn-sm btn-primary"
+                onClick={handleReconnect}
+                disabled={isReconnecting}
+                type="button"
+              >
+                {isReconnecting ? 'Reconnecting...' : 'Reconnect'}
+              </button>
+              {errorRecovery.restartUrl && onRestartServer && (
+                <button
+                  className="btn btn-sm btn-ghost"
+                  onClick={handleRestartServer}
+                  disabled={isReconnecting}
+                  type="button"
+                >
+                  {isReconnecting ? 'Restarting...' : 'Restart server'}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 

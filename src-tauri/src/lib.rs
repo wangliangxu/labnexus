@@ -22,6 +22,7 @@ pub fn run() {
             commands::jupyter::jupyter_disconnect,
             commands::jupyter::jupyter_list_servers,
             commands::jupyter::jupyter_set_active,
+            commands::jupyter::jupyter_restart_hub_server,
             // Jupyter Contents API
             commands::jupyter::jupyter_list_contents,
             commands::jupyter::jupyter_get_content,

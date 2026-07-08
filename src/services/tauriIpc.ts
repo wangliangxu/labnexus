@@ -39,6 +39,13 @@ export async function jupyterSetActive(serverId: string): Promise<void> {
   return invoke('jupyter_set_active', { serverId });
 }
 
+export async function jupyterRestartHubServer(
+  serverId: string,
+  restartUrl: string
+): Promise<ServerConnection> {
+  return invoke('jupyter_restart_hub_server', { serverId, restartUrl });
+}
+
 // ─── Contents API ──────────────────────────────────────────────────
 
 export async function jupyterListContents(
@@ -239,4 +246,3 @@ export async function jupyterResizeTerminal(name: string, rows: number, cols: nu
 export async function jupyterDisconnectTerminal(name: string, serverId?: string): Promise<void> {
   return invoke('jupyter_disconnect_terminal', { name, serverId });
 }
-
