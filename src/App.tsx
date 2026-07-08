@@ -1,0 +1,341 @@
+/**
+ * LabNexus — Main application entry point.
+ * Integrated with multi-tab workbench, remote terminals, dynamic theme system, and AI Agent.
+ */
+
+import { useState, useMemo } from 'react';
+import { WorkbenchLayout, type PanelId } from './layouts/WorkbenchLayout';
+import { ConnectionPanel } from './components/explorer/ConnectionPanel';
+import { FileExplorer } from './components/explorer/FileExplorer';
+import { StatusBar } from './components/common/StatusBar';
+import { WelcomeScreen } from './components/common/WelcomeScreen';
+import { WorkbenchTabs, type TabItem } from './components/common/WorkbenchTabs';
+import { NotebookEditor } from './components/notebook/NotebookEditor';
+import { TerminalPanel } from './components/terminal/TerminalPanel';
+import { TerminalSelector } from './components/terminal/TerminalSelector';
+import { SettingsPanel } from './components/settings/SettingsPanel';
+import { AgentChatPanel } from './components/agent/AgentChatPanel';
+import type { AgentChatContext } from './types/agent';
+import { useJupyter } from './hooks/useJupyter';
+import { jupyterCreateTerminal } from './services/tauriIpc';
+import './index.css';
+import './components/agent/Agent.css';
+
+type ViewMode = 'connect' | 'explore';
+
+function App() {
+  const {
+    servers,
+    activeServerId,
+    isConnecting,
+    error,
+    connect,
+    connectHub,
+    disconnect,
+    reconnect,
+    forget,
+    setActive,
+  } = useJupyter();
+
+  const [viewMode, setViewMode] = useState<ViewMode>('connect');
+  const [activePanel, setActivePanel] = useState<PanelId>('explorer');
+  const [tabs, setTabs] = useState<TabItem[]>([]);
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const [isAgentOpen, setIsAgentOpen] = useState<boolean>(false);
+  const [workspaceContext, setWorkspaceContext] = useState<AgentChatContext>({});
+
+  const activeServer = useMemo(
+    () => servers.find((s) => s.config.id === activeServerId) ?? null,
+    [servers, activeServerId]
+  );
+
+  // Auto-switch to explorer view after connection
+  const handleConnect = async (config: Parameters<typeof connect>[0]) => {
+    await connect(config);
+    setViewMode('explore');
+  };
+
+  const handleConnectHub = async (config: Parameters<typeof connectHub>[0]) => {
+    await connectHub(config);
+    setViewMode('explore');
+  };
+
+  // Open notebook or file in a tab
+  const handleFileOpen = (path: string, type: string) => {
+    const title = path.split('/').pop() || path;
+    const tabId = path;
+
+    setTabs((prev) => {
+      if (prev.some((t) => t.id === tabId)) return prev;
+      return [
+        ...prev,
+        {
+          id: tabId,
+          type: type === 'notebook' || path.endsWith('.ipynb') ? 'notebook' : 'welcome',
+          title,
+          icon: type === 'notebook' || path.endsWith('.ipynb') ? '📓' : '📄',
+          data: { path },
+        },
+      ];
+    });
+    setActiveTabId(tabId);
+  };
+
+  // Open terminal in a tab
+  const handleOpenTerminal = (name: string) => {
+    const tabId = `term-${name}`;
+    setTabs((prev) => {
+      if (prev.some((t) => t.id === tabId)) return prev;
+      return [
+        ...prev,
+        {
+          id: tabId,
+          type: 'terminal',
+          title: `terminal: ${name}`,
+          icon: '💻',
+          data: { terminalName: name },
+        },
+      ];
+    });
+    setActiveTabId(tabId);
+  };
+
+  // Create and open new terminal
+  const handleNewTerminal = async () => {
+    try {
+      const newTerm = await jupyterCreateTerminal(activeServerId || undefined);
+      handleOpenTerminal(newTerm.name);
+    } catch (err) {
+      console.error('Failed to create terminal:', err);
+    }
+  };
+
+  // Close tab and switch focus
+  const handleCloseTab = (id: string) => {
+    setTabs((prev) => {
+      const idx = prev.findIndex((t) => t.id === id);
+      if (idx === -1) return prev;
+      const nextTabs = prev.filter((t) => t.id !== id);
+
+      if (activeTabId === id) {
+        if (nextTabs.length > 0) {
+          const nextIdx = Math.min(idx, nextTabs.length - 1);
+          setActiveTabId(nextTabs[nextIdx].id);
+        } else {
+          setActiveTabId(null);
+        }
+      }
+      return nextTabs;
+    });
+  };
+
+  // Handle activity bar panel clicks
+  const handlePanelChange = (id: PanelId) => {
+    if (id === 'agent') {
+      setIsAgentOpen(!isAgentOpen);
+      return;
+    }
+    setActivePanel(id);
+  };
+
+  // Build the side panel content based on activePanel and viewMode
+  const renderPanelContent = () => {
+    if (activePanel === 'settings') {
+      return <SettingsPanel />;
+    }
+
+    if (activePanel === 'terminal') {
+      return (
+        <TerminalSelector
+          serverId={activeServerId || undefined}
+          onSelectTerminal={handleOpenTerminal}
+        />
+      );
+    }
+
+    // Default to explorer panel
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+        {/* Server connection list */}
+        {servers.length > 0 && (
+          <div style={{ borderBottom: '1px solid var(--border-subtle)', flexShrink: 0, maxHeight: '40%', overflowY: 'auto' }}>
+            <div className="panel-header" style={{ padding: '8px 12px' }}>
+              <h3 className="panel-header__title">Servers</h3>
+              <button
+                className="btn btn-icon btn-ghost"
+                onClick={() => setViewMode('connect')}
+                title="Add Server"
+                style={{ fontSize: '16px' }}
+              >
+                +
+              </button>
+            </div>
+            <div style={{ padding: '0 4px 8px' }}>
+              {servers.map((server) => (
+                <div
+                  key={server.config.id}
+                  className={`server-item ${server.config.id === activeServerId ? 'active' : ''}`}
+                  onClick={() => {
+                    if (server.status === 'connected') {
+                      setActive(server.config.id);
+                    } else if (!isConnecting) {
+                      reconnect(server.config.id);
+                    }
+                  }}
+                >
+                  <span className={`status-dot ${server.status}`} />
+                  <div className="server-item__info">
+                    <div className="server-item__name truncate">
+                      {server.config.name}
+                    </div>
+                    <div className="server-item__url truncate">
+                      {server.config.base_url}
+                    </div>
+                  </div>
+                  <div className="server-item__actions">
+                    {(server.status === 'disconnected' || server.status === 'error') && (
+                      <button
+                        className="btn btn-icon btn-ghost"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          reconnect(server.config.id);
+                        }}
+                        title="Reconnect"
+                        disabled={isConnecting}
+                        style={{ fontSize: '12px' }}
+                      >
+                        ↻
+                      </button>
+                    )}
+                    <button
+                      className="btn btn-icon btn-ghost btn-danger"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (server.status === 'connected') {
+                          disconnect(server.config.id);
+                        } else {
+                          forget(server.config.id);
+                        }
+                      }}
+                      title={server.status === 'connected' ? 'Disconnect' : 'Forget'}
+                      style={{ fontSize: '12px' }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* View content */}
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {viewMode === 'connect' ? (
+            <ConnectionPanel
+              onConnect={handleConnect}
+              onConnectHub={handleConnectHub}
+              isConnecting={isConnecting}
+            />
+          ) : (
+            <FileExplorer activeServer={activeServer} onFileOpen={handleFileOpen} />
+          )}
+        </div>
+
+        {/* Error display */}
+        {error && (
+          <div
+            style={{
+              padding: '8px 12px',
+              fontSize: '12px',
+              color: 'var(--color-error)',
+              background: 'var(--color-error-subtle)',
+              borderTop: '1px solid var(--border-subtle)',
+              flexShrink: 0,
+            }}
+          >
+            ⚠️ {error}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <>
+      <WorkbenchLayout
+        sidebar={null}
+        panel={renderPanelContent()}
+        activePanel={activePanel}
+        onPanelChange={handlePanelChange}
+        editor={
+          <div className="app-editor-shell">
+            <WorkbenchTabs
+              tabs={tabs}
+              activeTabId={activeTabId}
+              onSelectTab={setActiveTabId}
+              onCloseTab={handleCloseTab}
+              onNewTerminal={handleNewTerminal}
+            />
+            <div className="app-editor-content">
+              {tabs.length === 0 ? (
+                <WelcomeScreen />
+              ) : (
+                tabs.map((tab) => {
+                  const isCurrent = tab.id === activeTabId;
+                  return (
+                    <div
+                      key={tab.id}
+                      className="app-editor-tab"
+                      style={{ display: isCurrent ? 'flex' : 'none' }}
+                    >
+                      {tab.type === 'notebook' ? (
+                        <NotebookEditor
+                          path={tab.data.path}
+                          serverId={activeServerId || undefined}
+                          onClose={() => handleCloseTab(tab.id)}
+                          onContextChange={setWorkspaceContext}
+                        />
+                      ) : tab.type === 'terminal' ? (
+                        <TerminalPanel
+                          serverId={activeServerId || undefined}
+                          terminalName={tab.data.terminalName}
+                          onClose={() => handleCloseTab(tab.id)}
+                        />
+                      ) : (
+                        <div className="flex-1 flex flex-col items-center justify-center bg-zinc-950 text-zinc-400 gap-3 w-full h-full">
+                          <p className="text-sm font-medium">Text editor for {tab.title} coming soon</p>
+                          <button
+                            onClick={() => handleCloseTab(tab.id)}
+                            className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-xs font-medium transition-colors"
+                          >
+                            Close File
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        }
+        statusBar={
+          <StatusBar
+            activeServer={activeServer}
+            serverCount={servers.length}
+            onToggleAgent={() => setIsAgentOpen(!isAgentOpen)}
+            isAgentOpen={isAgentOpen}
+          />
+        }
+      />
+      <AgentChatPanel
+        isOpen={isAgentOpen}
+        onClose={() => setIsAgentOpen(false)}
+        getWorkspaceContext={() => workspaceContext}
+      />
+    </>
+  );
+}
+
+export default App;

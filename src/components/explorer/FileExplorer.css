@@ -1,0 +1,125 @@
+/* ─── FileExplorer ──────────────────────────────────────────────────── */
+
+.file-explorer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.file-explorer__server {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.file-explorer__server-name {
+  flex: 1;
+}
+
+.file-explorer__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8);
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  text-align: center;
+  gap: var(--space-1);
+}
+
+.file-explorer__hint {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.file-explorer__loading {
+  padding: var(--space-4);
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+}
+
+.file-explorer__error {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--color-error);
+  background: var(--color-error-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* File Tree */
+.file-tree {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-1) 0;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 3px 0;
+  padding-right: var(--space-3);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+.file-item:hover {
+  background: var(--bg-hover);
+}
+
+.file-item__icon {
+  font-size: var(--text-sm);
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+}
+
+.file-item__name {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-item.notebook .file-item__name {
+  color: var(--color-accent);
+}
+
+.file-item__spinner {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.file-tree__children {
+  /* Children are indented via inline paddingLeft */
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.panel-header__title {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.panel-header__actions {
+  display: flex;
+  gap: var(--space-1);
+}

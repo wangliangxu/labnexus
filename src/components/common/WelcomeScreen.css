@@ -1,0 +1,98 @@
+/* ─── WelcomeScreen ─────────────────────────────────────────────────── */
+
+.welcome-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-editor);
+}
+
+.welcome-screen__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-6);
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-8);
+}
+
+.welcome-screen__logo {
+  filter: drop-shadow(0 4px 16px rgba(99, 102, 241, 0.2));
+}
+
+.welcome-screen__title {
+  font-size: 2rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.5px;
+}
+
+.welcome-screen__subtitle {
+  font-size: var(--text-md);
+  color: var(--text-secondary);
+  text-align: center;
+  margin-top: calc(-1 * var(--space-4));
+}
+
+.welcome-screen__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.welcome-action {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  transition: all var(--transition-fast);
+  cursor: default;
+}
+
+.welcome-action:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.welcome-action__icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.welcome-action__title {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-1);
+}
+
+.welcome-action__desc {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  line-height: var(--leading-relaxed);
+}
+
+.welcome-screen__shortcuts {
+  margin-top: var(--space-4);
+}
+
+.welcome-screen__shortcut-hint {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
