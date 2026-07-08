@@ -18,10 +18,9 @@ import { AgentChatPanel } from './components/agent/AgentChatPanel';
 import type { AgentChatContext } from './types/agent';
 import { useJupyter } from './hooks/useJupyter';
 import { jupyterCreateTerminal } from './services/tauriIpc';
+import { resolveServerSelectionViewMode, type ViewMode } from './appViewMode';
 import './index.css';
 import './components/agent/Agent.css';
-
-type ViewMode = 'connect' | 'explore';
 
 function App() {
   const {
@@ -177,8 +176,14 @@ function App() {
                   className={`server-item ${server.config.id === activeServerId ? 'active' : ''}`}
                   onClick={() => {
                     if (server.status === 'connected') {
+                      setViewMode((current) =>
+                        resolveServerSelectionViewMode(current, server.status)
+                      );
                       setActive(server.config.id);
                     } else if (!isConnecting) {
+                      setViewMode((current) =>
+                        resolveServerSelectionViewMode(current, server.status)
+                      );
                       reconnect(server.config.id);
                     }
                   }}
@@ -198,6 +203,9 @@ function App() {
                         className="btn btn-icon btn-ghost"
                         onClick={(e) => {
                           e.stopPropagation();
+                          setViewMode((current) =>
+                            resolveServerSelectionViewMode(current, server.status)
+                          );
                           reconnect(server.config.id);
                         }}
                         title="Reconnect"

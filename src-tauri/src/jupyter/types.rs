@@ -4,6 +4,7 @@
 //! and the Jupyter messaging protocol.
 
 use chrono::Utc;
+use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -95,7 +96,7 @@ pub struct ServerConnection {
 // ─── Contents API ──────────────────────────────────────────────────────
 
 /// Content item returned by the Jupyter Contents API.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct ContentItem {
     pub name: String,
     pub path: String,
@@ -115,6 +116,68 @@ pub struct ContentItem {
     /// File size in bytes (if available).
     #[serde(default)]
     pub size: Option<u64>,
+}
+
+impl Serialize for ContentItem {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let content = if self.content_type == ContentType::Directory {
+            normalize_directory_content(&self.content)
+        } else {
+            self.content.clone()
+        };
+
+        let mut state = serializer.serialize_struct("ContentItem", 10)?;
+        state.serialize_field("name", &self.name)?;
+        state.serialize_field("path", &self.path)?;
+        state.serialize_field("content_type", &self.content_type)?;
+        state.serialize_field("writable", &self.writable)?;
+        state.serialize_field("created", &self.created)?;
+        state.serialize_field("last_modified", &self.last_modified)?;
+        state.serialize_field("mimetype", &self.mimetype)?;
+        state.serialize_field("format", &self.format)?;
+        state.serialize_field("content", &content)?;
+        state.serialize_field("size", &self.size)?;
+        state.end()
+    }
+}
+
+fn normalize_directory_content(
+    content: &Option<serde_json::Value>,
+) -> Option<serde_json::Value> {
+    match content {
+        Some(serde_json::Value::Array(children)) => Some(serde_json::Value::Array(
+            children.iter().map(normalize_directory_child).collect(),
+        )),
+        _ => content.clone(),
+    }
+}
+
+fn normalize_directory_child(child: &serde_json::Value) -> serde_json::Value {
+    let serde_json::Value::Object(raw_child) = child else {
+        return child.clone();
+    };
+
+    let mut normalized = raw_child.clone();
+    if let Some(content_type) = normalized.remove("type") {
+        normalized.insert("content_type".to_string(), content_type);
+    }
+
+    if normalized.get("content_type").and_then(|value| value.as_str()) == Some("directory") {
+        if let Some(child_content) = normalized.get("content") {
+            let normalized_content = match child_content {
+                serde_json::Value::Array(grandchildren) => serde_json::Value::Array(
+                    grandchildren.iter().map(normalize_directory_child).collect(),
+                ),
+                _ => child_content.clone(),
+            };
+            normalized.insert("content".to_string(), normalized_content);
+        }
+    }
+
+    serde_json::Value::Object(normalized)
 }
 
 /// Content types in the Jupyter file system.
@@ -414,5 +477,42 @@ mod tests {
         let serialized = serde_json::to_value(item).expect("content item should serialize");
         assert_eq!(serialized["content_type"], "directory");
         assert!(serialized.get("type").is_none());
+    }
+
+    #[test]
+    fn directory_content_children_serialize_content_type_for_frontend() {
+        let item: ContentItem = serde_json::from_value(serde_json::json!({
+            "name": "",
+            "path": "",
+            "type": "directory",
+            "writable": true,
+            "content": [
+                {
+                    "name": "notebooks",
+                    "path": "notebooks",
+                    "type": "directory",
+                    "writable": true,
+                    "content": []
+                },
+                {
+                    "name": "analysis.ipynb",
+                    "path": "analysis.ipynb",
+                    "type": "notebook",
+                    "writable": true,
+                    "content": null
+                }
+            ]
+        }))
+        .expect("directory item should deserialize");
+
+        let serialized = serde_json::to_value(item).expect("directory item should serialize");
+        let children = serialized["content"]
+            .as_array()
+            .expect("directory content should serialize as an array");
+
+        assert_eq!(children[0]["content_type"], "directory");
+        assert!(children[0].get("type").is_none());
+        assert_eq!(children[1]["content_type"], "notebook");
+        assert!(children[1].get("type").is_none());
     }
 }

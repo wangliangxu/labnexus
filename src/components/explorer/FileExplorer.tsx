@@ -5,17 +5,12 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { ContentItem, ServerConnection } from '../../types/jupyter';
 import { jupyterListContents } from '../../services/tauriIpc';
+import { normalizeContentItems, type TreeNode } from './fileExplorerTree';
 import './FileExplorer.css';
 
 interface FileExplorerProps {
   activeServer: ServerConnection | null;
   onFileOpen: (path: string, type: string) => void;
-}
-
-interface TreeNode extends ContentItem {
-  children?: TreeNode[];
-  isExpanded?: boolean;
-  isLoading?: boolean;
 }
 
 export function FileExplorer({ activeServer, onFileOpen }: FileExplorerProps) {
@@ -45,20 +40,7 @@ export function FileExplorer({ activeServer, onFileOpen }: FileExplorerProps) {
 
         // Parse the directory content
         const items: TreeNode[] = Array.isArray(result.content)
-          ? (result.content as ContentItem[])
-              .sort((a, b) => {
-                // Directories first, then files
-                if (a.content_type === 'directory' && b.content_type !== 'directory')
-                  return -1;
-                if (a.content_type !== 'directory' && b.content_type === 'directory')
-                  return 1;
-                return a.name.localeCompare(b.name);
-              })
-              .map((item) => ({
-                ...item,
-                isExpanded: false,
-                isLoading: false,
-              }))
+          ? normalizeContentItems(result.content as ContentItem[])
           : [];
 
         if (path === '') {
