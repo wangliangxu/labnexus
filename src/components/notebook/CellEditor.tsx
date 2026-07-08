@@ -1,8 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { python } from '@codemirror/lang-python';
 import { markdown } from '@codemirror/lang-markdown';
-import { keymap } from '@codemirror/view';
+import { oneDark } from '@codemirror/theme-one-dark';
+import { keymap, EditorView } from '@codemirror/view';
 import {
   Play,
   Trash2,
@@ -14,6 +15,24 @@ import {
 } from 'lucide-react';
 import type { Cell, CellType } from '../../types/jupyter';
 import { CellOutputView } from './CellOutputView';
+
+/* ── JupyterLab-like light theme for CodeMirror ─────────────────── */
+const jupyterLight = EditorView.theme({
+  '&': { backgroundColor: 'var(--color-nb-editor)' },
+  '.cm-gutters': {
+    backgroundColor: 'var(--color-nb-gutter)',
+    color: 'var(--color-nb-gutter-text)',
+    borderRight: '1px solid var(--color-nb-editor-border)',
+  },
+});
+
+/* ── Shared button class tokens ──────────────────────────────────── */
+const cellBtn =
+  'inline-flex items-center justify-center gap-1 min-h-6 px-1.5 ' +
+  'border border-transparent rounded-sm text-nb-text-secondary text-xs ' +
+  'leading-none whitespace-nowrap ' +
+  'hover:border-nb-btn-hover-border hover:bg-nb-btn-hover ' +
+  'disabled:opacity-45 disabled:cursor-default transition-colors';
 
 interface CellEditorProps {
   cell: Cell;
@@ -53,6 +72,24 @@ export const CellEditor: React.FC<CellEditorProps> = ({
   canMoveDown,
 }) => {
   const isCode = cell.cell_type === 'code';
+
+  /* ── Dark theme detection for CodeMirror ─────────────────────── */
+  const [isDarkTheme, setIsDarkTheme] = useState(() => {
+    const theme = document.documentElement.getAttribute('data-theme');
+    return theme !== 'solarized';
+  });
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      const theme = document.documentElement.getAttribute('data-theme');
+      setIsDarkTheme(theme !== 'solarized');
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+    return () => observer.disconnect();
+  }, []);
 
   const sourceText = useMemo(() => {
     return typeof cell.source === 'string'
@@ -100,27 +137,59 @@ export const CellEditor: React.FC<CellEditorProps> = ({
     ? 'Markdown'
     : 'Raw';
 
+  /* ── Cell border logic ────────────────────────────────────────── */
+  const borderOther = isActive
+    ? 'border-nb-cell-active-border'
+    : 'border-transparent';
+  const borderLeft =
+    isActive && !isExecuting
+      ? 'border-l-nb-cell-active-left'
+      : 'border-l-transparent';
+  const cellBg = isActive ? 'bg-nb-cell' : 'bg-transparent';
+  const hoverBorder = !isActive
+    ? 'hover:border-nb-cell-border'
+    : '';
+
+  // Inline style ensures executing left-border always wins over hover
+  const cellStyle = isExecuting
+    ? { borderLeftColor: 'var(--color-nb-cell-executing-left)' }
+    : undefined;
+
   return (
     <div
       onClick={onSelect}
-      className={`notebook-cell ${isActive ? 'is-active' : ''} ${
-        isExecuting ? 'is-executing' : ''
-      }`}
+      className={`group grid grid-cols-[82px_minmax(0,1fr)] gap-3 mb-2 border border-l-4 ${borderOther} ${borderLeft} ${cellBg} ${hoverBorder} max-[760px]:grid-cols-[58px_minmax(0,1fr)] max-[760px]:gap-2`}
+      style={cellStyle}
     >
-      <div className="notebook-cell__prompt" title={`Cell #${index + 1}`}>
+      {/* Prompt (In [n]:) */}
+      <div
+        className="pt-[37px] text-nb-prompt font-mono text-xs text-right whitespace-nowrap select-none max-[760px]:text-[11px]"
+        title={`Cell #${index + 1}`}
+      >
         {prompt}
       </div>
 
-      <div className="notebook-cell__body">
-        <div className="notebook-cell__tools">
-          <div className="notebook-cell__type-switch">
+      {/* Cell Body */}
+      <div className="min-w-0 pt-[5px] pr-[7px] pb-[7px]">
+        {/* Cell Tools */}
+        <div
+          className={`flex items-center justify-between min-h-7 gap-2 transition-opacity duration-150 max-[760px]:flex-wrap ${
+            isActive
+              ? 'opacity-100'
+              : 'opacity-0 group-hover:opacity-100 max-[760px]:opacity-100'
+          }`}
+        >
+          {/* Type Switch */}
+          <div className="inline-flex items-center gap-[3px] min-w-0">
             <button
               onClick={(event) => {
                 event.stopPropagation();
                 onTypeChange('code');
               }}
-              className={`notebook-cell__type-button ${
-                isCode ? 'is-selected' : ''
+              className={`${cellBtn} min-h-[23px] px-[7px] ${
+                isCode
+                  ? 'border-nb-type-selected-border bg-nb-type-selected text-nb-type-selected-text'
+                  : ''
               }`}
             >
               <Code2 size={13} />
@@ -131,8 +200,10 @@ export const CellEditor: React.FC<CellEditorProps> = ({
                 event.stopPropagation();
                 onTypeChange('markdown');
               }}
-              className={`notebook-cell__type-button ${
-                cell.cell_type === 'markdown' ? 'is-selected' : ''
+              className={`${cellBtn} min-h-[23px] px-[7px] ${
+                cell.cell_type === 'markdown'
+                  ? 'border-nb-type-selected-border bg-nb-type-selected text-nb-type-selected-text'
+                  : ''
               }`}
             >
               <FileText size={13} />
@@ -140,7 +211,8 @@ export const CellEditor: React.FC<CellEditorProps> = ({
             </button>
           </div>
 
-          <div className="notebook-cell__actions">
+          {/* Actions */}
+          <div className="inline-flex items-center gap-[3px] min-w-0">
             {isCode && (
               <button
                 onClick={(event) => {
@@ -150,7 +222,7 @@ export const CellEditor: React.FC<CellEditorProps> = ({
                 }}
                 disabled={isExecuting || !canRun}
                 title={canRun ? 'Run Cell (Ctrl/Cmd+Enter)' : 'Kernel is not ready'}
-                className="notebook-cell__action notebook-cell__action--run"
+                className={`${cellBtn} min-w-14 text-nb-prompt`}
               >
                 {isExecuting ? (
                   <>
@@ -166,7 +238,7 @@ export const CellEditor: React.FC<CellEditorProps> = ({
               </button>
             )}
 
-            <span className="notebook-cell__divider" />
+            <span className="w-px h-4 mx-0.5 bg-nb-cell-border" />
 
             <button
               onClick={(event) => {
@@ -175,7 +247,7 @@ export const CellEditor: React.FC<CellEditorProps> = ({
               }}
               disabled={!canMoveUp}
               title="Move Cell Up"
-              className="notebook-cell__action"
+              className={cellBtn}
             >
               <ChevronUp size={15} />
             </button>
@@ -187,7 +259,7 @@ export const CellEditor: React.FC<CellEditorProps> = ({
               }}
               disabled={!canMoveDown}
               title="Move Cell Down"
-              className="notebook-cell__action"
+              className={cellBtn}
             >
               <ChevronDown size={15} />
             </button>
@@ -198,18 +270,20 @@ export const CellEditor: React.FC<CellEditorProps> = ({
                 onDelete();
               }}
               title="Delete Cell"
-              className="notebook-cell__action notebook-cell__action--danger"
+              className={`${cellBtn} hover:border-nb-error-border hover:bg-nb-error hover:text-nb-error-text`}
             >
               <Trash2 size={15} />
             </button>
           </div>
         </div>
 
-        <div className="notebook-cell__editor">
+        {/* Editor */}
+        <div className="min-w-0 border border-nb-editor-border">
           <CodeMirror
             value={sourceText}
             extensions={extensions}
             onChange={(value) => onChange(value)}
+            theme={isDarkTheme ? oneDark : jupyterLight}
             basicSetup={{
               lineNumbers: true,
               foldGutter: true,
@@ -221,6 +295,7 @@ export const CellEditor: React.FC<CellEditorProps> = ({
           />
         </div>
 
+        {/* Outputs */}
         {isCode && cell.outputs && cell.outputs.length > 0 && (
           <CellOutputView outputs={cell.outputs} />
         )}

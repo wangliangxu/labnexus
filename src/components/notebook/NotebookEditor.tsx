@@ -13,6 +13,21 @@ import {
 } from './notebookCellOps';
 import './Notebook.css';
 
+/* ── Button class tokens (for empty state) ───────────────────────── */
+const nbBtn =
+  'inline-flex items-center justify-center gap-1 min-h-[26px] px-2 ' +
+  'border border-transparent rounded-sm bg-transparent ' +
+  'text-nb-text-secondary text-xs leading-none whitespace-nowrap ' +
+  'hover:border-nb-btn-hover-border hover:bg-nb-btn-hover ' +
+  'disabled:opacity-45 disabled:cursor-default transition-colors';
+
+const nbBtnPrimary =
+  'inline-flex items-center justify-center gap-1 min-h-[26px] px-2 ' +
+  'border border-nb-btn-primary rounded-sm bg-nb-btn-primary text-white ' +
+  'text-xs leading-none whitespace-nowrap ' +
+  'hover:border-nb-btn-primary-hover hover:bg-nb-btn-primary-hover ' +
+  'disabled:opacity-45 disabled:cursor-default transition-colors';
+
 interface NotebookEditorProps {
   path: string;
   serverId?: string;
@@ -301,7 +316,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
 
   if (isLoading) {
     return (
-      <div className="notebook-state">
+      <div className="flex flex-1 items-center justify-center flex-col gap-3 bg-nb-shell text-nb-text-secondary text-[13px]">
         <Loader2 size={30} className="animate-spin" />
         <span>Loading Notebook {notebookName}...</span>
       </div>
@@ -310,18 +325,20 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
 
   if (loadError) {
     return (
-      <div className="notebook-state notebook-state--error">
+      <div className="flex flex-1 items-center justify-center flex-col gap-3 bg-nb-shell text-nb-error-text text-[13px]">
         <AlertTriangle size={44} />
-        <div className="notebook-state__content">
-          <h3>Failed to Load Notebook</h3>
-          <p>{loadError}</p>
+        <div className="max-w-[620px] text-center">
+          <h3 className="mb-2 text-nb-text">Failed to Load Notebook</h3>
+          <p className="m-0 py-2.5 px-3 border border-nb-error-border bg-nb-cell text-nb-error-text font-mono text-xs text-left">
+            {loadError}
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="notebook-shell">
+    <div className="flex flex-1 flex-col min-w-0 min-h-0 overflow-hidden bg-nb-shell text-nb-text">
       <NotebookToolbar
         notebookName={notebookName}
         kernelName={nbMetadata?.kernelspec?.display_name || kernel.kernel?.name || 'Python 3'}
@@ -345,13 +362,13 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
       />
 
       {kernel.error && (
-        <div className="notebook-error-banner">
+        <div className="px-3.5 py-2 border-b border-nb-error-border bg-nb-error text-nb-error-text text-xs">
           {kernel.error}
         </div>
       )}
 
-      <div className="notebook-scroll">
-        <div className="notebook-page">
+      <div className="flex-1 min-h-0 overflow-auto">
+        <div className="w-full max-w-[1180px] mx-auto px-7 pt-[22px] max-[760px]:px-2.5 max-[760px]:pt-3.5">
         {cells.map((cell, idx) => (
           <CellEditor
             key={cell.id}
@@ -382,19 +399,19 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         ))}
 
         {cells.length === 0 && (
-          <div className="notebook-empty">
+          <div className="flex flex-col items-center justify-center min-h-[220px] gap-3 border border-dashed border-nb-cell-border bg-nb-cell text-nb-text-secondary">
             <FileCode size={40} />
             <span>This notebook has no cells yet.</span>
-            <div className="notebook-empty__actions">
+            <div className="flex flex-wrap justify-center gap-1.5">
               <button
                 onClick={() => handleAddCell('code')}
-                className="notebook-toolbar__button notebook-toolbar__button--primary"
+                className={nbBtnPrimary}
               >
                 + Add Code Cell
               </button>
               <button
                 onClick={() => handleAddCell('markdown')}
-                className="notebook-toolbar__button"
+                className={nbBtn}
               >
                 + Add Markdown Cell
               </button>
@@ -402,7 +419,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
           </div>
         )}
 
-          <div className="notebook-bottom-spacer" />
+          <div className="h-20" />
         </div>
       </div>
     </div>

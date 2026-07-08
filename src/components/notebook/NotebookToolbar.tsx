@@ -32,6 +32,26 @@ interface NotebookToolbarProps {
   onActiveCellTypeChange: (type: CellType) => void;
 }
 
+/* ── Toolbar button class tokens ─────────────────────────────────── */
+const tbBtn =
+  'inline-flex items-center justify-center gap-1 min-h-[26px] px-2 ' +
+  'border border-transparent rounded-sm bg-transparent ' +
+  'text-nb-text-secondary text-xs leading-none whitespace-nowrap ' +
+  'hover:border-nb-btn-hover-border hover:bg-nb-btn-hover ' +
+  'disabled:opacity-45 disabled:cursor-default transition-colors';
+
+const tbBtnPrimary =
+  'inline-flex items-center justify-center gap-1 min-h-[26px] px-2 ' +
+  'border border-nb-btn-primary rounded-sm bg-nb-btn-primary text-white ' +
+  'text-xs leading-none whitespace-nowrap ' +
+  'hover:border-nb-btn-primary-hover hover:bg-nb-btn-primary-hover ' +
+  'disabled:opacity-45 disabled:cursor-default transition-colors';
+
+const badgeBase =
+  'inline-flex items-center gap-1 min-h-6 max-w-[220px] px-2 ' +
+  'border border-nb-cell-border rounded-full bg-nb-cell ' +
+  'text-xs leading-none whitespace-nowrap';
+
 export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   notebookName,
   kernelName,
@@ -55,14 +75,14 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
     switch (status) {
       case 'idle':
         return (
-          <span className="notebook-status-badge notebook-status-badge--idle">
-            <span className="notebook-status-badge__dot" />
+          <span className={`${badgeBase} text-nb-status-idle`}>
+            <span className="w-[7px] h-[7px] rounded-full bg-current" />
             Idle
           </span>
         );
       case 'busy':
         return (
-          <span className="notebook-status-badge notebook-status-badge--busy">
+          <span className={`${badgeBase} text-nb-status-busy`}>
             <Loader2 size={13} className="animate-spin" />
             Busy
           </span>
@@ -70,7 +90,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
       case 'starting':
       case 'restarting':
         return (
-          <span className="notebook-status-badge notebook-status-badge--starting">
+          <span className={`${badgeBase} text-nb-status-busy`}>
             <Loader2 size={13} className="animate-spin" />
             {status === 'starting' ? 'Starting...' : 'Restarting...'}
           </span>
@@ -78,7 +98,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
       case 'dead':
       case 'error':
         return (
-          <span className="notebook-status-badge notebook-status-badge--error">
+          <span className={`${badgeBase} text-nb-status-error`}>
             <AlertCircle size={13} />
             {status === 'dead' ? 'Dead' : 'Error'}
           </span>
@@ -89,7 +109,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
           <button
             onClick={onConnect}
             disabled={isConnecting}
-            className="notebook-status-badge notebook-status-badge--disconnected"
+            className={`${badgeBase} text-nb-status-disconnected cursor-pointer`}
           >
             {isConnecting ? (
               <Loader2 size={13} className="animate-spin" />
@@ -103,13 +123,14 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   };
 
   return (
-    <div className="notebook-toolbar">
-      <div className="notebook-toolbar__group">
+    <div className="sticky top-0 z-20 flex items-center min-h-9 gap-1.5 px-2.5 py-1 border-b border-nb-toolbar-border bg-nb-toolbar shadow-sm max-[760px]:flex-wrap">
+      {/* Save + Add cells */}
+      <div className="inline-flex items-center gap-[3px] min-w-0">
         <button
           onClick={onSave}
           disabled={!isDirty || isSaving}
           title="Save Notebook (Ctrl+S / Cmd+S)"
-          className="notebook-toolbar__button"
+          className={tbBtn}
         >
           {isSaving ? (
             <Loader2 size={15} className="animate-spin" />
@@ -120,30 +141,23 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
           )}
         </button>
 
-        <span className="notebook-toolbar__divider" />
+        <span className="w-px h-[18px] mx-[3px] bg-nb-toolbar-border" />
 
-        <button
-          onClick={onAddCode}
-          title="Add Code Cell Below"
-          className="notebook-toolbar__button"
-        >
+        <button onClick={onAddCode} title="Add Code Cell Below" className={tbBtn}>
           <Plus size={15} />
           <span>Code</span>
         </button>
 
-        <button
-          onClick={onAddMarkdown}
-          title="Add Markdown Cell Below"
-          className="notebook-toolbar__button"
-        >
+        <button onClick={onAddMarkdown} title="Add Markdown Cell Below" className={tbBtn}>
           <Plus size={15} />
           <span>Markdown</span>
         </button>
       </div>
 
-      <div className="notebook-toolbar__group">
+      {/* Cell type selector */}
+      <div className="inline-flex items-center gap-[3px] min-w-0">
         <select
-          className="notebook-toolbar__select"
+          className="h-[26px] min-w-[126px] pl-2 pr-6 border border-nb-cell-border rounded-sm bg-nb-cell text-nb-text text-xs"
           value={activeCellType}
           title="Cell Type"
           onChange={(event) =>
@@ -156,12 +170,13 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
         </select>
       </div>
 
-      <div className="notebook-toolbar__group">
+      {/* Execution controls */}
+      <div className="inline-flex items-center gap-[3px] min-w-0">
         <button
           onClick={onRunSelected}
           disabled={!canRun}
           title="Run Selected Cell (Ctrl/Cmd+Enter)"
-          className="notebook-toolbar__button notebook-toolbar__button--primary"
+          className={tbBtnPrimary}
         >
           <Play size={15} fill="currentColor" />
           <span>Run</span>
@@ -171,7 +186,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
           onClick={onInterrupt}
           disabled={status !== 'busy'}
           title="Interrupt Kernel"
-          className="notebook-toolbar__button"
+          className={tbBtn}
         >
           <Square size={14} fill="currentColor" />
         </button>
@@ -179,7 +194,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
         <button
           onClick={onRestart}
           title="Restart Kernel"
-          className="notebook-toolbar__button"
+          className={tbBtn}
         >
           <RotateCcw size={15} />
         </button>
@@ -188,24 +203,39 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
           onClick={onRunAll}
           disabled={!canRun}
           title="Run All Cells"
-          className="notebook-toolbar__button"
+          className={tbBtn}
         >
           <Play size={15} fill="currentColor" />
           <span>Run All</span>
         </button>
       </div>
 
-      <div className="notebook-toolbar__spacer" />
+      {/* Spacer */}
+      <div className="flex-auto min-w-4" />
 
-      <div className="notebook-toolbar__identity" title={notebookName}>
-        <span className="notebook-toolbar__name">{notebookName}</span>
-        {isDirty && <span className="notebook-toolbar__dirty" title="Unsaved changes" />}
+      {/* Notebook identity */}
+      <div
+        className="inline-flex items-center min-w-0 max-w-[min(34vw,420px)] gap-1.5 text-nb-text-secondary text-xs max-[760px]:max-w-full"
+        title={notebookName}
+      >
+        <span className="truncate">{notebookName}</span>
+        {isDirty && (
+          <span
+            className="w-[7px] h-[7px] flex-none rounded-full bg-nb-dirty"
+            title="Unsaved changes"
+          />
+        )}
       </div>
 
-      <div className="notebook-kernel-chip" title={kernelName || 'Python 3'}>
+      {/* Kernel chip */}
+      <div
+        className={`${badgeBase} overflow-hidden text-ellipsis font-mono text-nb-text-secondary`}
+        title={kernelName || 'Python 3'}
+      >
         {kernelName || 'Python 3'}
       </div>
 
+      {/* Status badge */}
       {getStatusBadge()}
     </div>
   );
