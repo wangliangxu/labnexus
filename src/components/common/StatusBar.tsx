@@ -50,10 +50,10 @@ export function StatusBar({
               ? 'bg-brand-primary text-white shadow-brand-primary/30'
               : 'bg-dark-surface hover:bg-dark-border text-gray-300 border border-dark-border'
           }`}
-          title="Toggle ReAct AI Assistant Panel"
+          title="Toggle ReAct AI Agent Panel"
         >
-          <span>🤖</span>
-          <span>AI Assistant</span>
+          <span>⚡️</span>
+          <span>AI Agent</span>
         </button>
 
         {serverCount > 0 && (

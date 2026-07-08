@@ -77,47 +77,48 @@ export function WorkbenchLayout({
       className="workbench"
       style={currentPanel ? { '--panel-width': `${panelWidth}px` } as React.CSSProperties : undefined}
     >
-      {/* Activity Bar (icon sidebar) */}
-      <div className="workbench__activity-bar">
-        <div className="activity-bar__top">
+      {/* Title Bar (replaces Activity Bar) */}
+      <div className="workbench__titlebar" data-tauri-drag-region>
+        <div className="titlebar__left" data-tauri-drag-region>
           <button
-            className={`activity-bar__item ${currentPanel === 'explorer' ? 'active' : ''}`}
+            className={`titlebar__item ${currentPanel === 'explorer' ? 'active' : ''}`}
             onClick={() => handlePanelClick('explorer')}
             title="Explorer"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V9C21 7.89543 20.1046 7 19 7H13L11 5H5C3.89543 5 3 5.89543 3 7Z" />
             </svg>
           </button>
           <button
-            className={`activity-bar__item ${currentPanel === 'terminal' ? 'active' : ''}`}
+            className={`titlebar__item ${currentPanel === 'terminal' ? 'active' : ''}`}
             onClick={() => handlePanelClick('terminal')}
             title="Remote Terminals"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <polyline points="4 17 10 11 4 5" />
               <line x1="12" y1="19" x2="20" y2="19" />
             </svg>
           </button>
+        </div>
+        <div className="titlebar__center" data-tauri-drag-region></div>
+        <div className="titlebar__right" data-tauri-drag-region>
           <button
-            className={`activity-bar__item ${currentPanel === 'agent' ? 'active' : ''}`}
+            className={`titlebar__item ${currentPanel === 'agent' ? 'active' : ''}`}
             onClick={() => handlePanelClick('agent')}
             title="AI Agent"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M12 2L2 7L12 12L22 7L12 2Z" />
               <path d="M2 17L12 22L22 17" />
               <path d="M2 12L12 17L22 12" />
             </svg>
           </button>
-        </div>
-        <div className="activity-bar__bottom">
           <button
-            className={`activity-bar__item ${currentPanel === 'settings' ? 'active' : ''}`}
+            className={`titlebar__item ${currentPanel === 'settings' ? 'active' : ''}`}
             onClick={() => handlePanelClick('settings')}
             title="Settings"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <circle cx="12" cy="12" r="3" />
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>

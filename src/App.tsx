@@ -13,7 +13,7 @@ import { WorkbenchTabs, type TabItem } from './components/common/WorkbenchTabs';
 import { NotebookEditor } from './components/notebook/NotebookEditor';
 import { TerminalPanel } from './components/terminal/TerminalPanel';
 import { TerminalSelector } from './components/terminal/TerminalSelector';
-import { SettingsPanel } from './components/settings/SettingsPanel';
+import { SettingsModal } from './components/settings/SettingsModal';
 import { AgentChatPanel } from './components/agent/AgentChatPanel';
 import type { AgentChatContext } from './types/agent';
 import { useJupyter } from './hooks/useJupyter';
@@ -48,6 +48,8 @@ function App() {
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [isAgentOpen, setIsAgentOpen] = useState<boolean>(false);
   const [workspaceContext, setWorkspaceContext] = useState<AgentChatContext>({});
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [settingsTab, setSettingsTab] = useState<'global' | 'ai'>('global');
 
   const activeServer = useMemo(
     () => servers.find((s) => s.config.id === activeServerId) ?? null,
@@ -144,15 +146,16 @@ function App() {
       setIsAgentOpen(!isAgentOpen);
       return;
     }
+    if (id === 'settings') {
+      setSettingsTab('global');
+      setIsSettingsOpen(true);
+      return;
+    }
     setActivePanel(id);
   };
 
   // Build the side panel content based on activePanel and viewMode
   const renderPanelContent = () => {
-    if (activePanel === 'settings') {
-      return <SettingsPanel />;
-    }
-
     if (activePanel === 'terminal') {
       return (
         <TerminalSelector
@@ -384,6 +387,11 @@ function App() {
         isOpen={isAgentOpen}
         onClose={() => setIsAgentOpen(false)}
         getWorkspaceContext={() => workspaceContext}
+      />
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        defaultTab={settingsTab}
       />
     </>
   );

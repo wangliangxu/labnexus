@@ -2,38 +2,45 @@
 
 .workbench {
   display: grid;
-  grid-template-columns: var(--sidebar-width) auto 1fr;
-  grid-template-rows: 1fr var(--statusbar-height);
+  grid-template-columns: auto 1fr;
+  grid-template-rows: 40px 1fr var(--statusbar-height);
   height: 100%;
   width: 100%;
   overflow: hidden;
 }
 
-/* Activity Bar */
-.workbench__activity-bar {
-  grid-row: 1 / -1;
-  grid-column: 1;
+/* Title Bar */
+.workbench__titlebar {
+  grid-row: 1;
+  grid-column: 1 / -1;
   background: var(--bg-sidebar);
-  border-right: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border-default);
   display: flex;
-  flex-direction: column;
   align-items: center;
-  padding: var(--space-2) 0;
   justify-content: space-between;
+  padding: 0 var(--space-2);
   z-index: var(--z-sticky);
 }
 
-.activity-bar__top,
-.activity-bar__bottom {
+.titlebar__left,
+.titlebar__right {
   display: flex;
-  flex-direction: column;
   align-items: center;
   gap: var(--space-1);
 }
 
-.activity-bar__item {
-  width: 40px;
-  height: 40px;
+.titlebar__left {
+  padding-left: 70px; /* Space for macOS traffic lights */
+}
+
+.titlebar__center {
+  flex: 1;
+  height: 100%;
+}
+
+.titlebar__item {
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -41,32 +48,33 @@
   color: var(--text-tertiary);
   position: relative;
   transition: all var(--transition-fast);
+  cursor: default;
 }
 
-.activity-bar__item:hover {
+.titlebar__item:hover {
   color: var(--text-primary);
   background: var(--bg-hover);
 }
 
-.activity-bar__item.active {
+.titlebar__item.active {
   color: var(--color-primary-hover);
 }
 
-.activity-bar__item.active::before {
+.titlebar__item.active::after {
   content: '';
   position: absolute;
-  left: 0;
-  top: 8px;
-  bottom: 8px;
-  width: 2px;
+  bottom: 0;
+  left: 4px;
+  right: 4px;
+  height: 2px;
   background: var(--color-primary);
-  border-radius: 0 var(--radius-full) var(--radius-full) 0;
+  border-radius: var(--radius-full) var(--radius-full) 0 0;
 }
 
 /* Side Panel */
 .workbench__panel {
-  grid-row: 1;
-  grid-column: 2;
+  grid-row: 2;
+  grid-column: 1;
   width: var(--panel-width);
   background: var(--bg-panel);
   border-right: 1px solid var(--border-default);
@@ -104,8 +112,8 @@
 
 /* Editor Area */
 .workbench__editor {
-  grid-row: 1;
-  grid-column: 3;
+  grid-row: 2;
+  grid-column: 2;
   background: var(--bg-editor);
   display: flex;
   flex-direction: column;
@@ -115,7 +123,7 @@
 
 /* Status Bar */
 .workbench__statusbar {
-  grid-row: 2;
+  grid-row: 3;
   grid-column: 1 / -1;
   background: var(--bg-sidebar);
   border-top: 1px solid var(--border-default);
@@ -130,9 +138,9 @@
 
 /* When panel is hidden, editor takes full remaining width */
 .workbench:has(> .workbench__panel) {
-  grid-template-columns: var(--sidebar-width) var(--panel-width) 1fr;
+  grid-template-columns: var(--panel-width) 1fr;
 }
 
 .workbench:not(:has(> .workbench__panel)) {
-  grid-template-columns: var(--sidebar-width) 0px 1fr;
+  grid-template-columns: 0px 1fr;
 }

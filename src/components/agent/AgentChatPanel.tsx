@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAgent } from '../../hooks/useAgent';
 import { ToolConfirmModal } from './ToolConfirmModal';
-import { AiSettingsModal } from './AiSettingsModal';
+
 import { SkillSelector } from './SkillSelector';
 import { KnowledgeModal } from './KnowledgeModal';
 import { TraceViewerModal } from './TraceViewerModal';
@@ -31,7 +31,6 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
 
   const [inputPrompt, setInputPrompt] = useState('');
   const [injectContext, setInjectContext] = useState(true);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSkillOpen, setIsSkillOpen] = useState(false);
   const [isKnowledgeOpen, setIsKnowledgeOpen] = useState(false);
   const [isTraceOpen, setIsTraceOpen] = useState(false);
@@ -65,11 +64,14 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
 
   return (
     <>
-      <div className="fixed top-0 right-0 bottom-0 w-96 bg-dark-surface border-l border-dark-border shadow-2xl z-40 flex flex-col animate-slide-left">
+      <div 
+        className="fixed right-0 w-96 bg-dark-surface border-l border-dark-border shadow-2xl z-40 flex flex-col animate-slide-left"
+        style={{ top: '40px', bottom: 'var(--statusbar-height)' }}
+      >
         {/* Header */}
         <div className="p-4 border-b border-dark-border flex items-center justify-between bg-dark-bg/50">
           <div className="flex items-center gap-2">
-            <span className="text-xl">🤖</span>
+            <span className="text-xl">⚡️</span>
             <div>
               <h3 className="text-sm font-bold text-gray-100">LabNexus Assistant</h3>
               <p className="text-[10px] text-gray-400 flex items-center gap-1">
@@ -80,13 +82,6 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
           </div>
 
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              title="AI Settings"
-              className="p-1.5 rounded-lg hover:bg-dark-border text-gray-400 hover:text-gray-200 transition-colors text-sm"
-            >
-              ⚙️
-            </button>
             <button
               onClick={clearHistory}
               title="Clear Chat History"
@@ -270,10 +265,6 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
 
       {/* Modals */}
       <ToolConfirmModal toolCall={activeToolCall} onConfirm={confirmTool} />
-      <AiSettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-      />
       {isSkillOpen && (
         <SkillSelector
           onClose={() => setIsSkillOpen(false)}
