@@ -3,7 +3,7 @@
  * Integrated with multi-tab workbench, remote terminals, dynamic theme system, and AI Agent.
  */
 
-import { useState, useMemo, useRef, useCallback } from 'react';
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { WorkbenchLayout, type PanelId } from './layouts/WorkbenchLayout';
 import { ConnectionPanel } from './components/explorer/ConnectionPanel';
 import { FileExplorer } from './components/explorer/FileExplorer';
@@ -11,11 +11,17 @@ import { StatusBar } from './components/common/StatusBar';
 import { WelcomeScreen } from './components/common/WelcomeScreen';
 import { WorkbenchTabs, type TabItem } from './components/common/WorkbenchTabs';
 import { NotebookEditor } from './components/notebook/NotebookEditor';
+import { NotebookTocPanel } from './components/notebook/NotebookTocPanel';
 import { TerminalPanel } from './components/terminal/TerminalPanel';
 import { TerminalSelector } from './components/terminal/TerminalSelector';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { AgentChatPanel } from './components/agent/AgentChatPanel';
 import type { AgentChatContext } from './types/agent';
+import type {
+  NotebookTocHeading,
+  NotebookTocScrollRequest,
+  NotebookTocState,
+} from './components/notebook/notebookToc';
 import {
   readWorkspaceContextSnapshot,
   storeWorkspaceContextSnapshot,
@@ -54,10 +60,23 @@ function App() {
   const workspaceContextRef = useRef<AgentChatContext>({});
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [settingsTab, setSettingsTab] = useState<'global' | 'ai'>('global');
+  const [notebookToc, setNotebookToc] = useState<
+    NotebookTocState & { tabId: string | null }
+  >({
+    tabId: null,
+    headings: [],
+    activeHeadingId: null,
+  });
+  const [tocScrollRequest, setTocScrollRequest] =
+    useState<NotebookTocScrollRequest | null>(null);
 
   const activeServer = useMemo(
     () => servers.find((s) => s.config.id === activeServerId) ?? null,
     [servers, activeServerId]
+  );
+  const activeTab = useMemo(
+    () => tabs.find((tab) => tab.id === activeTabId) ?? null,
+    [activeTabId, tabs]
   );
   const appErrorRecovery = getJupyterConnectionErrorRecovery(error);
   const appErrorMessage = error
@@ -68,10 +87,52 @@ function App() {
     storeWorkspaceContextSnapshot(workspaceContextRef, ctx);
   }, []);
 
+  const handleNotebookTocChange = useCallback(
+    (tabId: string, state: NotebookTocState) => {
+      setNotebookToc((current) => {
+        if (
+          current.tabId === tabId &&
+          current.headings === state.headings &&
+          current.activeHeadingId === state.activeHeadingId
+        ) {
+          return current;
+        }
+
+        return {
+          tabId,
+          headings: state.headings,
+          activeHeadingId: state.activeHeadingId,
+        };
+      });
+    },
+    []
+  );
+
+  const handleTocHeadingSelect = useCallback(
+    (headingId: string) => {
+      if (!activeTabId) return;
+      setTocScrollRequest({
+        tabId: activeTabId,
+        headingId,
+        nonce: Date.now(),
+      });
+    },
+    [activeTabId]
+  );
+
   const getWorkspaceContext = useCallback(
     () => readWorkspaceContextSnapshot(workspaceContextRef),
     []
   );
+
+  useEffect(() => {
+    if (activeTab?.type === 'notebook') return;
+    setNotebookToc({
+      tabId: null,
+      headings: [],
+      activeHeadingId: null,
+    });
+  }, [activeTab?.type]);
 
   // Auto-switch to explorer view after connection
   const handleConnect = async (config: Parameters<typeof connect>[0]) => {
@@ -169,6 +230,23 @@ function App() {
 
   // Build the side panel content based on activePanel and viewMode
   const renderPanelContent = () => {
+    if (activePanel === 'toc') {
+      const isNotebookTocCurrent =
+        activeTab?.type === 'notebook' && notebookToc.tabId === activeTab.id;
+      const headings: NotebookTocHeading[] = isNotebookTocCurrent
+        ? notebookToc.headings
+        : [];
+
+      return (
+        <NotebookTocPanel
+          notebookName={activeTab?.type === 'notebook' ? activeTab.title : undefined}
+          headings={headings}
+          activeHeadingId={isNotebookTocCurrent ? notebookToc.activeHeadingId : null}
+          onSelectHeading={handleTocHeadingSelect}
+        />
+      );
+    }
+
     if (activePanel === 'terminal') {
       return (
         <TerminalSelector
@@ -362,6 +440,9 @@ function App() {
                           serverId={activeServerId || undefined}
                           onClose={() => handleCloseTab(tab.id)}
                           onContextChange={handleWorkspaceContextChange}
+                          tocOwnerId={isCurrent ? tab.id : undefined}
+                          tocScrollRequest={isCurrent ? tocScrollRequest : null}
+                          onTocChange={handleNotebookTocChange}
                         />
                       ) : tab.type === 'terminal' ? (
                         <TerminalPanel

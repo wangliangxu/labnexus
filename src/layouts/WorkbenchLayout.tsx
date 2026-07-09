@@ -3,9 +3,10 @@
  */
 
 import { useState, type ReactNode } from 'react';
+import { TableOfContents } from 'lucide-react';
 import './WorkbenchLayout.css';
 
-export type PanelId = 'explorer' | 'terminal' | 'agent' | 'settings' | null;
+export type PanelId = 'explorer' | 'terminal' | 'toc' | 'agent' | 'settings' | null;
 
 interface WorkbenchLayoutProps {
   sidebar?: ReactNode;
@@ -98,6 +99,13 @@ export function WorkbenchLayout({
               <polyline points="4 17 10 11 4 5" />
               <line x1="12" y1="19" x2="20" y2="19" />
             </svg>
+          </button>
+          <button
+            className={`titlebar__item ${currentPanel === 'toc' ? 'active' : ''}`}
+            onClick={() => handlePanelClick('toc')}
+            title="Table of Contents"
+          >
+            <TableOfContents size={18} strokeWidth={1.6} />
           </button>
         </div>
         <div className="titlebar__center" data-tauri-drag-region></div>

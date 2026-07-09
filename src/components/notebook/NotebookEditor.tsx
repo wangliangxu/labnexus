@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Loader2, AlertTriangle, FileCode } from 'lucide-react';
 import type { Cell, CellType, CellOutput } from '../../types/jupyter';
 import type { AgentChatContext } from '../../types/agent';
@@ -12,6 +12,13 @@ import {
   updateCellSourceSnapshot,
   type RunCellMode,
 } from './notebookCellOps';
+import {
+  extractNotebookToc,
+  resolveActiveTocHeadingId,
+  type NotebookCursorPosition,
+  type NotebookTocScrollRequest,
+  type NotebookTocState,
+} from './notebookToc';
 import './Notebook.css';
 
 /* ── Button class tokens (for empty state) ───────────────────────── */
@@ -34,12 +41,18 @@ interface NotebookEditorProps {
   serverId?: string;
   onClose?: () => void;
   onContextChange?: (ctx: AgentChatContext) => void;
+  tocOwnerId?: string;
+  tocScrollRequest?: NotebookTocScrollRequest | null;
+  onTocChange?: (ownerId: string, state: NotebookTocState) => void;
 }
 
 export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   path,
   serverId,
   onContextChange,
+  tocOwnerId,
+  tocScrollRequest,
+  onTocChange,
 }) => {
   const [cells, setCells] = useState<Cell[]>([]);
   const [nbMetadata, setNbMetadata] = useState<Record<string, any>>({});
@@ -49,7 +62,12 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeCellIndex, setActiveCellIndex] = useState<number>(0);
   const [executingCellId, setExecutingCellId] = useState<string | null>(null);
+  const [cursorPosition, setCursorPosition] = useState<NotebookCursorPosition>({
+    cellIndex: 0,
+    line: 0,
+  });
   const cellsRef = useRef<Cell[]>([]);
+  const cellElementsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const sourceCommitTimersRef = useRef<Map<string, number>>(new Map());
 
   // Extract notebook filename from path
@@ -164,6 +182,33 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   });
   const canRunCode = kernel.isReady;
   const activeCellType = cells[activeCellIndex]?.cell_type || 'code';
+  const tocHeadings = useMemo(() => extractNotebookToc(cells), [cells]);
+  const activeTocHeadingId = useMemo(
+    () => resolveActiveTocHeadingId(tocHeadings, cursorPosition),
+    [cursorPosition, tocHeadings]
+  );
+
+  useEffect(() => {
+    if (!tocOwnerId || !onTocChange) return;
+    onTocChange(tocOwnerId, {
+      headings: tocHeadings,
+      activeHeadingId: activeTocHeadingId,
+    });
+  }, [activeTocHeadingId, onTocChange, tocHeadings, tocOwnerId]);
+
+  useEffect(() => {
+    if (!tocScrollRequest || tocScrollRequest.tabId !== tocOwnerId) return;
+
+    const heading = tocHeadings.find((item) => item.id === tocScrollRequest.headingId);
+    if (!heading) return;
+
+    const target = cellElementsRef.current.get(heading.cellId);
+    if (!target) return;
+
+    setActiveCellIndex(heading.cellIndex);
+    setCursorPosition({ cellIndex: heading.cellIndex, line: heading.line });
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [tocOwnerId, tocScrollRequest, tocHeadings]);
 
   // Sync workspace context with AI Agent
   useEffect(() => {
@@ -210,12 +255,16 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
             metadata: c.metadata || {},
           }));
           setCellsSnapshot(loadedCells);
+          setActiveCellIndex(0);
+          setCursorPosition({ cellIndex: 0, line: 0 });
           setNbMetadata(content.metadata || {});
         } else {
           // Empty or new notebook
           setCellsSnapshot([
             createNotebookCell('code'),
           ]);
+          setActiveCellIndex(0);
+          setCursorPosition({ cellIndex: 0, line: 0 });
         }
         setIsDirty(false);
 
@@ -291,6 +340,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     const transition = prepareRunCellExecutionState(currentCells, index, mode);
     setCellsSnapshot(transition.cells);
     setActiveCellIndex(transition.activeCellIndex);
+    setCursorPosition({ cellIndex: transition.activeCellIndex, line: 0 });
     setIsDirty(true);
     setExecutingCellId(cell.id || null);
 
@@ -306,6 +356,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     for (let i = 0; i < currentCells.length; i++) {
       if (currentCells[i].cell_type === 'code') {
         setActiveCellIndex(i);
+        setCursorPosition({ cellIndex: i, line: 0 });
         await handleRunCell(i, 'stay');
       }
     }
@@ -322,6 +373,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     ];
     setCellsSnapshot(newCells);
     setActiveCellIndex(insertIdx);
+    setCursorPosition({ cellIndex: insertIdx, line: 0 });
     setIsDirty(true);
   };
 
@@ -340,8 +392,10 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     const currentCells = cellsRef.current;
     if (currentCells.length <= 1) return; // Keep at least one cell
     const newCells = currentCells.filter((_, i) => i !== index);
+    const nextActiveIndex = Math.min(activeCellIndex, newCells.length - 1);
     setCellsSnapshot(newCells);
-    setActiveCellIndex((prev) => Math.min(prev, newCells.length - 1));
+    setActiveCellIndex(nextActiveIndex);
+    setCursorPosition({ cellIndex: nextActiveIndex, line: 0 });
     setIsDirty(true);
   };
 
@@ -357,8 +411,19 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
 
     setCellsSnapshot(newCells);
     setActiveCellIndex(targetIdx);
+    setCursorPosition({ cellIndex: targetIdx, line: 0 });
     setIsDirty(true);
   };
+
+  const handleSelectCell = useCallback((index: number) => {
+    setActiveCellIndex(index);
+    setCursorPosition({ cellIndex: index, line: 0 });
+  }, []);
+
+  const handleCellCursorChange = useCallback((index: number, line: number) => {
+    setActiveCellIndex(index);
+    setCursorPosition({ cellIndex: index, line });
+  }, []);
 
   const handleCellSourceChange = useCallback(
     (cellId: string, index: number, newSource: string) => {
@@ -433,29 +498,44 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
 
       <div className="flex-1 min-h-0 overflow-auto">
         <div className="w-full max-w-[1180px] mx-auto px-7 pt-[22px] max-[760px]:px-2.5 max-[760px]:pt-3.5">
-          {cells.map((cell, idx) => (
-            <CellEditor
-              key={cell.id}
-              cell={cell}
-              index={idx}
-              isActive={idx === activeCellIndex}
-              isExecuting={executingCellId === cell.id}
-              canRun={canRunCode}
-              onSelect={() => setActiveCellIndex(idx)}
-              onChange={(newSource) =>
-                handleCellSourceChange(cell.id || '', idx, newSource)
-              }
-              onTypeChange={(newType) => handleCellTypeChange(idx, newType)}
-              onRun={() => handleRunCell(idx, 'stay')}
-              onRunAndAdvance={() => handleRunCell(idx, 'advance')}
-              onRunAndInsert={() => handleRunCell(idx, 'insert')}
-              onDelete={() => handleDeleteCell(idx)}
-              onMoveUp={() => handleMoveCell(idx, 'up')}
-              onMoveDown={() => handleMoveCell(idx, 'down')}
-              canMoveUp={idx > 0}
-              canMoveDown={idx < cells.length - 1}
-            />
-          ))}
+          {cells.map((cell, idx) => {
+            const cellId = cell.id || `cell-${idx}`;
+            return (
+              <div
+                key={cellId}
+                style={{ scrollMarginTop: '48px' }}
+                ref={(element) => {
+                  if (element) {
+                    cellElementsRef.current.set(cellId, element);
+                  } else {
+                    cellElementsRef.current.delete(cellId);
+                  }
+                }}
+              >
+                <CellEditor
+                  cell={cell}
+                  index={idx}
+                  isActive={idx === activeCellIndex}
+                  isExecuting={executingCellId === cell.id}
+                  canRun={canRunCode}
+                  onSelect={() => handleSelectCell(idx)}
+                  onChange={(newSource) =>
+                    handleCellSourceChange(cell.id || '', idx, newSource)
+                  }
+                  onTypeChange={(newType) => handleCellTypeChange(idx, newType)}
+                  onRun={() => handleRunCell(idx, 'stay')}
+                  onRunAndAdvance={() => handleRunCell(idx, 'advance')}
+                  onRunAndInsert={() => handleRunCell(idx, 'insert')}
+                  onDelete={() => handleDeleteCell(idx)}
+                  onMoveUp={() => handleMoveCell(idx, 'up')}
+                  onMoveDown={() => handleMoveCell(idx, 'down')}
+                  onCursorChange={(line) => handleCellCursorChange(idx, line)}
+                  canMoveUp={idx > 0}
+                  canMoveDown={idx < cells.length - 1}
+                />
+              </div>
+            );
+          })}
 
           {cells.length === 0 && (
             <div className="flex flex-col items-center justify-center min-h-[220px] gap-3 border border-dashed border-nb-cell-border bg-nb-cell text-nb-text-secondary">

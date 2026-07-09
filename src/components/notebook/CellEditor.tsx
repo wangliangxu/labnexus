@@ -3,7 +3,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import { python } from '@codemirror/lang-python';
 import { markdown } from '@codemirror/lang-markdown';
 import { oneDark } from '@codemirror/theme-one-dark';
-import { keymap, EditorView } from '@codemirror/view';
+import { keymap, EditorView, type ViewUpdate } from '@codemirror/view';
 import { marked } from 'marked';
 import {
   Play,
@@ -53,6 +53,7 @@ interface CellEditorProps {
   onDelete: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
+  onCursorChange?: (line: number) => void;
   canMoveUp: boolean;
   canMoveDown: boolean;
 }
@@ -72,6 +73,7 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
   onDelete,
   onMoveUp,
   onMoveDown,
+  onCursorChange,
   canMoveUp,
   canMoveDown,
 }) => {
@@ -241,6 +243,18 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
     [onChange]
   );
 
+  const handleEditorUpdate = useCallback(
+    (update: ViewUpdate) => {
+      if (!onCursorChange) return;
+      if (!update.selectionSet && !update.docChanged && !update.focusChanged) return;
+
+      const head = update.state.selection.main.head;
+      const line = update.state.doc.lineAt(head).number - 1;
+      onCursorChange(line);
+    },
+    [onCursorChange]
+  );
+
   const prompt = isCode
     ? `In [${isExecuting ? '*' : cell.execution_count ?? ' '}]:`
     : cell.cell_type === 'markdown'
@@ -406,6 +420,7 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
               value={draftSource}
               extensions={extensions}
               onChange={handleEditorChange}
+              onUpdate={handleEditorUpdate}
               theme={isDarkTheme ? oneDark : jupyterLight}
               basicSetup={basicSetup}
               autoFocus={isMarkdown && isEditingMarkdown}
@@ -431,6 +446,7 @@ export const CellEditor = React.memo(
     prev.isActive === next.isActive &&
     prev.isExecuting === next.isExecuting &&
     prev.canRun === next.canRun &&
+    prev.onCursorChange === next.onCursorChange &&
     prev.canMoveUp === next.canMoveUp &&
     prev.canMoveDown === next.canMoveDown
 );
