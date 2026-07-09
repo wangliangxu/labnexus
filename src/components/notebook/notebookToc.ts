@@ -104,3 +104,44 @@ export function resolveActiveTocHeadingId(
 
   return activeHeading?.id || null;
 }
+
+export function headingHasNestedChildren(
+  headings: NotebookTocHeading[],
+  index: number
+): boolean {
+  const currentLevel = headings[index]?.level;
+  if (!currentLevel) return false;
+
+  for (let nextIndex = index + 1; nextIndex < headings.length; nextIndex++) {
+    const nextLevel = headings[nextIndex].level;
+    if (nextLevel <= currentLevel) return false;
+    if (nextLevel > currentLevel) return true;
+  }
+
+  return false;
+}
+
+export function resolveVisibleTocHeadings(
+  headings: NotebookTocHeading[],
+  collapsedHeadingIds: Set<string>
+): NotebookTocHeading[] {
+  const visibleHeadings: NotebookTocHeading[] = [];
+  let hiddenUntilLevel: number | null = null;
+
+  headings.forEach((heading) => {
+    if (hiddenUntilLevel !== null) {
+      if (heading.level > hiddenUntilLevel) {
+        return;
+      }
+      hiddenUntilLevel = null;
+    }
+
+    visibleHeadings.push(heading);
+
+    if (collapsedHeadingIds.has(heading.id)) {
+      hiddenUntilLevel = heading.level;
+    }
+  });
+
+  return visibleHeadings;
+}

@@ -1,6 +1,10 @@
-import React from 'react';
-import { TableOfContents } from 'lucide-react';
-import type { NotebookTocHeading } from './notebookToc';
+import React, { useCallback, useMemo, useState } from 'react';
+import { ChevronDown, TableOfContents } from 'lucide-react';
+import {
+  headingHasNestedChildren,
+  resolveVisibleTocHeadings,
+  type NotebookTocHeading,
+} from './notebookToc';
 
 interface NotebookTocPanelProps {
   notebookName?: string;
@@ -15,49 +19,88 @@ export const NotebookTocPanel: React.FC<NotebookTocPanelProps> = ({
   activeHeadingId,
   onSelectHeading,
 }) => {
+  const [collapsedHeadingIds, setCollapsedHeadingIds] = useState<Set<string>>(
+    () => new Set()
+  );
+  const visibleHeadings = useMemo(
+    () => resolveVisibleTocHeadings(headings, collapsedHeadingIds),
+    [collapsedHeadingIds, headings]
+  );
+
+  const toggleHeading = useCallback((headingId: string) => {
+    setCollapsedHeadingIds((current) => {
+      const next = new Set(current);
+      if (next.has(headingId)) {
+        next.delete(headingId);
+      } else {
+        next.add(headingId);
+      }
+      return next;
+    });
+  }, []);
+
   return (
-    <div className="flex h-full min-h-0 flex-col bg-dark-surface text-sm text-gray-300">
-      <div className="panel-header">
-        <div className="min-w-0">
-          <h3 className="panel-header__title">Table of Contents</h3>
+    <div className="nb-toc-panel">
+      <div className="nb-toc-panel__header">
+        <div className="nb-toc-panel__title-group">
+          <h3 className="nb-toc-panel__title">Table of Contents</h3>
           {notebookName && (
-            <div className="mt-1 truncate text-[11px] text-gray-500" title={notebookName}>
+            <div className="nb-toc-panel__subtitle" title={notebookName}>
               {notebookName}
             </div>
           )}
         </div>
-        <TableOfContents size={16} className="shrink-0 text-gray-500" />
+        <TableOfContents size={15} className="nb-toc-panel__icon" />
       </div>
 
       {headings.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 px-5 text-center text-xs text-gray-500">
-          <TableOfContents size={28} />
+        <div className="nb-toc-empty">
+          <TableOfContents size={26} />
           <span>No markdown headings</span>
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
-          {headings.map((heading) => {
+        <div className="nb-toc-tree" role="tree" aria-label="Notebook headings">
+          {visibleHeadings.map((heading) => {
+            const headingIndex = headings.findIndex((item) => item.id === heading.id);
             const isActive = heading.id === activeHeadingId;
+            const hasChildren = headingHasNestedChildren(headings, headingIndex);
+            const isCollapsed = collapsedHeadingIds.has(heading.id);
+
             return (
-              <button
+              <div
                 key={heading.id}
-                type="button"
-                onClick={() => onSelectHeading(heading.id)}
                 title={heading.text}
-                className={`flex w-full items-center gap-2 rounded-sm border-l-2 py-1.5 pr-2 text-left text-xs transition-colors ${
-                  isActive
-                    ? 'border-brand-primary bg-brand-primary/10 text-brand-primary'
-                    : 'border-transparent text-gray-400 hover:bg-dark-surface hover:text-gray-200'
-                }`}
-                style={{ paddingLeft: `${8 + (heading.level - 1) * 12}px` }}
+                role="treeitem"
+                aria-current={isActive ? 'location' : undefined}
+                aria-expanded={hasChildren ? !isCollapsed : undefined}
+                aria-level={heading.level}
+                className={`nb-toc-tree__item ${isActive ? 'is-active' : ''}`}
+                style={{ '--toc-indent': `${(heading.level - 1) * 13}px` } as React.CSSProperties}
               >
-                <span
-                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                    isActive ? 'bg-brand-primary' : 'bg-gray-600'
-                  }`}
-                />
-                <span className="min-w-0 flex-1 truncate">{heading.text}</span>
-              </button>
+                <span className="nb-toc-tree__guide" aria-hidden="true" />
+                {hasChildren ? (
+                  <button
+                    type="button"
+                    className={`nb-toc-tree__twisty ${isCollapsed ? 'is-collapsed' : ''}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleHeading(heading.id);
+                    }}
+                    aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${heading.text}`}
+                  >
+                    <ChevronDown size={13} />
+                  </button>
+                ) : (
+                  <span className="nb-toc-tree__twisty" aria-hidden="true" />
+                )}
+                <button
+                  type="button"
+                  className="nb-toc-tree__label"
+                  onClick={() => onSelectHeading(heading.id)}
+                >
+                  {heading.text}
+                </button>
+              </div>
             );
           })}
         </div>

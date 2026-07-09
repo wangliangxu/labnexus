@@ -1,6 +1,7 @@
 import {
   extractNotebookToc,
   resolveActiveTocHeadingId,
+  resolveVisibleTocHeadings,
 } from '../notebookToc.ts';
 import type { Cell } from '../../../types/jupyter';
 
@@ -72,4 +73,26 @@ assert(
 assert(
   resolveActiveTocHeadingId([], { cellIndex: 0, line: 0 }) === null,
   'empty toc has no active heading'
+);
+
+const visibleWithLeafCollapsed = resolveVisibleTocHeadings(
+  toc,
+  new Set(['analysis:5'])
+);
+assert(
+  visibleWithLeafCollapsed.map((heading) => heading.text).join(',') ===
+    'Intro,Setup,Results,Details',
+  'collapsing a leaf heading keeps following headings visible'
+);
+
+const nestedToc = extractNotebookToc([
+  markdownCell('chapter', '# Chapter\n## Section\n### Hidden\n## Next\n'),
+]);
+const collapsedNested = resolveVisibleTocHeadings(
+  nestedToc,
+  new Set(['chapter:1'])
+);
+assert(
+  collapsedNested.map((heading) => heading.text).join(',') === 'Chapter,Section,Next',
+  'collapsing a heading hides only deeper nested headings until the next sibling'
 );
