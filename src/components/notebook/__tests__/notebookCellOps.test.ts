@@ -1,4 +1,9 @@
-import { createNotebookCell, resolveRunModeTransition } from '../notebookCellOps';
+import {
+  createNotebookCell,
+  prepareRunCellExecutionState,
+  resolveRunModeTransition,
+  updateCellSourceSnapshot,
+} from '../notebookCellOps.ts';
 import type { Cell } from '../../../types/jupyter';
 
 function assert(condition: unknown, message: string): void {
@@ -44,3 +49,23 @@ assert(
 const markdown = createNotebookCell('markdown');
 assert(markdown.cell_type === 'markdown', 'createNotebookCell supports markdown');
 assert(markdown.outputs.length === 0, 'new cells start with no outputs');
+
+const cellWithOutput: Cell = {
+  ...makeCell('with-output'),
+  outputs: [{ output_type: 'stream', name: 'stdout', text: 'old\n' } as any],
+};
+const preparedStay = prepareRunCellExecutionState([cellWithOutput], 0, 'stay');
+assert(preparedStay.cells.length === 1, 'preparing stay mode does not add a cell');
+assert(preparedStay.cells[0].outputs?.length === 0, 'preparing execution clears only the target cell outputs');
+assert(preparedStay.activeCellIndex === 0, 'preparing stay mode keeps the active cell');
+
+const preparedInsert = prepareRunCellExecutionState(cells, 0, 'insert');
+assert(preparedInsert.cells.length === 3, 'preparing insert mode adds a cell before execution is sent');
+assert(preparedInsert.activeCellIndex === 1, 'preparing insert mode selects the inserted cell');
+
+const sourceSnapshot = { current: cells };
+const updatedSourceCells = updateCellSourceSnapshot(sourceSnapshot, 'b', 'print("fast")');
+assert(sourceSnapshot.current === updatedSourceCells, 'source snapshot points at the latest cells array');
+assert(updatedSourceCells[1].source === 'print("fast")', 'source snapshot updates the edited cell source');
+assert(updatedSourceCells[0] === cells[0], 'source snapshot preserves untouched cell objects');
+assert(updatedSourceCells !== cells, 'source snapshot update does not mutate the original cells array');

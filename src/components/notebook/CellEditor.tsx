@@ -57,7 +57,7 @@ interface CellEditorProps {
   canMoveDown: boolean;
 }
 
-export const CellEditor: React.FC<CellEditorProps> = ({
+const CellEditorComponent: React.FC<CellEditorProps> = ({
   cell,
   index,
   isActive,
@@ -78,6 +78,20 @@ export const CellEditor: React.FC<CellEditorProps> = ({
   const isCode = cell.cell_type === 'code';
   const isMarkdown = cell.cell_type === 'markdown';
 
+  const externalSourceText = useMemo(() => {
+    return typeof cell.source === 'string'
+      ? cell.source
+      : Array.isArray(cell.source)
+        ? cell.source.join('')
+        : '';
+  }, [cell.source]);
+
+  const [draftSource, setDraftSource] = useState(externalSourceText);
+
+  useEffect(() => {
+    setDraftSource(externalSourceText);
+  }, [cell.id, externalSourceText]);
+
   /* ── Markdown edit/render mode (JupyterLab style) ────────────── */
   const [isEditingMarkdown, setIsEditingMarkdown] = useState(false);
   const cellRef = useRef<HTMLDivElement>(null);
@@ -92,16 +106,11 @@ export const CellEditor: React.FC<CellEditorProps> = ({
   // When newly created markdown cell has no content, auto-enter edit mode
   useEffect(() => {
     if (isMarkdown && isActive) {
-      const src = typeof cell.source === 'string'
-        ? cell.source
-        : Array.isArray(cell.source)
-        ? cell.source.join('')
-        : '';
-      if (src.trim() === '') {
+      if (externalSourceText.trim() === '') {
         setIsEditingMarkdown(true);
       }
     }
-  }, [cell.id]); // Only on mount / cell id change
+  }, [cell.id, externalSourceText, isActive, isMarkdown]);
 
   // Click outside markdown cell → exit edit mode
   useEffect(() => {
@@ -146,21 +155,13 @@ export const CellEditor: React.FC<CellEditorProps> = ({
     return () => observer.disconnect();
   }, []);
 
-  const sourceText = useMemo(() => {
-    return typeof cell.source === 'string'
-      ? cell.source
-      : Array.isArray(cell.source)
-      ? cell.source.join('')
-      : '';
-  }, [cell.source]);
-
   /* ── Rendered markdown HTML ──────────────────────────────────── */
   const renderedMarkdown = useMemo(() => {
     if (!isMarkdown) return '';
-    const raw = sourceText.trim();
+    const raw = draftSource.trim();
     if (!raw) return '<p class="nb-md-placeholder">Double-click to edit…</p>';
     return marked.parse(raw) as string;
-  }, [isMarkdown, sourceText]);
+  }, [isMarkdown, draftSource]);
 
   const extensions = useMemo(() => {
     const exitEditOnRun = () => {
@@ -221,11 +222,30 @@ export const CellEditor: React.FC<CellEditorProps> = ({
     ];
   }, [isCode, isMarkdown, onRun, onRunAndAdvance, onRunAndInsert, canRun]);
 
+  const basicSetup = useMemo(
+    () => ({
+      lineNumbers: true,
+      foldGutter: true,
+      highlightActiveLine: isActive,
+      autocompletion: true,
+      bracketMatching: true,
+    }),
+    [isActive]
+  );
+
+  const handleEditorChange = useCallback(
+    (value: string) => {
+      setDraftSource(value);
+      onChange(value);
+    },
+    [onChange]
+  );
+
   const prompt = isCode
     ? `In [${isExecuting ? '*' : cell.execution_count ?? ' '}]:`
     : cell.cell_type === 'markdown'
-    ? 'Markdown'
-    : 'Raw';
+      ? 'Markdown'
+      : 'Raw';
 
   /* ── Cell border logic ────────────────────────────────────────── */
   const borderOther = isActive
@@ -258,9 +278,8 @@ export const CellEditor: React.FC<CellEditorProps> = ({
     >
       {/* Prompt (In [n]:) */}
       <div
-        className={`text-nb-prompt font-mono text-xs text-right whitespace-nowrap select-none max-[760px]:text-[11px] ${
-          showMarkdownRendered ? 'pt-2.5' : 'pt-[37px]'
-        }`}
+        className={`text-nb-prompt font-mono text-xs text-right whitespace-nowrap select-none max-[760px]:text-[11px] ${showMarkdownRendered ? 'pt-2.5' : 'pt-[37px]'
+          }`}
         title={`Cell #${index + 1}`}
       >
         {prompt}
@@ -271,11 +290,10 @@ export const CellEditor: React.FC<CellEditorProps> = ({
         {/* Cell Tools – hidden when markdown is in rendered mode */}
         {!showMarkdownRendered && (
           <div
-            className={`flex items-center justify-between min-h-7 gap-2 transition-opacity duration-150 max-[760px]:flex-wrap ${
-              isActive
+            className={`flex items-center justify-between min-h-7 gap-2 transition-opacity duration-150 max-[760px]:flex-wrap ${isActive
                 ? 'opacity-100'
                 : 'opacity-0 group-hover:opacity-100 max-[760px]:opacity-100'
-            }`}
+              }`}
           >
             {/* Type Switch */}
             <div className="inline-flex items-center gap-[3px] min-w-0">
@@ -284,11 +302,10 @@ export const CellEditor: React.FC<CellEditorProps> = ({
                   event.stopPropagation();
                   onTypeChange('code');
                 }}
-                className={`${cellBtn} min-h-[23px] px-[7px] ${
-                  isCode
+                className={`${cellBtn} min-h-[23px] px-[7px] ${isCode
                     ? 'border-nb-type-selected-border bg-nb-type-selected text-nb-type-selected-text'
                     : ''
-                }`}
+                  }`}
               >
                 <Code2 size={13} />
                 Code
@@ -298,11 +315,10 @@ export const CellEditor: React.FC<CellEditorProps> = ({
                   event.stopPropagation();
                   onTypeChange('markdown');
                 }}
-                className={`${cellBtn} min-h-[23px] px-[7px] ${
-                  cell.cell_type === 'markdown'
+                className={`${cellBtn} min-h-[23px] px-[7px] ${cell.cell_type === 'markdown'
                     ? 'border-nb-type-selected-border bg-nb-type-selected text-nb-type-selected-text'
                     : ''
-                }`}
+                  }`}
               >
                 <FileText size={13} />
                 Markdown
@@ -387,17 +403,11 @@ export const CellEditor: React.FC<CellEditorProps> = ({
           /* Editor */
           <div className="min-w-0 border border-nb-editor-border">
             <CodeMirror
-              value={sourceText}
+              value={draftSource}
               extensions={extensions}
-              onChange={(value) => onChange(value)}
+              onChange={handleEditorChange}
               theme={isDarkTheme ? oneDark : jupyterLight}
-              basicSetup={{
-                lineNumbers: true,
-                foldGutter: true,
-                highlightActiveLine: isActive,
-                autocompletion: true,
-                bracketMatching: true,
-              }}
+              basicSetup={basicSetup}
               autoFocus={isMarkdown && isEditingMarkdown}
               className="notebook-codemirror"
             />
@@ -412,3 +422,15 @@ export const CellEditor: React.FC<CellEditorProps> = ({
     </div>
   );
 };
+
+export const CellEditor = React.memo(
+  CellEditorComponent,
+  (prev, next) =>
+    prev.cell === next.cell &&
+    prev.index === next.index &&
+    prev.isActive === next.isActive &&
+    prev.isExecuting === next.isExecuting &&
+    prev.canRun === next.canRun &&
+    prev.canMoveUp === next.canMoveUp &&
+    prev.canMoveDown === next.canMoveDown
+);

@@ -3,7 +3,7 @@
  * Integrated with multi-tab workbench, remote terminals, dynamic theme system, and AI Agent.
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import { WorkbenchLayout, type PanelId } from './layouts/WorkbenchLayout';
 import { ConnectionPanel } from './components/explorer/ConnectionPanel';
 import { FileExplorer } from './components/explorer/FileExplorer';
@@ -16,6 +16,10 @@ import { TerminalSelector } from './components/terminal/TerminalSelector';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { AgentChatPanel } from './components/agent/AgentChatPanel';
 import type { AgentChatContext } from './types/agent';
+import {
+  readWorkspaceContextSnapshot,
+  storeWorkspaceContextSnapshot,
+} from './workspaceContextSnapshot';
 import { useJupyter } from './hooks/useJupyter';
 import { jupyterCreateTerminal } from './services/tauriIpc';
 import { resolveServerSelectionViewMode, type ViewMode } from './appViewMode';
@@ -47,7 +51,7 @@ function App() {
   const [tabs, setTabs] = useState<TabItem[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [isAgentOpen, setIsAgentOpen] = useState<boolean>(false);
-  const [workspaceContext, setWorkspaceContext] = useState<AgentChatContext>({});
+  const workspaceContextRef = useRef<AgentChatContext>({});
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [settingsTab, setSettingsTab] = useState<'global' | 'ai'>('global');
 
@@ -59,6 +63,15 @@ function App() {
   const appErrorMessage = error
     ? normalizeJupyterConnectionErrorMessage(error)
     : null;
+
+  const handleWorkspaceContextChange = useCallback((ctx: AgentChatContext) => {
+    storeWorkspaceContextSnapshot(workspaceContextRef, ctx);
+  }, []);
+
+  const getWorkspaceContext = useCallback(
+    () => readWorkspaceContextSnapshot(workspaceContextRef),
+    []
+  );
 
   // Auto-switch to explorer view after connection
   const handleConnect = async (config: Parameters<typeof connect>[0]) => {
@@ -348,7 +361,7 @@ function App() {
                           path={tab.data.path}
                           serverId={activeServerId || undefined}
                           onClose={() => handleCloseTab(tab.id)}
-                          onContextChange={setWorkspaceContext}
+                          onContextChange={handleWorkspaceContextChange}
                         />
                       ) : tab.type === 'terminal' ? (
                         <TerminalPanel
@@ -394,7 +407,7 @@ function App() {
       <AgentChatPanel
         isOpen={isAgentOpen}
         onClose={() => setIsAgentOpen(false)}
-        getWorkspaceContext={() => workspaceContext}
+        getWorkspaceContext={getWorkspaceContext}
       />
       <SettingsModal
         isOpen={isSettingsOpen}

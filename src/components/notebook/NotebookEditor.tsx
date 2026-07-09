@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Loader2, AlertTriangle, FileCode } from 'lucide-react';
 import type { Cell, CellType, CellOutput } from '../../types/jupyter';
 import type { AgentChatContext } from '../../types/agent';
@@ -8,7 +8,8 @@ import { NotebookToolbar } from './NotebookToolbar';
 import { CellEditor } from './CellEditor';
 import {
   createNotebookCell,
-  resolveRunModeTransition,
+  prepareRunCellExecutionState,
+  updateCellSourceSnapshot,
   type RunCellMode,
 } from './notebookCellOps';
 import './Notebook.css';
@@ -48,14 +49,54 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeCellIndex, setActiveCellIndex] = useState<number>(0);
   const [executingCellId, setExecutingCellId] = useState<string | null>(null);
+  const cellsRef = useRef<Cell[]>([]);
+  const sourceCommitTimersRef = useRef<Map<string, number>>(new Map());
 
   // Extract notebook filename from path
   const notebookName = path.split('/').pop() || path;
 
+  const setCellsSnapshot = useCallback((nextCells: Cell[]) => {
+    cellsRef.current = nextCells;
+    setCells(nextCells);
+  }, []);
+
+  const updateCellsSnapshot = useCallback((updater: (current: Cell[]) => Cell[]) => {
+    const nextCells = updater(cellsRef.current);
+    cellsRef.current = nextCells;
+    setCells(nextCells);
+    return nextCells;
+  }, []);
+
+  const flushSourceCommits = useCallback(() => {
+    sourceCommitTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    sourceCommitTimersRef.current.clear();
+    setCells(cellsRef.current);
+  }, []);
+
+  const scheduleSourceCommit = useCallback((cellId: string) => {
+    const currentTimer = sourceCommitTimersRef.current.get(cellId);
+    if (currentTimer !== undefined) {
+      window.clearTimeout(currentTimer);
+    }
+
+    const timerId = window.setTimeout(() => {
+      sourceCommitTimersRef.current.delete(cellId);
+      setCells(cellsRef.current);
+    }, 180);
+    sourceCommitTimersRef.current.set(cellId, timerId);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      sourceCommitTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+      sourceCommitTimersRef.current.clear();
+    };
+  }, []);
+
   // Handle incoming outputs from kernel WebSocket
   const handleCellOutput = useCallback(
     (cellId: string, output: CellOutput) => {
-      setCells((prevCells) =>
+      updateCellsSnapshot((prevCells) =>
         prevCells.map((cell) => {
           if (cell.id === cellId) {
             const currentOutputs = cell.outputs || [];
@@ -70,7 +111,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
               const updatedLast = {
                 ...last,
                 text: (typeof last.text === 'string' ? last.text : last.text.join('')) +
-                      (typeof output.text === 'string' ? output.text : output.text.join('')),
+                  (typeof output.text === 'string' ? output.text : output.text.join('')),
               };
               return {
                 ...cell,
@@ -95,7 +136,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
 
   const handleCellExecutionDone = useCallback(
     (cellId: string, executionCount?: number) => {
-      setCells((prevCells) =>
+      updateCellsSnapshot((prevCells) =>
         prevCells.map((cell) => {
           if (cell.id === cellId) {
             return {
@@ -168,11 +209,11 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
             execution_count: c.execution_count ?? null,
             metadata: c.metadata || {},
           }));
-          setCells(loadedCells);
+          setCellsSnapshot(loadedCells);
           setNbMetadata(content.metadata || {});
         } else {
           // Empty or new notebook
-          setCells([
+          setCellsSnapshot([
             createNotebookCell('code'),
           ]);
         }
@@ -194,15 +235,17 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [path, serverId]);
+  }, [path, serverId, setCellsSnapshot]);
 
   // Save Notebook
   const handleSave = useCallback(async () => {
     if (isSaving || !isDirty) return;
+    flushSourceCommits();
     setIsSaving(true);
     try {
+      const latestCells = cellsRef.current;
       const nbData = {
-        cells: cells.map((c) => ({
+        cells: latestCells.map((c) => ({
           id: c.id,
           cell_type: c.cell_type,
           execution_count: c.cell_type === 'code' ? c.execution_count ?? null : null,
@@ -221,7 +264,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     } finally {
       setIsSaving(false);
     }
-  }, [cells, nbMetadata, path, serverId, isSaving, isDirty]);
+  }, [flushSourceCommits, nbMetadata, path, serverId, isSaving, isDirty]);
 
   // Ctrl+S / Cmd+S shortcut
   useEffect(() => {
@@ -237,29 +280,17 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
 
   // Cell operations
   const handleRunCell = async (index: number, mode: RunCellMode = 'stay') => {
-    const cell = cells[index];
+    flushSourceCommits();
+    const currentCells = cellsRef.current;
+    const cell = currentCells[index];
     if (!cell || cell.cell_type !== 'code') return;
     if (!canRunCode) return;
 
     const sourceText =
       typeof cell.source === 'string' ? cell.source : cell.source.join('');
-
-    // Use functional update to prevent overwriting outputs from other cells
-    setCells((prevCells) => {
-      const clearedCells = prevCells.map((c, i) =>
-        i === index ? { ...c, outputs: [] } : c
-      );
-      return resolveRunModeTransition(clearedCells, index, mode).cells;
-    });
-
-    if (mode === 'stay') {
-      setActiveCellIndex(index);
-    } else if (mode === 'insert') {
-      setActiveCellIndex(index + 1);
-    } else if (mode === 'advance') {
-      setActiveCellIndex(index < cells.length - 1 ? index + 1 : cells.length);
-    }
-    
+    const transition = prepareRunCellExecutionState(currentCells, index, mode);
+    setCellsSnapshot(transition.cells);
+    setActiveCellIndex(transition.activeCellIndex);
     setIsDirty(true);
     setExecutingCellId(cell.id || null);
 
@@ -270,8 +301,10 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   };
 
   const handleRunAll = async () => {
-    for (let i = 0; i < cells.length; i++) {
-      if (cells[i].cell_type === 'code') {
+    flushSourceCommits();
+    const currentCells = cellsRef.current;
+    for (let i = 0; i < currentCells.length; i++) {
+      if (currentCells[i].cell_type === 'code') {
         setActiveCellIndex(i);
         await handleRunCell(i, 'stay');
       }
@@ -281,18 +314,19 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   const handleAddCell = (type: CellType) => {
     const newCell = createNotebookCell(type);
     const insertIdx = activeCellIndex + 1;
+    const currentCells = cellsRef.current;
     const newCells = [
-      ...cells.slice(0, insertIdx),
+      ...currentCells.slice(0, insertIdx),
       newCell,
-      ...cells.slice(insertIdx),
+      ...currentCells.slice(insertIdx),
     ];
-    setCells(newCells);
+    setCellsSnapshot(newCells);
     setActiveCellIndex(insertIdx);
     setIsDirty(true);
   };
 
   const handleCellTypeChange = (index: number, newType: CellType) => {
-    setCells((prev) =>
+    updateCellsSnapshot((prev) =>
       prev.map((c, i) =>
         i === index
           ? { ...c, cell_type: newType, outputs: [], execution_count: null }
@@ -303,26 +337,46 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   };
 
   const handleDeleteCell = (index: number) => {
-    if (cells.length <= 1) return; // Keep at least one cell
-    const newCells = cells.filter((_, i) => i !== index);
-    setCells(newCells);
+    const currentCells = cellsRef.current;
+    if (currentCells.length <= 1) return; // Keep at least one cell
+    const newCells = currentCells.filter((_, i) => i !== index);
+    setCellsSnapshot(newCells);
     setActiveCellIndex((prev) => Math.min(prev, newCells.length - 1));
     setIsDirty(true);
   };
 
   const handleMoveCell = (index: number, direction: 'up' | 'down') => {
     const targetIdx = direction === 'up' ? index - 1 : index + 1;
-    if (targetIdx < 0 || targetIdx >= cells.length) return;
+    const currentCells = cellsRef.current;
+    if (targetIdx < 0 || targetIdx >= currentCells.length) return;
 
-    const newCells = [...cells];
+    const newCells = [...currentCells];
     const temp = newCells[index];
     newCells[index] = newCells[targetIdx];
     newCells[targetIdx] = temp;
 
-    setCells(newCells);
+    setCellsSnapshot(newCells);
     setActiveCellIndex(targetIdx);
     setIsDirty(true);
   };
+
+  const handleCellSourceChange = useCallback(
+    (cellId: string, index: number, newSource: string) => {
+      updateCellSourceSnapshot(cellsRef, cellId, newSource);
+      scheduleSourceCommit(cellId);
+      setIsDirty(true);
+
+      if (index === activeCellIndex && onContextChange) {
+        onContextChange({
+          notebook_path: path,
+          active_cell_index: activeCellIndex,
+          active_cell_code: newSource,
+          kernel_status: kernel.status,
+        });
+      }
+    },
+    [activeCellIndex, kernel.status, onContextChange, path, scheduleSourceCommit]
+  );
 
   if (isLoading) {
     return (
@@ -379,55 +433,50 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
 
       <div className="flex-1 min-h-0 overflow-auto">
         <div className="w-full max-w-[1180px] mx-auto px-7 pt-[22px] max-[760px]:px-2.5 max-[760px]:pt-3.5">
-        {cells.map((cell, idx) => (
-          <CellEditor
-            key={cell.id}
-            cell={cell}
-            index={idx}
-            isActive={idx === activeCellIndex}
-            isExecuting={executingCellId === cell.id}
-            canRun={canRunCode}
-            onSelect={() => setActiveCellIndex(idx)}
-            onChange={(newSource) => {
-              setCells((prev) =>
-                prev.map((c, i) =>
-                  i === idx ? { ...c, source: newSource } : c
-                )
-              );
-              setIsDirty(true);
-            }}
-            onTypeChange={(newType) => handleCellTypeChange(idx, newType)}
-            onRun={() => handleRunCell(idx, 'stay')}
-            onRunAndAdvance={() => handleRunCell(idx, 'advance')}
-            onRunAndInsert={() => handleRunCell(idx, 'insert')}
-            onDelete={() => handleDeleteCell(idx)}
-            onMoveUp={() => handleMoveCell(idx, 'up')}
-            onMoveDown={() => handleMoveCell(idx, 'down')}
-            canMoveUp={idx > 0}
-            canMoveDown={idx < cells.length - 1}
-          />
-        ))}
+          {cells.map((cell, idx) => (
+            <CellEditor
+              key={cell.id}
+              cell={cell}
+              index={idx}
+              isActive={idx === activeCellIndex}
+              isExecuting={executingCellId === cell.id}
+              canRun={canRunCode}
+              onSelect={() => setActiveCellIndex(idx)}
+              onChange={(newSource) =>
+                handleCellSourceChange(cell.id || '', idx, newSource)
+              }
+              onTypeChange={(newType) => handleCellTypeChange(idx, newType)}
+              onRun={() => handleRunCell(idx, 'stay')}
+              onRunAndAdvance={() => handleRunCell(idx, 'advance')}
+              onRunAndInsert={() => handleRunCell(idx, 'insert')}
+              onDelete={() => handleDeleteCell(idx)}
+              onMoveUp={() => handleMoveCell(idx, 'up')}
+              onMoveDown={() => handleMoveCell(idx, 'down')}
+              canMoveUp={idx > 0}
+              canMoveDown={idx < cells.length - 1}
+            />
+          ))}
 
-        {cells.length === 0 && (
-          <div className="flex flex-col items-center justify-center min-h-[220px] gap-3 border border-dashed border-nb-cell-border bg-nb-cell text-nb-text-secondary">
-            <FileCode size={40} />
-            <span>This notebook has no cells yet.</span>
-            <div className="flex flex-wrap justify-center gap-1.5">
-              <button
-                onClick={() => handleAddCell('code')}
-                className={nbBtnPrimary}
-              >
-                + Add Code Cell
-              </button>
-              <button
-                onClick={() => handleAddCell('markdown')}
-                className={nbBtn}
-              >
-                + Add Markdown Cell
-              </button>
+          {cells.length === 0 && (
+            <div className="flex flex-col items-center justify-center min-h-[220px] gap-3 border border-dashed border-nb-cell-border bg-nb-cell text-nb-text-secondary">
+              <FileCode size={40} />
+              <span>This notebook has no cells yet.</span>
+              <div className="flex flex-wrap justify-center gap-1.5">
+                <button
+                  onClick={() => handleAddCell('code')}
+                  className={nbBtnPrimary}
+                >
+                  + Add Code Cell
+                </button>
+                <button
+                  onClick={() => handleAddCell('markdown')}
+                  className={nbBtn}
+                >
+                  + Add Markdown Cell
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
           <div className="h-20" />
         </div>
