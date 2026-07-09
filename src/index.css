@@ -6,8 +6,44 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
+/* ─── Notebook Theme Tokens (Tailwind v4) ──────────────────────────── */
+@theme {
+  --color-nb-shell: #111827;
+  --color-nb-toolbar: #1f2937;
+  --color-nb-toolbar-border: #374151;
+  --color-nb-cell: #1e293b;
+  --color-nb-cell-border: #334155;
+  --color-nb-cell-active-border: #60a5fa;
+  --color-nb-cell-active-left: #3b82f6;
+  --color-nb-cell-executing-left: #f59e0b;
+  --color-nb-prompt: #60a5fa;
+  --color-nb-editor: #0f172a;
+  --color-nb-editor-border: #334155;
+  --color-nb-gutter: #1e293b;
+  --color-nb-gutter-text: #6b7280;
+  --color-nb-output-border: #334155;
+  --color-nb-error: #2d1b1b;
+  --color-nb-error-border: #5c2d2d;
+  --color-nb-error-text: #fca5a5;
+  --color-nb-text: #e5e7eb;
+  --color-nb-text-secondary: #9ca3af;
+  --color-nb-btn-hover: #374151;
+  --color-nb-btn-hover-border: #4b5563;
+  --color-nb-status-idle: #22c55e;
+  --color-nb-status-busy: #eab308;
+  --color-nb-status-error: #ef4444;
+  --color-nb-status-disconnected: #6b7280;
+  --color-nb-dirty: #d97706;
+  --color-nb-btn-primary: #2563eb;
+  --color-nb-btn-primary-hover: #1d4ed8;
+  --color-nb-type-selected: #1e3a5f;
+  --color-nb-type-selected-border: #2d5a8f;
+  --color-nb-type-selected-text: #93c5fd;
+}
+
 /* ─── CSS Variables ─────────────────────────────────────────────────── */
 :root {
+  color-scheme: dark;
   /* Brand Colors */
   --color-primary: #6366f1;
   --color-primary-hover: #818cf8;
@@ -159,6 +195,7 @@
 
 /* Solarized Light */
 [data-theme="solarized"] {
+  color-scheme: light;
   --color-primary: #268bd2;
   --color-primary-hover: #2aa198;
   --color-accent: #b58900;
@@ -174,6 +211,39 @@
   --border-hover: rgba(0, 0, 0, 0.2);
   --border-subtle: rgba(0, 0, 0, 0.05);
   --bg-hover: rgba(0, 0, 0, 0.05);
+
+  /* Notebook Overrides */
+  --color-nb-shell: #f3f3f3;
+  --color-nb-toolbar: #f7f7f7;
+  --color-nb-toolbar-border: #cfcfcf;
+  --color-nb-cell: #ffffff;
+  --color-nb-cell-border: #d9d9d9;
+  --color-nb-cell-active-border: #8ab4f8;
+  --color-nb-cell-active-left: #1976d2;
+  --color-nb-cell-executing-left: #c77700;
+  --color-nb-prompt: #307fc1;
+  --color-nb-editor: #ffffff;
+  --color-nb-editor-border: #d8d8d8;
+  --color-nb-gutter: #f8f8f8;
+  --color-nb-gutter-text: #757575;
+  --color-nb-output-border: #dedede;
+  --color-nb-error: #fff5f5;
+  --color-nb-error-border: #f1b7b7;
+  --color-nb-error-text: #9f1d1d;
+  --color-nb-text: #1f2328;
+  --color-nb-text-secondary: #5f6368;
+  --color-nb-btn-hover: #e9e9e9;
+  --color-nb-btn-hover-border: #c8c8c8;
+  --color-nb-status-idle: #16794c;
+  --color-nb-status-busy: #9a6700;
+  --color-nb-status-error: #c62828;
+  --color-nb-status-disconnected: #666666;
+  --color-nb-dirty: #d9822b;
+  --color-nb-btn-primary: #2f80d0;
+  --color-nb-btn-primary-hover: #256fb8;
+  --color-nb-type-selected: #e9f3ff;
+  --color-nb-type-selected-border: #b7d3f2;
+  --color-nb-type-selected-text: #174ea6;
 }
 
 /* ─── Reset & Base ──────────────────────────────────────────────────── */
@@ -225,7 +295,7 @@ body {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: #09090b;
+  background: var(--bg-editor);
 }
 
 .app-editor-content {

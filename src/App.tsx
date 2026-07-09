@@ -357,11 +357,19 @@ function App() {
                           onClose={() => handleCloseTab(tab.id)}
                         />
                       ) : (
-                        <div className="flex-1 flex flex-col items-center justify-center bg-zinc-950 text-zinc-400 gap-3 w-full h-full">
+                        <div
+                          className="flex-1 flex flex-col items-center justify-center gap-3 w-full h-full"
+                          style={{ background: 'var(--bg-editor)', color: 'var(--text-secondary)' }}
+                        >
                           <p className="text-sm font-medium">Text editor for {tab.title} coming soon</p>
                           <button
                             onClick={() => handleCloseTab(tab.id)}
-                            className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-xs font-medium transition-colors"
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                            style={{
+                              background: 'var(--bg-card)',
+                              color: 'var(--text-primary)',
+                              border: '1px solid var(--border-default)',
+                            }}
                           >
                             Close File
                           </button>

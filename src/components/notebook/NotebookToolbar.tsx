@@ -32,25 +32,46 @@ interface NotebookToolbarProps {
   onActiveCellTypeChange: (type: CellType) => void;
 }
 
-/* ── Toolbar button class tokens ─────────────────────────────────── */
-const tbBtn =
-  'inline-flex items-center justify-center gap-1 min-h-[26px] px-2 ' +
-  'border border-transparent rounded-sm bg-transparent ' +
-  'text-nb-text-secondary text-xs leading-none whitespace-nowrap ' +
-  'hover:border-nb-btn-hover-border hover:bg-nb-btn-hover ' +
-  'disabled:opacity-45 disabled:cursor-default transition-colors';
+/* ── Inline style helpers (avoid global CSS override issues) ──────── */
+const tbBtnStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '4px',
+  minHeight: '26px',
+  padding: '0 8px',
+  border: '1px solid transparent',
+  borderRadius: '2px',
+  background: 'transparent',
+  color: 'var(--color-nb-text-secondary)',
+  fontSize: '12px',
+  lineHeight: 1,
+  whiteSpace: 'nowrap',
+  cursor: 'pointer',
+  transition: 'all 150ms ease',
+};
 
-const tbBtnPrimary =
-  'inline-flex items-center justify-center gap-1 min-h-[26px] px-2 ' +
-  'border border-nb-btn-primary rounded-sm bg-nb-btn-primary text-white ' +
-  'text-xs leading-none whitespace-nowrap ' +
-  'hover:border-nb-btn-primary-hover hover:bg-nb-btn-primary-hover ' +
-  'disabled:opacity-45 disabled:cursor-default transition-colors';
+const tbBtnPrimaryStyle: React.CSSProperties = {
+  ...tbBtnStyle,
+  background: 'var(--color-nb-btn-primary)',
+  borderColor: 'var(--color-nb-btn-primary)',
+  color: '#ffffff',
+};
 
-const badgeBase =
-  'inline-flex items-center gap-1 min-h-6 max-w-[220px] px-2 ' +
-  'border border-nb-cell-border rounded-full bg-nb-cell ' +
-  'text-xs leading-none whitespace-nowrap';
+const badgeStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '4px',
+  minHeight: '24px',
+  maxWidth: '220px',
+  padding: '0 8px',
+  border: '1px solid var(--color-nb-cell-border)',
+  borderRadius: '9999px',
+  background: 'var(--color-nb-cell)',
+  fontSize: '12px',
+  lineHeight: 1,
+  whiteSpace: 'nowrap',
+};
 
 export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   notebookName,
@@ -75,14 +96,14 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
     switch (status) {
       case 'idle':
         return (
-          <span className={`${badgeBase} text-nb-status-idle`}>
-            <span className="w-[7px] h-[7px] rounded-full bg-current" />
+          <span style={{ ...badgeStyle, color: 'var(--color-nb-status-idle)' }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'currentColor' }} />
             Idle
           </span>
         );
       case 'busy':
         return (
-          <span className={`${badgeBase} text-nb-status-busy`}>
+          <span style={{ ...badgeStyle, color: 'var(--color-nb-status-busy)' }}>
             <Loader2 size={13} className="animate-spin" />
             Busy
           </span>
@@ -90,7 +111,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
       case 'starting':
       case 'restarting':
         return (
-          <span className={`${badgeBase} text-nb-status-busy`}>
+          <span style={{ ...badgeStyle, color: 'var(--color-nb-status-busy)' }}>
             <Loader2 size={13} className="animate-spin" />
             {status === 'starting' ? 'Starting...' : 'Restarting...'}
           </span>
@@ -98,7 +119,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
       case 'dead':
       case 'error':
         return (
-          <span className={`${badgeBase} text-nb-status-error`}>
+          <span style={{ ...badgeStyle, color: 'var(--color-nb-status-error)' }}>
             <AlertCircle size={13} />
             {status === 'dead' ? 'Dead' : 'Error'}
           </span>
@@ -109,7 +130,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
           <button
             onClick={onConnect}
             disabled={isConnecting}
-            className={`${badgeBase} text-nb-status-disconnected cursor-pointer`}
+            style={{ ...badgeStyle, color: 'var(--color-nb-status-disconnected)', cursor: 'pointer' }}
           >
             {isConnecting ? (
               <Loader2 size={13} className="animate-spin" />
@@ -123,14 +144,26 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   };
 
   return (
-    <div className="sticky top-0 z-20 flex items-center min-h-9 gap-1.5 px-2.5 py-1 border-b border-nb-toolbar-border bg-nb-toolbar shadow-sm max-[760px]:flex-wrap">
+    <div
+      className="sticky top-0 z-20 max-[760px]:flex-wrap"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        minHeight: '36px',
+        gap: '6px',
+        padding: '4px 10px',
+        borderBottom: '1px solid var(--color-nb-toolbar-border)',
+        background: 'var(--color-nb-toolbar)',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
+      }}
+    >
       {/* Save + Add cells */}
-      <div className="inline-flex items-center gap-[3px] min-w-0">
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', minWidth: 0 }}>
         <button
           onClick={onSave}
           disabled={!isDirty || isSaving}
           title="Save Notebook (Ctrl+S / Cmd+S)"
-          className={tbBtn}
+          style={{ ...tbBtnStyle, opacity: (!isDirty || isSaving) ? 0.45 : 1 }}
         >
           {isSaving ? (
             <Loader2 size={15} className="animate-spin" />
@@ -141,23 +174,37 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
           )}
         </button>
 
-        <span className="w-px h-[18px] mx-[3px] bg-nb-toolbar-border" />
+        <span style={{
+          width: 1, height: 18, margin: '0 3px',
+          background: 'var(--color-nb-toolbar-border)',
+        }} />
 
-        <button onClick={onAddCode} title="Add Code Cell Below" className={tbBtn}>
+        <button onClick={onAddCode} title="Add Code Cell Below" style={tbBtnStyle}>
           <Plus size={15} />
           <span>Code</span>
         </button>
 
-        <button onClick={onAddMarkdown} title="Add Markdown Cell Below" className={tbBtn}>
+        <button onClick={onAddMarkdown} title="Add Markdown Cell Below" style={tbBtnStyle}>
           <Plus size={15} />
           <span>Markdown</span>
         </button>
       </div>
 
       {/* Cell type selector */}
-      <div className="inline-flex items-center gap-[3px] min-w-0">
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', minWidth: 0 }}>
         <select
-          className="h-[26px] min-w-[126px] pl-2 pr-6 border border-nb-cell-border rounded-sm bg-nb-cell text-nb-text text-xs"
+          style={{
+            height: '26px',
+            minWidth: '126px',
+            paddingLeft: '8px',
+            paddingRight: '24px',
+            borderRadius: '2px',
+            fontSize: '12px',
+            background: 'var(--color-nb-cell)',
+            color: 'var(--color-nb-text)',
+            border: '1px solid var(--color-nb-cell-border)',
+            colorScheme: 'auto',
+          }}
           value={activeCellType}
           title="Cell Type"
           onChange={(event) =>
@@ -171,12 +218,12 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
       </div>
 
       {/* Execution controls */}
-      <div className="inline-flex items-center gap-[3px] min-w-0">
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', minWidth: 0 }}>
         <button
           onClick={onRunSelected}
           disabled={!canRun}
           title="Run Selected Cell (Ctrl/Cmd+Enter)"
-          className={tbBtnPrimary}
+          style={{ ...tbBtnPrimaryStyle, opacity: !canRun ? 0.45 : 1 }}
         >
           <Play size={15} fill="currentColor" />
           <span>Run</span>
@@ -186,7 +233,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
           onClick={onInterrupt}
           disabled={status !== 'busy'}
           title="Interrupt Kernel"
-          className={tbBtn}
+          style={{ ...tbBtnStyle, opacity: status !== 'busy' ? 0.45 : 1 }}
         >
           <Square size={14} fill="currentColor" />
         </button>
@@ -194,7 +241,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
         <button
           onClick={onRestart}
           title="Restart Kernel"
-          className={tbBtn}
+          style={tbBtnStyle}
         >
           <RotateCcw size={15} />
         </button>
@@ -203,7 +250,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
           onClick={onRunAll}
           disabled={!canRun}
           title="Run All Cells"
-          className={tbBtn}
+          style={{ ...tbBtnStyle, opacity: !canRun ? 0.45 : 1 }}
         >
           <Play size={15} fill="currentColor" />
           <span>Run All</span>
@@ -211,17 +258,28 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
       </div>
 
       {/* Spacer */}
-      <div className="flex-auto min-w-4" />
+      <div style={{ flex: '1 1 auto', minWidth: '16px' }} />
 
       {/* Notebook identity */}
       <div
-        className="inline-flex items-center min-w-0 max-w-[min(34vw,420px)] gap-1.5 text-nb-text-secondary text-xs max-[760px]:max-w-full"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          minWidth: 0,
+          maxWidth: 'min(34vw, 420px)',
+          gap: '6px',
+          color: 'var(--color-nb-text-secondary)',
+          fontSize: '12px',
+        }}
         title={notebookName}
       >
         <span className="truncate">{notebookName}</span>
         {isDirty && (
           <span
-            className="w-[7px] h-[7px] flex-none rounded-full bg-nb-dirty"
+            style={{
+              width: 7, height: 7, flexShrink: 0, borderRadius: '50%',
+              background: 'var(--color-nb-dirty)',
+            }}
             title="Unsaved changes"
           />
         )}
@@ -229,7 +287,13 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
 
       {/* Kernel chip */}
       <div
-        className={`${badgeBase} overflow-hidden text-ellipsis font-mono text-nb-text-secondary`}
+        style={{
+          ...badgeStyle,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          fontFamily: 'var(--font-mono)',
+          color: 'var(--color-nb-text-secondary)',
+        }}
         title={kernelName || 'Python 3'}
       >
         {kernelName || 'Python 3'}
