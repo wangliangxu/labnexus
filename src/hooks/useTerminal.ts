@@ -15,6 +15,7 @@ interface UseTerminalProps {
   serverId?: string;
   terminalName: string;
   onData?: (data: string) => void;
+  onExit?: () => void;
 }
 
 interface UseTerminalReturn {
@@ -30,11 +31,17 @@ export function useTerminal({
   serverId,
   terminalName,
   onData,
+  onExit,
 }: UseTerminalProps): UseTerminalReturn {
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const [error, setError] = useState<string | null>(null);
   const onDataRef = useRef(onData);
   onDataRef.current = onData;
+  const onExitRef = useRef(onExit);
+  onExitRef.current = onExit;
+
+  const statusRef = useRef(status);
+  statusRef.current = status;
 
   const connect = useCallback(async () => {
     if (!terminalName) return;
@@ -61,34 +68,36 @@ export function useTerminal({
 
   const sendInput = useCallback(
     async (data: string) => {
-      if (status !== 'connected' || !terminalName) return;
+      if (statusRef.current !== 'connected' || !terminalName) return;
       try {
         await jupyterSendTerminalInput(terminalName, data, serverId);
       } catch (err) {
         console.error('Error sending input to terminal:', err);
       }
     },
-    [status, terminalName, serverId]
+    [terminalName, serverId]
   );
 
   const resize = useCallback(
     async (rows: number, cols: number) => {
-      if (status !== 'connected' || !terminalName) return;
+      if (statusRef.current !== 'connected' || !terminalName) return;
       try {
         await jupyterResizeTerminal(terminalName, rows, cols, serverId);
       } catch (err) {
         console.error('Error resizing terminal:', err);
       }
     },
-    [status, terminalName, serverId]
+    [terminalName, serverId]
   );
 
   useEffect(() => {
     let unlistenOutput: (() => void) | undefined;
     let unlistenStatus: (() => void) | undefined;
+    let unlistenExited: (() => void) | undefined;
+    let isMounted = true;
 
     async function setupListeners() {
-      unlistenOutput = await listen<{ server_id?: string; terminal_name: string; data: string }>(
+      const uOutput = await listen<{ server_id?: string; terminal_name: string; data: string }>(
         'jupyter:terminal_output',
         (event) => {
           if (event.payload.terminal_name === terminalName) {
@@ -96,8 +105,19 @@ export function useTerminal({
           }
         }
       );
+      if (!isMounted) uOutput(); else unlistenOutput = uOutput;
 
-      unlistenStatus = await listen<{ server_id?: string; terminal_name: string; status: string }>(
+      const uExited = await listen<{ server_id?: string; terminal_name: string }>(
+        'jupyter:terminal_exited',
+        (event) => {
+          if (event.payload.terminal_name === terminalName) {
+            onExitRef.current?.();
+          }
+        }
+      );
+      if (!isMounted) uExited(); else unlistenExited = uExited;
+
+      const uStatus = await listen<{ server_id?: string; terminal_name: string; status: string }>(
         'jupyter:terminal_status',
         (event) => {
           if (event.payload.terminal_name === terminalName) {
@@ -106,16 +126,17 @@ export function useTerminal({
           }
         }
       );
+      if (!isMounted) uStatus(); else unlistenStatus = uStatus;
     }
 
     setupListeners();
 
     return () => {
+      isMounted = false;
       unlistenOutput?.();
       unlistenStatus?.();
-      if (status === 'connected') {
-        jupyterDisconnectTerminal(terminalName, serverId).catch(() => {});
-      }
+      unlistenExited?.();
+      jupyterDisconnectTerminal(terminalName, serverId).catch(() => {});
     };
   }, [terminalName, serverId]);
 

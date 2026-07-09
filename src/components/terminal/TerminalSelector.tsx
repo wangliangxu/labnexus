@@ -36,6 +36,19 @@ export function TerminalSelector({ serverId, onSelectTerminal, onClose: _onClose
 
   useEffect(() => {
     fetchTerminals();
+
+    let unlistenExited: (() => void) | undefined;
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen<{ server_id?: string; terminal_name: string }>('jupyter:terminal_exited', () => {
+        fetchTerminals();
+      }).then((unlisten) => {
+        unlistenExited = unlisten;
+      });
+    });
+
+    return () => {
+      if (unlistenExited) unlistenExited();
+    };
   }, [serverId]);
 
   const handleCreate = async () => {

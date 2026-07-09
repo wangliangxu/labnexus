@@ -24,14 +24,27 @@ use crate::jupyter::types::*;
 
 const WS_CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 
-/// Active WebSocket connection to a Jupyter kernel.
+use tokio::task::JoinHandle;
+
+/// Active WebSocket connection to a Jupyter kernel session.
 pub struct KernelConnection {
     /// Channel sender to send JSON string messages to the WebSocket write task.
     pub tx: mpsc::Sender<String>,
+    /// Handle to the write task.
+    pub write_task: JoinHandle<()>,
+    /// Handle to the read task.
+    pub read_task: JoinHandle<()>,
     /// Kernel ID.
     pub kernel_id: String,
     /// Server ID this kernel belongs to.
     pub server_id: String,
+}
+
+impl Drop for KernelConnection {
+    fn drop(&mut self) {
+        self.write_task.abort();
+        self.read_task.abort();
+    }
 }
 
 /// Global manager for kernel WebSocket connections.
@@ -93,18 +106,7 @@ impl KernelWsManager {
         // Create channel for sending messages from Tauri commands to the WebSocket
         let (tx, mut rx) = mpsc::channel::<String>(100);
 
-        // Store connection in manager
-        {
-            let mut conns = self.connections.write().await;
-            conns.insert(
-                kernel_id.to_string(),
-                KernelConnection {
-                    tx,
-                    kernel_id: kernel_id.to_string(),
-                    server_id: config.id.clone(),
-                },
-            );
-        }
+        // Will insert connection in manager after spawning tasks
 
         // Emit connected status event
         let _ = app.emit(
@@ -119,7 +121,7 @@ impl KernelWsManager {
         let app_write = app.clone();
 
         // Spawn Write Task: Reads from mpsc rx and sends to WebSocket write_half
-        tokio::spawn(async move {
+        let write_task = tokio::spawn(async move {
             use futures_util::SinkExt;
             while let Some(msg_str) = rx.recv().await {
                 log::debug!(
@@ -136,6 +138,8 @@ impl KernelWsManager {
                     break;
                 }
             }
+            // Send close frame to cleanly terminate the read task
+            let _ = write_half.send(Message::Close(None)).await;
             log::info!("[KernelWS] Write task ended for kernel {}", k_id_write);
             let _ = app_write.emit(
                 "kernel:status",
@@ -152,7 +156,7 @@ impl KernelWsManager {
         let listeners_ref = self.listeners.clone();
 
         // Spawn Read Task: Reads from WebSocket read_half and emits Tauri events
-        tokio::spawn(async move {
+        let read_task = tokio::spawn(async move {
             use futures_util::StreamExt;
             log::info!("[KernelWS] Read task started for kernel {}", k_id_read);
             while let Some(msg_res) = read_half.next().await {
@@ -304,6 +308,21 @@ impl KernelWsManager {
                 }),
             );
         });
+
+        // Store connection in manager with abort handles
+        {
+            let mut conns = self.connections.write().await;
+            conns.insert(
+                kernel_id.to_string(),
+                KernelConnection {
+                    tx,
+                    write_task,
+                    read_task,
+                    kernel_id: kernel_id.to_string(),
+                    server_id: config.id.clone(),
+                },
+            );
+        }
 
         Ok(())
     }

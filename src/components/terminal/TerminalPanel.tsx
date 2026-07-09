@@ -25,6 +25,9 @@ export function TerminalPanel({ serverId, terminalName, onClose }: TerminalPanel
     onData: (data) => {
       termRef.current?.write(data);
     },
+    onExit: () => {
+      if (onClose) onClose();
+    },
   });
 
   useEffect(() => {

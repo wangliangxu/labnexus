@@ -15,14 +15,27 @@ use crate::error::AppError;
 use crate::jupyter::types::*;
 use crate::jupyter::ws::connect_ws_stream;
 
+use tokio::task::JoinHandle;
+
 /// Active WebSocket connection to a Jupyter terminal session.
 pub struct TerminalConnection {
     /// Channel sender to send JSON string messages to the WebSocket write task.
     pub tx: mpsc::Sender<String>,
+    /// Handle to the write task.
+    pub write_task: JoinHandle<()>,
+    /// Handle to the read task.
+    pub read_task: JoinHandle<()>,
     /// Terminal name.
     pub terminal_name: String,
     /// Server ID this terminal belongs to.
     pub server_id: String,
+}
+
+impl Drop for TerminalConnection {
+    fn drop(&mut self) {
+        self.write_task.abort();
+        self.read_task.abort();
+    }
 }
 
 /// Global manager for terminal WebSocket connections.
@@ -62,18 +75,6 @@ impl TerminalWsManager {
 
         let (tx, mut rx) = mpsc::channel::<String>(100);
 
-        {
-            let mut conns = self.connections.write().await;
-            conns.insert(
-                key.clone(),
-                TerminalConnection {
-                    tx,
-                    terminal_name: terminal_name.to_string(),
-                    server_id: config.id.clone(),
-                },
-            );
-        }
-
         let _ = app.emit(
             "jupyter:terminal_status",
             serde_json::json!({
@@ -87,7 +88,7 @@ impl TerminalWsManager {
         let s_id_write = config.id.clone();
         let app_write = app.clone();
 
-        tokio::spawn(async move {
+        let write_task = tokio::spawn(async move {
             use futures_util::SinkExt;
             while let Some(msg_str) = rx.recv().await {
                 if let Err(e) = write_half.send(Message::Text(msg_str.into())).await {
@@ -95,6 +96,7 @@ impl TerminalWsManager {
                     break;
                 }
             }
+            let _ = write_half.send(Message::Close(None)).await;
             let _ = app_write.emit(
                 "jupyter:terminal_status",
                 serde_json::json!({
@@ -111,12 +113,11 @@ impl TerminalWsManager {
         let conns_ref = self.connections.clone();
         let key_read = key.clone();
 
-        tokio::spawn(async move {
+        let read_task = tokio::spawn(async move {
             use futures_util::StreamExt;
             while let Some(msg_res) = read_half.next().await {
                 match msg_res {
                     Ok(Message::Text(text)) => {
-                        // Try to parse JSON array: ["stdout", "data"] or ["stdin", "data"]
                         if let Ok(arr) = serde_json::from_str::<Vec<serde_json::Value>>(&text) {
                             if arr.len() >= 2 {
                                 let msg_type = arr[0].as_str().unwrap_or("");
@@ -133,11 +134,17 @@ impl TerminalWsManager {
                                     }
                                 } else if msg_type == "disconnect" {
                                     log::info!("Terminal {} disconnected by server", t_name_read);
+                                    let _ = app_read.emit(
+                                        "jupyter:terminal_exited",
+                                        serde_json::json!({
+                                            "server_id": &s_id_read,
+                                            "terminal_name": &t_name_read,
+                                        }),
+                                    );
                                     break;
                                 }
                             }
                         } else {
-                            // Raw output fallback
                             let _ = app_read.emit(
                                 "jupyter:terminal_output",
                                 serde_json::json!({
@@ -172,6 +179,20 @@ impl TerminalWsManager {
                 }),
             );
         });
+
+        {
+            let mut conns = self.connections.write().await;
+            conns.insert(
+                key.clone(),
+                TerminalConnection {
+                    tx,
+                    write_task,
+                    read_task,
+                    terminal_name: terminal_name.to_string(),
+                    server_id: config.id.clone(),
+                },
+            );
+        }
 
         Ok(())
     }

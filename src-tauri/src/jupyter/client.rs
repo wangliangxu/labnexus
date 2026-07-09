@@ -414,7 +414,7 @@ impl JupyterClient {
         }
 
         let base_path = ws_url.path().trim_end_matches('/');
-        let path = format!("{}/api/terminals/{}/channels", base_path, name);
+        let path = format!("{}/terminals/websocket/{}", base_path, name);
         ws_url.set_path(&path);
 
         if let Some(token) = &self.token {
