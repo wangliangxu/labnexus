@@ -32,3 +32,173 @@
   padding: 4px 7px;
   border: 1px solid var(--color-nb-output-border);
 }
+
+/* ─── Rendered Markdown Cell ────────────────────────────────────────
+ *  Styles for the JupyterLab-style rendered markdown view.
+ *  Shown when the cell is NOT being edited.
+ * ──────────────────────────────────────────────────────────────────── */
+.nb-markdown-rendered {
+  padding: 8px 12px;
+  font-family: var(--font-sans, system-ui, -apple-system, sans-serif);
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--color-nb-text);
+  word-wrap: break-word;
+  min-height: 28px;
+}
+
+/* Placeholder text */
+.nb-markdown-rendered .nb-md-placeholder {
+  color: var(--color-nb-text-secondary);
+  font-style: italic;
+  opacity: 0.6;
+}
+
+/* ── Headings ─────────────────────────────────────────────────────── */
+.nb-markdown-rendered h1,
+.nb-markdown-rendered h2,
+.nb-markdown-rendered h3,
+.nb-markdown-rendered h4,
+.nb-markdown-rendered h5,
+.nb-markdown-rendered h6 {
+  margin-top: 0.6em;
+  margin-bottom: 0.4em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.nb-markdown-rendered h1 { font-size: 1.75em; }
+.nb-markdown-rendered h2 { font-size: 1.45em; }
+.nb-markdown-rendered h3 { font-size: 1.2em; }
+.nb-markdown-rendered h4 { font-size: 1.05em; }
+.nb-markdown-rendered h5 { font-size: 0.95em; }
+.nb-markdown-rendered h6 { font-size: 0.9em; color: var(--color-nb-text-secondary); }
+
+.nb-markdown-rendered h1:first-child,
+.nb-markdown-rendered h2:first-child,
+.nb-markdown-rendered h3:first-child,
+.nb-markdown-rendered h4:first-child,
+.nb-markdown-rendered h5:first-child,
+.nb-markdown-rendered h6:first-child {
+  margin-top: 0;
+}
+
+/* ── Paragraphs & spacing ─────────────────────────────────────────── */
+.nb-markdown-rendered p {
+  margin: 0 0 0.65em 0;
+}
+
+.nb-markdown-rendered p:last-child {
+  margin-bottom: 0;
+}
+
+/* ── Links ────────────────────────────────────────────────────────── */
+.nb-markdown-rendered a {
+  color: var(--color-nb-cell-active-left, #1976d2);
+  text-decoration: none;
+}
+
+.nb-markdown-rendered a:hover {
+  text-decoration: underline;
+}
+
+/* ── Inline code ──────────────────────────────────────────────────── */
+.nb-markdown-rendered code {
+  padding: 0.15em 0.4em;
+  font-size: 0.88em;
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, monospace;
+  background: var(--color-nb-editor, rgba(128, 128, 128, 0.12));
+  border-radius: 3px;
+}
+
+/* ── Code blocks ──────────────────────────────────────────────────── */
+.nb-markdown-rendered pre {
+  margin: 0.5em 0;
+  padding: 10px 14px;
+  overflow-x: auto;
+  font-size: 12.5px;
+  line-height: 1.55;
+  background: var(--color-nb-editor, rgba(128, 128, 128, 0.08));
+  border: 1px solid var(--color-nb-editor-border, rgba(128, 128, 128, 0.15));
+  border-radius: 3px;
+}
+
+.nb-markdown-rendered pre code {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  font-size: inherit;
+}
+
+/* ── Lists ────────────────────────────────────────────────────────── */
+.nb-markdown-rendered ul,
+.nb-markdown-rendered ol {
+  margin: 0.3em 0 0.65em 0;
+  padding-left: 1.75em;
+}
+
+.nb-markdown-rendered li {
+  margin-bottom: 0.2em;
+}
+
+.nb-markdown-rendered li > p {
+  margin-bottom: 0.3em;
+}
+
+/* Nested lists */
+.nb-markdown-rendered ul ul,
+.nb-markdown-rendered ol ul,
+.nb-markdown-rendered ul ol,
+.nb-markdown-rendered ol ol {
+  margin-top: 0.15em;
+  margin-bottom: 0.15em;
+}
+
+/* ── Blockquotes ──────────────────────────────────────────────────── */
+.nb-markdown-rendered blockquote {
+  margin: 0.5em 0;
+  padding: 4px 14px;
+  border-left: 3px solid var(--color-nb-cell-active-left, #1976d2);
+  color: var(--color-nb-text-secondary);
+}
+
+.nb-markdown-rendered blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* ── Tables ───────────────────────────────────────────────────────── */
+.nb-markdown-rendered table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  font-size: 13px;
+}
+
+.nb-markdown-rendered th,
+.nb-markdown-rendered td {
+  padding: 5px 10px;
+  border: 1px solid var(--color-nb-output-border, rgba(128, 128, 128, 0.25));
+}
+
+.nb-markdown-rendered th {
+  font-weight: 600;
+  background: var(--color-nb-editor, rgba(128, 128, 128, 0.06));
+}
+
+/* ── Horizontal rules ─────────────────────────────────────────────── */
+.nb-markdown-rendered hr {
+  margin: 1em 0;
+  border: none;
+  border-top: 1px solid var(--color-nb-cell-border, rgba(128, 128, 128, 0.2));
+}
+
+/* ── Images ───────────────────────────────────────────────────────── */
+.nb-markdown-rendered img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* ── Task lists (GFM) ─────────────────────────────────────────────── */
+.nb-markdown-rendered input[type="checkbox"] {
+  margin-right: 0.4em;
+}
+
