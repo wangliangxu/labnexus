@@ -241,22 +241,32 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     if (!cell || cell.cell_type !== 'code') return;
     if (!canRunCode) return;
 
-    // Clear previous outputs
     const sourceText =
       typeof cell.source === 'string' ? cell.source : cell.source.join('');
-    const clearedCells = cells.map((c, i) =>
-      i === index ? { ...c, outputs: [] } : c
-    );
-    setCells(clearedCells);
+
+    // Use functional update to prevent overwriting outputs from other cells
+    setCells((prevCells) => {
+      const clearedCells = prevCells.map((c, i) =>
+        i === index ? { ...c, outputs: [] } : c
+      );
+      return resolveRunModeTransition(clearedCells, index, mode).cells;
+    });
+
+    if (mode === 'stay') {
+      setActiveCellIndex(index);
+    } else if (mode === 'insert') {
+      setActiveCellIndex(index + 1);
+    } else if (mode === 'advance') {
+      setActiveCellIndex(index < cells.length - 1 ? index + 1 : cells.length);
+    }
+    
+    setIsDirty(true);
     setExecutingCellId(cell.id || null);
 
     const didSend = await kernel.executeCell(cell.id || '', sourceText);
-    if (!didSend) return;
-
-    const transition = resolveRunModeTransition(clearedCells, index, mode);
-    setCells(transition.cells);
-    setActiveCellIndex(transition.activeCellIndex);
-    if (transition.cells !== clearedCells) setIsDirty(true);
+    if (!didSend) {
+      setExecutingCellId((prev) => (prev === cell.id ? null : prev));
+    }
   };
 
   const handleRunAll = async () => {
