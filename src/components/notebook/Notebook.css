@@ -20,6 +20,11 @@
   outline-offset: -1px;
 }
 
+.notebook-cell:not(.notebook-cell--active) .cm-activeLine,
+.notebook-cell:not(.notebook-cell--active) .cm-activeLineGutter {
+  background-color: transparent;
+}
+
 /* ─── Rich Output (injected via dangerouslySetInnerHTML) ─────────── */
 .notebook-output-rich table {
   border-collapse: collapse;

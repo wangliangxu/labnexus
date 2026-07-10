@@ -4,6 +4,7 @@ import { python } from '@codemirror/lang-python';
 import { markdown } from '@codemirror/lang-markdown';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { keymap, EditorView, type ViewUpdate } from '@codemirror/view';
+import { Prec } from '@codemirror/state';
 import { marked } from 'marked';
 import {
   Play,
@@ -44,6 +45,7 @@ interface CellEditorProps {
   isActive: boolean;
   isExecuting?: boolean;
   canRun?: boolean;
+  runCurrentCellShortcut: string;
   onSelect: () => void;
   onChange: (source: string) => void;
   onTypeChange: (type: CellType) => void;
@@ -64,6 +66,7 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
   isActive,
   isExecuting = false,
   canRun = true,
+  runCurrentCellShortcut,
   onSelect,
   onChange,
   onTypeChange,
@@ -79,6 +82,12 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
 }) => {
   const isCode = cell.cell_type === 'code';
   const isMarkdown = cell.cell_type === 'markdown';
+  const onRunRef = useRef(onRun);
+  const onRunAndAdvanceRef = useRef(onRunAndAdvance);
+  const onRunAndInsertRef = useRef(onRunAndInsert);
+  onRunRef.current = onRun;
+  onRunAndAdvanceRef.current = onRunAndAdvance;
+  onRunAndInsertRef.current = onRunAndInsert;
 
   const externalSourceText = useMemo(() => {
     return typeof cell.source === 'string'
@@ -171,17 +180,17 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
     };
     return [
       isCode ? python() : markdown(),
-      keymap.of([
+      Prec.highest(keymap.of([
         {
-          key: 'Shift-Enter',
+          key: runCurrentCellShortcut,
           run: () => {
             if (isMarkdown) {
               exitEditOnRun();
-              onRunAndAdvance();
+              onRunAndAdvanceRef.current();
               return true;
             }
             if (!canRun) return true;
-            onRunAndAdvance();
+            onRunAndAdvanceRef.current();
             return true;
           },
         },
@@ -193,7 +202,7 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
               return true;
             }
             if (!canRun) return true;
-            onRun();
+            onRunRef.current();
             return true;
           },
         },
@@ -202,11 +211,11 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
           run: () => {
             if (isMarkdown) {
               exitEditOnRun();
-              onRunAndInsert();
+              onRunAndInsertRef.current();
               return true;
             }
             if (!canRun) return true;
-            onRunAndInsert();
+            onRunAndInsertRef.current();
             return true;
           },
         },
@@ -220,19 +229,19 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
             return false;
           },
         },
-      ]),
+      ])),
     ];
-  }, [isCode, isMarkdown, onRun, onRunAndAdvance, onRunAndInsert, canRun]);
+  }, [isCode, isMarkdown, canRun, runCurrentCellShortcut]);
 
   const basicSetup = useMemo(
     () => ({
       lineNumbers: true,
       foldGutter: true,
-      highlightActiveLine: isActive,
+      highlightActiveLine: true,
       autocompletion: true,
       bracketMatching: true,
     }),
-    [isActive]
+    []
   );
 
   const handleEditorChange = useCallback(
@@ -285,9 +294,10 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
   return (
     <div
       ref={cellRef}
-      onClick={onSelect}
+      tabIndex={-1}
+      onPointerDown={onSelect}
       onDoubleClick={handleMarkdownDoubleClick}
-      className={`group grid grid-cols-[82px_minmax(0,1fr)] gap-3 mb-2 border border-l-4 ${borderOther} ${borderLeft} ${cellBg} ${hoverBorder} max-[760px]:grid-cols-[58px_minmax(0,1fr)] max-[760px]:gap-2`}
+      className={`group notebook-cell ${isActive ? 'notebook-cell--active' : ''} grid grid-cols-[82px_minmax(0,1fr)] gap-3 mb-2 border border-l-4 ${borderOther} ${borderLeft} ${cellBg} ${hoverBorder} max-[760px]:grid-cols-[58px_minmax(0,1fr)] max-[760px]:gap-2`}
       style={cellStyle}
     >
       {/* Prompt (In [n]:) */}
@@ -446,7 +456,7 @@ export const CellEditor = React.memo(
     prev.isActive === next.isActive &&
     prev.isExecuting === next.isExecuting &&
     prev.canRun === next.canRun &&
-    prev.onCursorChange === next.onCursorChange &&
+    prev.runCurrentCellShortcut === next.runCurrentCellShortcut &&
     prev.canMoveUp === next.canMoveUp &&
     prev.canMoveDown === next.canMoveDown
 );

@@ -20,6 +20,13 @@ import {
   type NotebookTocState,
 } from './notebookToc';
 import './Notebook.css';
+import {
+  GLOBAL_SETTINGS_CHANGED_EVENT,
+  isEditableKeyboardTarget,
+  keyboardEventMatchesShortcut,
+  loadGlobalSettings,
+  type GlobalSettings,
+} from '../../services/globalSettings';
 
 /* ── Button class tokens (for empty state) ───────────────────────── */
 const nbBtn =
@@ -62,6 +69,9 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeCellIndex, setActiveCellIndex] = useState<number>(0);
   const [executingCellId, setExecutingCellId] = useState<string | null>(null);
+  const [runCurrentCellShortcut, setRunCurrentCellShortcut] = useState(
+    () => loadGlobalSettings().runCurrentCellShortcut
+  );
   const [cursorPosition, setCursorPosition] = useState<NotebookCursorPosition>({
     cellIndex: 0,
     line: 0,
@@ -109,6 +119,15 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
       sourceCommitTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
       sourceCommitTimersRef.current.clear();
     };
+  }, []);
+
+  useEffect(() => {
+    const handleSettingsChanged = (event: Event) => {
+      const settings = (event as CustomEvent<GlobalSettings>).detail;
+      setRunCurrentCellShortcut(settings.runCurrentCellShortcut);
+    };
+    window.addEventListener(GLOBAL_SETTINGS_CHANGED_EVENT, handleSettingsChanged);
+    return () => window.removeEventListener(GLOBAL_SETTINGS_CHANGED_EVENT, handleSettingsChanged);
   }, []);
 
   // Handle incoming outputs from kernel WebSocket
@@ -344,11 +363,41 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     setIsDirty(true);
     setExecutingCellId(cell.id || null);
 
+    if (mode !== 'stay') {
+      const nextCell = transition.cells[transition.activeCellIndex];
+      const nextCellId = nextCell?.id;
+      requestAnimationFrame(() => {
+        const element = nextCellId ? cellElementsRef.current.get(nextCellId) : undefined;
+        const editor = element?.querySelector<HTMLElement>('.cm-content');
+        (editor ?? element)?.focus();
+      });
+    }
+
     const didSend = await kernel.executeCell(cell.id || '', sourceText);
     if (!didSend) {
       setExecutingCellId((prev) => (prev === cell.id ? null : prev));
     }
   };
+
+  // Run the selected cell even when CodeMirror itself does not have focus.
+  useEffect(() => {
+    const handleNotebookShortcut = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.repeat ||
+        isEditableKeyboardTarget(event.target) ||
+        !keyboardEventMatchesShortcut(event, runCurrentCellShortcut)
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      void handleRunCell(activeCellIndex, 'advance');
+    };
+
+    window.addEventListener('keydown', handleNotebookShortcut);
+    return () => window.removeEventListener('keydown', handleNotebookShortcut);
+  }, [activeCellIndex, runCurrentCellShortcut, canRunCode]);
 
   const handleRunAll = async () => {
     flushSourceCommits();
@@ -416,8 +465,10 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   };
 
   const handleSelectCell = useCallback((index: number) => {
-    setActiveCellIndex(index);
-    setCursorPosition({ cellIndex: index, line: 0 });
+    setActiveCellIndex((current) => (current === index ? current : index));
+    setCursorPosition((current) =>
+      current.cellIndex === index ? current : { cellIndex: index, line: 0 }
+    );
   }, []);
 
   const handleCellCursorChange = useCallback((index: number, line: number) => {
@@ -518,6 +569,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
                   isActive={idx === activeCellIndex}
                   isExecuting={executingCellId === cell.id}
                   canRun={canRunCode}
+                  runCurrentCellShortcut={runCurrentCellShortcut}
                   onSelect={() => handleSelectCell(idx)}
                   onChange={(newSource) =>
                     handleCellSourceChange(cell.id || '', idx, newSource)

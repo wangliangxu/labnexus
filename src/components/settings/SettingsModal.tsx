@@ -1,24 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import type { AiConfig } from '../../types/agent';
 import { agentGetConfig, agentSaveConfig } from '../../services/tauriIpc';
-
-export type ThemeMode = 'obsidian' | 'cyberpunk' | 'nord' | 'solarized' | 'system';
-
-interface GlobalSettings {
-  theme: ThemeMode;
-  defaultKernel: string;
-  defaultProxyHost: string;
-  defaultProxyPort: number;
-  agentAutoConfirm: boolean;
-}
-
-const DEFAULT_SETTINGS: GlobalSettings = {
-  theme: 'obsidian',
-  defaultKernel: 'python3',
-  defaultProxyHost: '127.0.0.1',
-  defaultProxyPort: 1080,
-  agentAutoConfirm: false,
-};
+import {
+  formatShortcut,
+  loadGlobalSettings,
+  saveGlobalSettings as persistGlobalSettings,
+  shortcutFromKeyboardEvent,
+  type GlobalSettings,
+  type ThemeMode,
+} from '../../services/globalSettings';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -35,8 +25,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // Global Settings State
   const [settings, setSettings] = useState<GlobalSettings>(() => {
-    const saved = localStorage.getItem('labnexus:settings');
-    return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
+    return loadGlobalSettings();
   });
   const [globalSavedMessage, setGlobalSavedMessage] = useState<boolean>(false);
 
@@ -74,7 +63,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   // Global Settings Handlers
   const saveGlobalSettings = (newSettings: GlobalSettings) => {
     setSettings(newSettings);
-    localStorage.setItem('labnexus:settings', JSON.stringify(newSettings));
+    persistGlobalSettings(newSettings);
     setGlobalSavedMessage(true);
     setTimeout(() => setGlobalSavedMessage(false), 2000);
   };
@@ -205,6 +194,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     />
                   </label>
                 </div>
+              </div>
+
+              {/* Section: Default Proxy */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider border-b border-dark-border pb-1">
+                  ⌨ Keyboard Shortcuts
+                </h4>
+                <label className="flex flex-col gap-1 max-w-sm">
+                  <span className="text-gray-300 font-medium">Run current cell</span>
+                  <input
+                    type="text"
+                    readOnly
+                    value={formatShortcut(settings.runCurrentCellShortcut)}
+                    onKeyDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      const shortcut = shortcutFromKeyboardEvent(event.nativeEvent);
+                      if (shortcut) saveGlobalSettings({ ...settings, runCurrentCellShortcut: shortcut });
+                    }}
+                    className="px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-gray-200 font-mono focus:outline-none focus:border-brand-primary cursor-text"
+                    title="Focus this field and press the desired key combination"
+                  />
+                  <span className="text-xs text-gray-500">Click the field, then press a new key combination.</span>
+                </label>
               </div>
 
               {/* Section: Default Proxy */}
