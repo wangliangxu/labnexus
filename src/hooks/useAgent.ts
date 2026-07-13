@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
+import { isTauri } from '@tauri-apps/api/core';
 import type {
   AgentMessage,
   AgentStreamEvent,
@@ -15,6 +16,7 @@ import {
   agentGetHistory,
   agentClearSession,
   agentConfirmTool,
+  agentCancelTask,
 } from '../services/tauriIpc';
 
 export type AgentStatus = 'idle' | 'running' | 'error';
@@ -26,8 +28,10 @@ export interface UseAgentReturn {
   activeToolCall: AgentToolCallEvent | null;
   error: string | null;
   sendPrompt: (prompt: string, context?: AgentChatContext) => Promise<void>;
-  confirmTool: (approved: boolean) => Promise<void>;
+  confirmTool: (approved: boolean, scope?: 'once' | 'session') => Promise<void>;
+  cancelTask: (interruptKernel?: boolean) => Promise<void>;
   clearHistory: () => Promise<void>;
+  dismissError: () => void;
 }
 
 export function useAgent(sessionId: string = 'default'): UseAgentReturn {
@@ -38,10 +42,12 @@ export function useAgent(sessionId: string = 'default'): UseAgentReturn {
   const [error, setError] = useState<string | null>(null);
 
   const sessionIdRef = useRef(sessionId);
+  const activeRunIdRef = useRef<string | null>(null);
   sessionIdRef.current = sessionId;
 
   // Load initial history
   const refreshHistory = useCallback(async () => {
+    if (!isTauri()) return;
     try {
       const history = await agentGetHistory(sessionIdRef.current);
       // Filter out system messages from UI
@@ -52,14 +58,22 @@ export function useAgent(sessionId: string = 'default'): UseAgentReturn {
   }, []);
 
   useEffect(() => {
+    setMessages([]);
+    setCurrentStreamingAnswer('');
+    setActiveToolCall(null);
+    setError(null);
+    setStatus('idle');
+    activeRunIdRef.current = null;
     refreshHistory();
   }, [sessionId, refreshHistory]);
 
   // Listen for real-time stream and tool events
   useEffect(() => {
+    if (!isTauri()) return;
     const unlistenStream = listen<AgentStreamEvent>('agent:stream', (event) => {
       const { session_id, chunk_type, content } = event.payload;
       if (session_id !== sessionIdRef.current) return;
+      if (activeRunIdRef.current && event.payload.run_id !== activeRunIdRef.current) return;
 
       if (chunk_type === 'answer') {
         setCurrentStreamingAnswer((prev) => prev + content);
@@ -67,12 +81,14 @@ export function useAgent(sessionId: string = 'default'): UseAgentReturn {
         setCurrentStreamingAnswer('');
         setActiveToolCall(null);
         setStatus('idle');
+        activeRunIdRef.current = null;
         refreshHistory();
       } else if (chunk_type === 'error') {
         setError(content);
         setCurrentStreamingAnswer('');
         setActiveToolCall(null);
         setStatus('error');
+        activeRunIdRef.current = null;
         refreshHistory();
       }
     });
@@ -80,6 +96,7 @@ export function useAgent(sessionId: string = 'default'): UseAgentReturn {
     const unlistenTool = listen<AgentToolCallEvent>('agent:tool_call', (event) => {
       const payload = event.payload;
       if (payload.session_id !== sessionIdRef.current) return;
+      if (activeRunIdRef.current && payload.run_id !== activeRunIdRef.current) return;
 
       if (payload.status === 'requires_confirmation') {
         setActiveToolCall(payload);
@@ -111,6 +128,8 @@ export function useAgent(sessionId: string = 'default'): UseAgentReturn {
       setCurrentStreamingAnswer('');
       setActiveToolCall(null);
       setStatus('running');
+      const runId = crypto.randomUUID();
+      activeRunIdRef.current = runId;
 
       // Optimistically append user message to UI
       const tempUserMsg: AgentMessage = {
@@ -122,11 +141,12 @@ export function useAgent(sessionId: string = 'default'): UseAgentReturn {
       setMessages((prev) => [...prev, tempUserMsg]);
 
       try {
-        await agentRunTask(sessionIdRef.current, prompt, context);
+        await agentRunTask(sessionIdRef.current, runId, prompt, context);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         setError(msg);
         setStatus('error');
+        activeRunIdRef.current = null;
         refreshHistory();
       }
     },
@@ -134,13 +154,15 @@ export function useAgent(sessionId: string = 'default'): UseAgentReturn {
   );
 
   const confirmTool = useCallback(
-    async (approved: boolean) => {
+    async (approved: boolean, scope: 'once' | 'session' = 'once') => {
       if (!activeToolCall || activeToolCall.status !== 'requires_confirmation') return;
       try {
         await agentConfirmTool(
           sessionIdRef.current,
+          activeToolCall.run_id,
           activeToolCall.tool_call_id,
-          approved
+          approved,
+          scope
         );
         if (!approved) {
           setActiveToolCall(null);
@@ -157,6 +179,17 @@ export function useAgent(sessionId: string = 'default'): UseAgentReturn {
     [activeToolCall]
   );
 
+  const cancelTask = useCallback(async (interruptKernel: boolean = false) => {
+    const runId = activeRunIdRef.current;
+    if (!runId) return;
+    try {
+      await agentCancelTask(sessionIdRef.current, runId, interruptKernel);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+    }
+  }, []);
+
   const clearHistory = useCallback(async () => {
     try {
       await agentClearSession(sessionIdRef.current);
@@ -165,6 +198,7 @@ export function useAgent(sessionId: string = 'default'): UseAgentReturn {
       setCurrentStreamingAnswer('');
       setActiveToolCall(null);
       setStatus('idle');
+      activeRunIdRef.current = null;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
@@ -179,6 +213,8 @@ export function useAgent(sessionId: string = 'default'): UseAgentReturn {
     error,
     sendPrompt,
     confirmTool,
+    cancelTask,
     clearHistory,
+    dismissError: () => setError(null),
   };
 }

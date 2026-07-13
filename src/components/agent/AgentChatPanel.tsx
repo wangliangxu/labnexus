@@ -1,285 +1,348 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { isTauri } from '@tauri-apps/api/core';
+import {
+  Activity, Bot, ChevronDown, Database, FileText, GripVertical, History,
+  Maximize2, MessageSquarePlus, Minimize2, MoreHorizontal, Pencil, Plus, Send,
+  Square, Wrench, X, Zap,
+} from 'lucide-react';
 import { useAgent } from '../../hooks/useAgent';
+import type { AgentChatContext, AgentSessionListItem, AiConfig, Skill } from '../../types/agent';
+import {
+  agentCreateSession, agentGetConfig, agentGetMcpConfig, agentListSessions, agentRenameSession,
+} from '../../services/tauriIpc';
 import { ToolConfirmModal } from './ToolConfirmModal';
-
 import { SkillSelector } from './SkillSelector';
 import { KnowledgeModal } from './KnowledgeModal';
 import { TraceViewerModal } from './TraceViewerModal';
-import type { AgentChatContext, Skill } from '../../types/agent';
+import { MarkdownMessage, ToolExecutionCard } from './AgentMessageContent';
 
 interface AgentChatPanelProps {
   isOpen: boolean;
   onClose: () => void;
   getWorkspaceContext?: () => AgentChatContext;
+  width: number;
+  onWidthChange: (width: number) => void;
+  isFullscreen: boolean;
+  onToggleFullscreen: () => void;
 }
 
-export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
-  isOpen,
-  onClose,
-  getWorkspaceContext,
-}) => {
-  const {
-    messages,
-    status,
-    currentStreamingAnswer,
-    activeToolCall,
-    error,
-    sendPrompt,
-    confirmTool,
-    clearHistory,
-  } = useAgent('default');
+type ContextChip = { id: string; label: string; value: string; keys: Array<keyof AgentChatContext> };
 
+export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
+  isOpen, onClose, getWorkspaceContext, width, onWidthChange, isFullscreen, onToggleFullscreen,
+}) => {
+  const [sessionId, setSessionId] = useState('default');
+  const [sessions, setSessions] = useState<AgentSessionListItem[]>([]);
+  const [sessionMenuOpen, setSessionMenuOpen] = useState(false);
+  const [renameTitle, setRenameTitle] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [inputPrompt, setInputPrompt] = useState('');
   const [injectContext, setInjectContext] = useState(true);
+  const [excludedContext, setExcludedContext] = useState<string[]>([]);
+  const [workspaceContext, setWorkspaceContext] = useState<AgentChatContext>({});
+  const [aiConfig, setAiConfig] = useState<AiConfig | null>(null);
+  const [mcpCount, setMcpCount] = useState(0);
+  const [panelError, setPanelError] = useState<string | null>(null);
   const [isSkillOpen, setIsSkillOpen] = useState(false);
   const [isKnowledgeOpen, setIsKnowledgeOpen] = useState(false);
   const [isTraceOpen, setIsTraceOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const {
+    messages, status, currentStreamingAnswer, activeToolCall, error, sendPrompt,
+    confirmTool, cancelTask, clearHistory, dismissError,
+  } = useAgent(sessionId);
+
+  const refreshSessions = async () => {
+    try {
+      const loaded = await agentListSessions();
+      setSessions(loaded);
+      if (sessionId === 'default' && loaded.length > 0 && !loaded.some((session) => session.session_id === sessionId)) {
+        setSessionId(loaded[0].session_id);
+      }
+    } catch (cause) {
+      setPanelError(`Unable to load conversations: ${readableError(cause)}`);
+    }
   };
 
   useEffect(() => {
-    if (isOpen) {
-      scrollToBottom();
+    if (!isOpen) return;
+    if (!isTauri()) {
+      setPanelError(null);
+      return;
     }
-  }, [messages, currentStreamingAnswer, isOpen]);
+    void refreshSessions();
+    void agentGetConfig().then(setAiConfig).catch(() => setAiConfig(null));
+    void agentGetMcpConfig().then((config) => setMcpCount(config.servers.filter((server) => server.enabled).length)).catch(() => setMcpCount(0));
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen && status !== 'running' && isTauri()) void refreshSessions();
+  }, [isOpen, status, messages.length]);
+
+  useEffect(() => {
+    if (!isOpen || !getWorkspaceContext) return;
+    const update = () => setWorkspaceContext(getWorkspaceContext());
+    update();
+    const timer = window.setInterval(update, 2000);
+    return () => window.clearInterval(timer);
+  }, [getWorkspaceContext, isOpen]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, currentStreamingAnswer]);
+
+  useEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    input.style.height = 'auto';
+    input.style.height = `${Math.min(input.scrollHeight, 180)}px`;
+  }, [inputPrompt]);
+
+  const currentSession = sessions.find((session) => session.session_id === sessionId);
+  const contextChips = useMemo(() => buildContextChips(workspaceContext), [workspaceContext]);
+  const visibleContextChips = contextChips.filter((chip) => !excludedContext.includes(chip.id));
+  const providerName = aiConfig?.provider === 'ollama'
+    ? `Ollama · ${aiConfig.ollama.chat_model}`
+    : aiConfig ? `Remote · ${aiConfig.remote.chat_model}` : 'Provider unavailable';
+  const runLabel = status === 'running'
+    ? activeToolCall?.status === 'requires_confirmation' ? 'Waiting for approval' : activeToolCall?.status === 'running' ? 'Running tool' : 'Thinking'
+    : status === 'error' ? 'Needs attention' : workspaceContext.kernel_id ? 'Ready with kernel' : 'Ready · No kernel';
 
   if (!isOpen) return null;
 
+  const createSession = async () => {
+    try {
+      const id = `session-${crypto.randomUUID()}`;
+      await agentCreateSession(id, 'New Chat', getWorkspaceContext?.());
+      await refreshSessions();
+      setSessionId(id);
+      setSessionMenuOpen(false);
+      setPanelError(null);
+    } catch (cause) {
+      setPanelError(`Unable to create conversation: ${readableError(cause)}`);
+    }
+  };
+
+  const renameSession = async () => {
+    if (!renameTitle?.trim()) return;
+    try {
+      await agentRenameSession(sessionId, renameTitle.trim());
+      setRenameTitle(null);
+      await refreshSessions();
+    } catch (cause) {
+      setPanelError(`Unable to rename conversation: ${readableError(cause)}`);
+    }
+  };
+
+  const deleteSession = async () => {
+    try {
+      await clearHistory();
+      const remaining = sessions.filter((session) => session.session_id !== sessionId);
+      if (remaining.length > 0) setSessionId(remaining[0].session_id);
+      else await createSession();
+      setDeleteConfirmOpen(false);
+      await refreshSessions();
+    } catch (cause) {
+      setPanelError(`Unable to delete conversation: ${readableError(cause)}`);
+    }
+  };
+
+  const buildSelectedContext = (): AgentChatContext | undefined => {
+    if (!injectContext) return undefined;
+    const selected = { ...(getWorkspaceContext?.() ?? workspaceContext) };
+    for (const chip of contextChips.filter((item) => excludedContext.includes(item.id))) {
+      for (const key of chip.keys) delete selected[key];
+    }
+    return selected;
+  };
+
   const handleSend = () => {
     if (!inputPrompt.trim() || status === 'running') return;
-    const ctx = injectContext && getWorkspaceContext ? getWorkspaceContext() : undefined;
-    sendPrompt(inputPrompt, ctx);
+    void sendPrompt(inputPrompt, buildSelectedContext());
     setInputPrompt('');
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
+  const startResize = (event: React.MouseEvent) => {
+    if (isFullscreen) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = width;
+    const move = (moveEvent: MouseEvent) => onWidthChange(Math.min(760, Math.max(400, startWidth + startX - moveEvent.clientX)));
+    const stop = () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', stop);
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', stop);
   };
 
   return (
     <>
-      <div 
-        className="fixed right-0 w-96 bg-dark-surface border-l border-dark-border shadow-2xl z-40 flex flex-col animate-slide-left"
-        style={{ top: '40px', bottom: 'var(--statusbar-height)' }}
-      >
-        {/* Header */}
-        <div className="p-4 border-b border-dark-border flex items-center justify-between bg-dark-bg/50">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">⚡️</span>
-            <div>
-              <h3 className="text-sm font-bold text-gray-100">LabNexus Assistant</h3>
-              <p className="text-[10px] text-gray-400 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                ReAct Agent Engine Active
-              </p>
+      <section className="agent-workspace" aria-label="LabNexus AI Agent">
+        {!isFullscreen && <div className="agent-workspace__resizer" onMouseDown={startResize} role="separator" aria-label="Resize AI Agent panel"><GripVertical size={16} /></div>}
+        <header className="agent-workspace__header">
+          <div className="agent-workspace__identity">
+            <div className="agent-workspace__logo"><Bot size={19} /></div>
+            <div className="min-w-0">
+              <h2>LabNexus Assistant</h2>
+              <div className="agent-workspace__status"><span className={`agent-status-dot ${status}`} />{runLabel}</div>
             </div>
           </div>
-
-          <div className="flex items-center gap-1">
-            <button
-              onClick={clearHistory}
-              title="Clear Chat History"
-              className="p-1.5 rounded-lg hover:bg-dark-border text-gray-400 hover:text-red-400 transition-colors text-sm"
-            >
-              🗑️
+          <div className="agent-workspace__header-actions">
+            <button type="button" onClick={() => setIsTraceOpen(true)} aria-label="Open execution traces" title="Execution traces"><Activity size={16} /></button>
+            <button type="button" onClick={onToggleFullscreen} aria-label={isFullscreen ? 'Exit full screen Agent' : 'Open full screen Agent'} title={isFullscreen ? 'Exit full screen' : 'Full screen'}>
+              {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
             </button>
-            <button
-              onClick={onClose}
-              title="Close Panel"
-              className="p-1.5 rounded-lg hover:bg-dark-border text-gray-400 hover:text-white transition-colors text-sm"
-            >
-              ✕
-            </button>
+            <button type="button" onClick={onClose} aria-label="Close AI Agent" title="Close"><X size={17} /></button>
           </div>
+        </header>
+
+        <div className="agent-runtime-bar">
+          <span title={providerName}><Zap size={12} />{providerName}</span>
+          <span><Wrench size={12} />{mcpCount} MCP</span>
+          <span><Database size={12} />{workspaceContext.kernel_status || (workspaceContext.kernel_id ? 'kernel' : 'offline')}</span>
         </div>
 
-        {/* Chat Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 text-sm">
+        <div className="agent-session-bar">
+          <div className="agent-session-picker">
+            <button type="button" className="agent-session-picker__trigger" onClick={() => setSessionMenuOpen((value) => !value)} aria-expanded={sessionMenuOpen}>
+              <div><span>{currentSession?.title || 'New Chat'}</span><small>{currentSession?.message_count || messages.length} messages</small></div>
+              <ChevronDown size={15} />
+            </button>
+            {sessionMenuOpen && (
+              <div className="agent-session-menu">
+                <div className="agent-session-menu__heading"><span>Conversations</span><button type="button" onClick={createSession} aria-label="New conversation"><Plus size={15} /></button></div>
+                <div className="agent-session-menu__list">
+                  {sessions.map((session) => (
+                    <button type="button" key={session.session_id} className={session.session_id === sessionId ? 'active' : ''} onClick={() => { setSessionId(session.session_id); setSessionMenuOpen(false); }}>
+                      <span>{session.title}</span><small>{formatRelativeTime(session.updated_at)} · {session.message_count}</small>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <button type="button" onClick={createSession} aria-label="New conversation" title="New conversation"><MessageSquarePlus size={16} /></button>
+          <button type="button" onClick={() => setRenameTitle(currentSession?.title || 'New Chat')} aria-label="Rename conversation" title="Rename"><Pencil size={15} /></button>
+          <button type="button" onClick={() => setDeleteConfirmOpen(true)} aria-label="Conversation actions" title="Delete conversation"><MoreHorizontal size={16} /></button>
+        </div>
+
+        <main className="agent-conversation" aria-live="polite">
           {messages.length === 0 && !currentStreamingAnswer && (
-            <div className="text-center py-12 text-gray-500 space-y-2">
-              <div className="text-3xl">🧪</div>
-              <p className="font-semibold text-gray-400">Welcome to LabNexus AI</p>
-              <p className="text-xs max-w-[240px] mx-auto">
-                Ask me to write scripts, inspect variables, analyze datasets, or execute code directly in your Jupyter kernel!
-              </p>
-            </div>
-          )}
-
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex flex-col ${
-                msg.role === 'user'
-                  ? 'items-end'
-                  : msg.role === 'tool'
-                  ? 'items-center'
-                  : 'items-start'
-              }`}
-            >
-              {msg.role === 'user' ? (
-                <div className="bg-gradient-to-r from-brand-primary to-indigo-600 text-white px-4 py-2.5 rounded-2xl rounded-tr-sm max-w-[85%] shadow-md whitespace-pre-wrap text-xs">
-                  {msg.content}
-                </div>
-              ) : msg.role === 'tool' ? (
-                <div className="w-full bg-dark-bg/80 border border-dark-border rounded-lg p-2 my-1 text-[11px] font-mono text-gray-400 overflow-x-auto max-h-32">
-                  <span className="text-emerald-400 font-bold block mb-0.5">
-                    ✓ Observation [{msg.name}]:
-                  </span>
-                  {msg.content}
-                </div>
-              ) : (
-                <div className="bg-dark-bg border border-dark-border text-gray-200 px-4 py-3 rounded-2xl rounded-tl-sm max-w-[95%] shadow-sm space-y-2 text-xs">
-                  {msg.content && (
-                    <div className="whitespace-pre-wrap leading-relaxed">
-                      {msg.content}
-                    </div>
-                  )}
-
-                  {msg.tool_calls && msg.tool_calls.length > 0 && (
-                    <div className="border-t border-dark-border pt-2 space-y-1">
-                      <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">
-                        Tool Execution Requested:
-                      </span>
-                      {msg.tool_calls.map((tc, idx) => (
-                        <div
-                          key={idx}
-                          className="bg-dark-surface border border-brand-primary/30 rounded px-2 py-1 flex items-center justify-between text-[11px] font-mono text-brand-primary"
-                        >
-                          <span>🔧 {tc.function.name}</span>
-                          <span className="text-[10px] text-gray-500 truncate max-w-[120px]">
-                            {tc.function.arguments}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
-
-          {/* Streaming Answer */}
-          {currentStreamingAnswer && (
-            <div className="flex flex-col items-start">
-              <div className="bg-dark-bg border border-dark-border text-gray-200 px-4 py-3 rounded-2xl rounded-tl-sm max-w-[95%] shadow-sm whitespace-pre-wrap text-xs leading-relaxed">
-                {currentStreamingAnswer}
-                <span className="inline-block w-1.5 h-3 bg-brand-primary ml-1 animate-pulse" />
+            <div className="agent-empty-state">
+              <div><Zap size={25} /></div><h3>What would you like to work on?</h3>
+              <p>Analyze a notebook, inspect an error, transform data, or ask the Agent to run a scientific workflow.</p>
+              <div className="agent-empty-state__actions">
+                <button type="button" onClick={() => setInputPrompt('Summarize the current notebook and identify the next useful analysis step.')}>Summarize notebook</button>
+                <button type="button" onClick={() => setInputPrompt('Inspect the current error and propose a safe fix.')}>Diagnose error</button>
               </div>
             </div>
           )}
 
-          {/* Active Tool Running Indicator */}
-          {activeToolCall && activeToolCall.status === 'running' && (
-            <div className="w-full bg-brand-primary/10 border border-brand-primary/30 rounded-lg p-2.5 flex items-center gap-2 text-xs text-brand-primary animate-pulse">
-              <span className="animate-spin text-sm">⚡</span>
-              <span className="font-mono font-semibold">
-                Executing tool: {activeToolCall.tool_name}...
-              </span>
-            </div>
+          {messages.map((message) => {
+            if (message.role === 'tool') return null;
+            if (message.role === 'user') return <div key={message.id} className="agent-message agent-message--user"><div>{message.content}</div></div>;
+            return (
+              <article key={message.id} className="agent-message agent-message--assistant">
+                <div className="agent-message__avatar"><Bot size={14} /></div>
+                <div className="agent-message__body">
+                  {message.content && <MarkdownMessage content={message.content} onUseCode={(code) => setInputPrompt((current) => `${current}${current ? '\n\n' : ''}${code}`)} />}
+                  {message.tool_calls && message.tool_calls.length > 0 && (
+                    <div className="agent-tool-timeline">
+                      <div className="agent-tool-timeline__label"><History size={13} />Execution</div>
+                      {message.tool_calls.map((call) => <ToolExecutionCard key={call.id} call={call} result={messages.find((candidate) => candidate.role === 'tool' && candidate.tool_call_id === call.id)} />)}
+                    </div>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+
+          {currentStreamingAnswer && (
+            <article className="agent-message agent-message--assistant"><div className="agent-message__avatar"><Bot size={14} /></div><div className="agent-message__body"><MarkdownMessage content={currentStreamingAnswer} /><span className="agent-stream-cursor" /></div></article>
           )}
 
-          {/* Error Banner */}
-          {error && (
-            <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-xs p-3 rounded-lg flex items-start gap-2">
-              <span>❌</span>
-              <div className="flex-1 whitespace-pre-wrap">{error}</div>
-            </div>
+          {activeToolCall?.status === 'running' && (
+            <div className="agent-running-card"><span className="agent-spinner" /><div><strong>Running tool</strong><code>{activeToolCall.tool_name}</code></div></div>
           )}
 
+          {(error || panelError) && (
+            <div className="agent-error-card" role="alert"><div><strong>Agent needs attention</strong><p>{error || panelError}</p></div><button type="button" onClick={() => { dismissError(); setPanelError(null); }} aria-label="Dismiss error"><X size={15} /></button></div>
+          )}
           <div ref={messagesEndRef} />
-        </div>
+        </main>
 
-        {/* Prompt Input Area */}
-        <div className="p-3 border-t border-dark-border bg-dark-bg/80 space-y-2">
-          {/* Phase 4 Shortcut Bar */}
-          <div className="flex items-center justify-between px-1 border-b border-dark-border/50 pb-1.5">
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => setIsSkillOpen(true)}
-                title="Select Scientific Workflow Skill"
-                className="px-2 py-0.5 text-[10px] font-bold bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary border border-brand-primary/30 rounded flex items-center gap-1 transition-all shadow-sm"
-              >
-                ⚡ Skills
-              </button>
-              <button
-                onClick={() => setIsKnowledgeOpen(true)}
-                title="Domain Knowledge Base"
-                className="px-2 py-0.5 text-[10px] font-bold bg-dark-surface hover:bg-dark-border text-gray-300 border border-dark-border rounded flex items-center gap-1 transition-all"
-              >
-                📚 Knowledge
-              </button>
-              <button
-                onClick={() => setIsTraceOpen(true)}
-                title="Execution Traces & Audit Logs"
-                className="px-2 py-0.5 text-[10px] font-bold bg-dark-surface hover:bg-dark-border text-gray-300 border border-dark-border rounded flex items-center gap-1 transition-all"
-              >
-                📊 Traces
-              </button>
+        <footer className="agent-composer">
+          <div className="agent-composer__topbar">
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => setIsSkillOpen(true)}><Zap size={13} />Skills</button>
+              <button type="button" onClick={() => setIsKnowledgeOpen(true)}><Database size={13} />Knowledge</button>
             </div>
-            {injectContext && (
-              <span className="text-[9px] bg-brand-primary/10 text-brand-primary px-1.5 py-0.5 rounded border border-brand-primary/20">
-                Active Cell & Logs
-              </span>
-            )}
+            <label><input type="checkbox" checked={injectContext} onChange={(event) => setInjectContext(event.target.checked)} />Notebook context</label>
           </div>
-
-          {/* Context Checkbox */}
-          <div className="flex items-center justify-between px-1">
-            <label className="flex items-center gap-1.5 text-[11px] text-gray-400 cursor-pointer hover:text-gray-300">
-              <input
-                type="checkbox"
-                checked={injectContext}
-                onChange={(e) => setInjectContext(e.target.checked)}
-                className="rounded border-dark-border bg-dark-surface text-brand-primary focus:ring-0 w-3 h-3 accent-brand-primary"
-              />
-              <span>Auto-inject Notebook Context</span>
-            </label>
+          {injectContext && visibleContextChips.length > 0 && (
+            <div className="agent-context-chips">
+              {visibleContextChips.map((chip) => <span key={chip.id} title={chip.value}><FileText size={11} />{chip.label}<button type="button" onClick={() => setExcludedContext((items) => [...items, chip.id])} aria-label={`Remove ${chip.label} context`}><X size={11} /></button></span>)}
+              {excludedContext.length > 0 && <button type="button" className="agent-context-reset" onClick={() => setExcludedContext([])}>Restore</button>}
+            </div>
+          )}
+          <div className="agent-composer__input">
+            <textarea ref={inputRef} rows={1} value={inputPrompt} onChange={(event) => setInputPrompt(event.target.value)} onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); handleSend(); }
+            }} placeholder="Ask the Agent to analyze, explain, or act…" disabled={status === 'running'} aria-label="Agent prompt" />
+            <div className="agent-composer__actions">
+              <span>Enter to send · Shift+Enter for newline</span>
+              {status === 'running' ? (
+                <div><button type="button" className="stop" onClick={() => cancelTask(false)} title="Stop Agent"><Square size={14} />Stop</button><button type="button" className="interrupt" onClick={() => cancelTask(true)} title="Stop Agent and interrupt kernel"><Zap size={14} /></button></div>
+              ) : <button type="button" className="send" onClick={handleSend} disabled={!inputPrompt.trim()} aria-label="Send prompt"><Send size={15} /></button>}
+            </div>
           </div>
+        </footer>
+      </section>
 
-          <div className="relative">
-            <textarea
-              rows={2}
-              value={inputPrompt}
-              onChange={(e) => setInputPrompt(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask LabNexus AI anything... (Press Enter to send, or / for skills)"
-              disabled={status === 'running'}
-              className="w-full bg-dark-surface border border-dark-border rounded-xl px-3 py-2 pr-10 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-brand-primary resize-none disabled:opacity-50"
-            />
-            <button
-              onClick={handleSend}
-              disabled={!inputPrompt.trim() || status === 'running'}
-              className="absolute right-2 bottom-2 p-1.5 rounded-lg bg-brand-primary hover:bg-brand-primary/80 text-white disabled:opacity-30 disabled:hover:bg-brand-primary transition-all shadow-md"
-            >
-              ➤
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Modals */}
       <ToolConfirmModal toolCall={activeToolCall} onConfirm={confirmTool} />
-      {isSkillOpen && (
-        <SkillSelector
-          onClose={() => setIsSkillOpen(false)}
-          onSelectSkill={(skill: Skill) => {
-            setInputPrompt((prev) => `/${skill.id} ${prev}`.trim() + ' ');
-          }}
-        />
-      )}
-      {isKnowledgeOpen && (
-        <KnowledgeModal onClose={() => setIsKnowledgeOpen(false)} />
-      )}
-      {isTraceOpen && (
-        <TraceViewerModal onClose={() => setIsTraceOpen(false)} />
-      )}
+      {isSkillOpen && <SkillSelector onClose={() => setIsSkillOpen(false)} onSelectSkill={(skill: Skill) => setInputPrompt((current) => `/${skill.id} ${current}`.trim() + ' ')} />}
+      {isKnowledgeOpen && <KnowledgeModal onClose={() => setIsKnowledgeOpen(false)} />}
+      {isTraceOpen && <TraceViewerModal onClose={() => setIsTraceOpen(false)} />}
+
+      {renameTitle !== null && <AgentDialog title="Rename conversation" onClose={() => setRenameTitle(null)} actions={<><button type="button" onClick={() => setRenameTitle(null)}>Cancel</button><button type="button" className="primary" onClick={renameSession}>Save</button></>}><input autoFocus value={renameTitle} onChange={(event) => setRenameTitle(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && void renameSession()} /></AgentDialog>}
+      {deleteConfirmOpen && <AgentDialog title="Delete this conversation?" onClose={() => setDeleteConfirmOpen(false)} actions={<><button type="button" onClick={() => setDeleteConfirmOpen(false)}>Cancel</button><button type="button" className="danger" onClick={deleteSession}>Delete</button></>}><p>This removes the conversation and its history. This action cannot be undone.</p></AgentDialog>}
     </>
   );
 };
 
+const AgentDialog: React.FC<{ title: string; onClose: () => void; actions: React.ReactNode; children: React.ReactNode }> = ({ title, onClose, actions, children }) => (
+  <div className="agent-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+    <div className="agent-dialog" role="dialog" aria-modal="true" aria-label={title}><div className="agent-dialog__header"><h3>{title}</h3><button type="button" onClick={onClose} aria-label="Close dialog"><X size={16} /></button></div><div className="agent-dialog__content">{children}</div><div className="agent-dialog__actions">{actions}</div></div>
+  </div>
+);
+
+function buildContextChips(context: AgentChatContext): ContextChip[] {
+  const chips: ContextChip[] = [];
+  if (context.notebook_path) chips.push({ id: 'notebook', label: context.notebook_path.split('/').pop() || context.notebook_path, value: context.notebook_path, keys: ['notebook_path', 'server_id', 'session_id'] });
+  if (context.kernel_id) chips.push({ id: 'kernel', label: context.kernel_status || 'Kernel', value: context.kernel_id, keys: ['kernel_id', 'kernel_status'] });
+  if (context.active_cell_code) chips.push({ id: 'cell', label: `Cell ${typeof context.active_cell_index === 'number' ? context.active_cell_index + 1 : ''}`.trim(), value: context.active_cell_code, keys: ['active_cell_id', 'active_cell_index', 'active_cell_code'] });
+  if (context.last_error) chips.push({ id: 'error', label: 'Last error', value: context.last_error, keys: ['last_error'] });
+  return chips;
+}
+
+function formatRelativeTime(value: string): string {
+  const time = new Date(value).getTime();
+  if (!Number.isFinite(time)) return '';
+  const minutes = Math.max(0, Math.round((Date.now() - time) / 60_000));
+  if (minutes < 1) return 'now';
+  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1_440) return `${Math.round(minutes / 60)}h ago`;
+  return `${Math.round(minutes / 1_440)}d ago`;
+}
+
+function readableError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replace(/^Error:\s*/i, '').replace(/^Agent error:\s*/i, '');
+}

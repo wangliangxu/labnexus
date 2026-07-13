@@ -4,6 +4,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
+import { isTauri } from '@tauri-apps/api/core';
 import type {
   JupyterServerConfig,
   JupyterHubLoginConfig,
@@ -74,6 +75,7 @@ export function useJupyter(): UseJupyterReturn {
 
   // Listen for connection status events from the Rust backend
   useEffect(() => {
+    if (!isTauri()) return;
     const unlisten = listen<JupyterConnectionEvent>(
       'jupyter:connection',
       (event) => {

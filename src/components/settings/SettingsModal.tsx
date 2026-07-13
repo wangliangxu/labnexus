@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import type { AiConfig } from '../../types/agent';
-import { agentGetConfig, agentSaveConfig } from '../../services/tauriIpc';
+import { isTauri } from '@tauri-apps/api/core';
+import type { AiConfig, ExternalMcpConfigFile } from '../../types/agent';
+import {
+  agentGetConfig,
+  agentGetMcpConfig,
+  agentSaveConfig,
+  agentSaveMcpConfig,
+} from '../../services/tauriIpc';
 import {
   formatShortcut,
   loadGlobalSettings,
@@ -34,19 +40,37 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isSavingAi, setIsSavingAi] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiStrategyTab, setAiStrategyTab] = useState<'remote' | 'ollama'>('remote');
+  const [aiSection, setAiSection] = useState<'provider' | 'context' | 'reliability' | 'mcp'>('provider');
+  const [aiReloadNonce, setAiReloadNonce] = useState(0);
+  const [isLoadingAi, setIsLoadingAi] = useState(false);
+  const [mcpConfig, setMcpConfig] = useState<ExternalMcpConfigFile>({ servers: [] });
+  const [mcpWarnings, setMcpWarnings] = useState<string[]>([]);
+  const [aiSaved, setAiSaved] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setActiveTab(defaultTab);
-      // Reload AI config when opened
-      agentGetConfig()
-        .then((cfg) => {
+      setAiError(null);
+      if (!isTauri()) {
+        setAiConfig(null);
+        setIsLoadingAi(false);
+        setAiError('AI configuration is available when LabNexus runs as a desktop application.');
+        return;
+      }
+      setIsLoadingAi(true);
+      Promise.all([agentGetConfig(), agentGetMcpConfig()])
+        .then(([cfg, mcp]) => {
           setAiConfig(cfg);
           setAiStrategyTab(cfg.provider);
+          setMcpConfig(mcp);
         })
-        .catch((e) => setAiError(String(e)));
+        .catch((e) => {
+          setAiConfig(null);
+          setAiError(e instanceof Error ? e.message : String(e));
+        })
+        .finally(() => setIsLoadingAi(false));
     }
-  }, [isOpen, defaultTab]);
+  }, [isOpen, defaultTab, aiReloadNonce]);
 
   useEffect(() => {
     // Apply theme to document root
@@ -87,8 +111,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         provider: aiStrategyTab,
       };
       await agentSaveConfig(updatedConfig);
-      // Optional: show a saved message or close
-      onClose();
+      const warnings = await agentSaveMcpConfig(mcpConfig);
+      setMcpWarnings(warnings);
+      setAiConfig(updatedConfig);
+      setAiSaved(true);
+      window.setTimeout(() => setAiSaved(false), 2000);
     } catch (e: unknown) {
       setAiError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -98,7 +125,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-      <div className="bg-dark-surface border border-dark-border rounded-xl shadow-2xl max-w-2xl w-full flex flex-col animate-scale-up" style={{ maxHeight: '85vh' }}>
+      <div className="bg-dark-surface border border-dark-border rounded-xl shadow-2xl max-w-4xl w-full flex flex-col animate-scale-up" style={{ maxHeight: '88vh' }}>
         {/* Header */}
         <div className="flex justify-between items-center border-b border-dark-border px-6 py-4 shrink-0">
           <div>
@@ -282,6 +309,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               {aiConfig ? (
                 <>
+                  <div className="grid grid-cols-4 gap-2 rounded-xl border border-dark-border bg-dark-bg/50 p-1.5">
+                    {([
+                      ['provider', 'Provider & Models'],
+                      ['context', 'Context & Memory'],
+                      ['reliability', 'Reliability'],
+                      ['mcp', 'MCP Servers'],
+                    ] as const).map(([id, label]) => (
+                      <button key={id} type="button" onClick={() => setAiSection(id)} className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${aiSection === id ? 'bg-brand-primary text-white shadow' : 'text-gray-400 hover:bg-dark-border hover:text-gray-200'}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {aiSection === 'provider' && <>
                   {/* Strategy Tabs */}
                   <div className="flex border-b border-dark-border gap-4 mb-4">
                     <button
@@ -508,8 +549,305 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                     )}
                   </div>
+                  </>}
 
-                  <div className="flex justify-end pt-6 mt-4 border-t border-dark-border">
+                  {aiSection === 'context' && (
+                  <div className="space-y-5 rounded-xl border border-dark-border bg-dark-bg/35 p-5">
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-100">Context budget</h4>
+                      <p className="mt-1 text-xs text-gray-500">Configure the active model's input window and reserved response capacity.</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                    <label className="space-y-1">
+                      <span className="text-xs text-gray-400">Context window (tokens)</span>
+                      <input
+                        type="number"
+                        min="2048"
+                        value={aiStrategyTab === 'remote' ? aiConfig.remote.context_window_tokens : aiConfig.ollama.context_window_tokens}
+                        onChange={(event) => {
+                          const value = Number(event.target.value);
+                          setAiConfig(aiStrategyTab === 'remote'
+                            ? { ...aiConfig, remote: { ...aiConfig.remote, context_window_tokens: value } }
+                            : { ...aiConfig, ollama: { ...aiConfig.ollama, context_window_tokens: value } });
+                        }}
+                        className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-xs text-gray-200"
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs text-gray-400">Maximum output (tokens)</span>
+                      <input
+                        type="number"
+                        min="256"
+                        value={aiStrategyTab === 'remote' ? aiConfig.remote.max_output_tokens : aiConfig.ollama.max_output_tokens}
+                        onChange={(event) => {
+                          const value = Number(event.target.value);
+                          setAiConfig(aiStrategyTab === 'remote'
+                            ? { ...aiConfig, remote: { ...aiConfig.remote, max_output_tokens: value } }
+                            : { ...aiConfig, ollama: { ...aiConfig.ollama, max_output_tokens: value } });
+                        }}
+                        className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-xs text-gray-200"
+                      />
+                    </label>
+                    </div>
+                    <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3 text-xs leading-relaxed text-blue-200/80">
+                      LabNexus reserves output and tool-schema tokens first, then keeps complete user/tool turns within the remaining budget.
+                    </div>
+                  </div>
+                  )}
+
+                  {aiSection === 'reliability' && (
+                  <div className="space-y-4 rounded-xl border border-dark-border bg-dark-bg/35 p-5">
+                    <h4 className="text-xs font-semibold text-gray-300 uppercase tracking-wider">Provider Resilience</h4>
+                    <label className="flex items-center justify-between p-3 rounded-lg bg-dark-bg border border-dark-border">
+                      <span className="text-xs text-gray-300">Automatically switch to the other enabled provider on transient failures</span>
+                      <input
+                        type="checkbox"
+                        checked={aiConfig.resilience.fallback_enabled}
+                        onChange={(event) => setAiConfig({
+                          ...aiConfig,
+                          resilience: { ...aiConfig.resilience, fallback_enabled: event.target.checked },
+                        })}
+                        className="w-4 h-4 accent-brand-primary"
+                      />
+                    </label>
+                    <div className="grid grid-cols-4 gap-3">
+                      <label className="space-y-1">
+                        <span className="text-xs text-gray-400">Maximum retries</span>
+                        <input type="number" min="0" max="8" value={aiConfig.resilience.max_retries}
+                          onChange={(event) => setAiConfig({ ...aiConfig, resilience: { ...aiConfig.resilience, max_retries: Number(event.target.value) } })}
+                          className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-xs text-gray-200" />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-xs text-gray-400">Retry base (ms)</span>
+                        <input type="number" min="50" max="60000" value={aiConfig.resilience.retry_base_delay_ms}
+                          onChange={(event) => setAiConfig({ ...aiConfig, resilience: { ...aiConfig.resilience, retry_base_delay_ms: Number(event.target.value) } })}
+                          className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-xs text-gray-200" />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-xs text-gray-400">Circuit failures</span>
+                        <input type="number" min="1" max="20" value={aiConfig.resilience.circuit_breaker_threshold}
+                          onChange={(event) => setAiConfig({ ...aiConfig, resilience: { ...aiConfig.resilience, circuit_breaker_threshold: Number(event.target.value) } })}
+                          className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-xs text-gray-200" />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-xs text-gray-400">Cooldown (seconds)</span>
+                        <input type="number" min="1" max="3600" value={aiConfig.resilience.circuit_breaker_cooldown_seconds}
+                          onChange={(event) => setAiConfig({ ...aiConfig, resilience: { ...aiConfig.resilience, circuit_breaker_cooldown_seconds: Number(event.target.value) } })}
+                          className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-xs text-gray-200" />
+                      </label>
+                    </div>
+                  </div>
+                  )}
+
+                  {aiSection === 'mcp' && (
+                  <div className="space-y-3 rounded-xl border border-dark-border bg-dark-bg/35 p-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                          External MCP Servers
+                        </h4>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Enabled servers are connected and discovered on save. External tool calls always require one-time approval.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const suffix = Date.now().toString(36);
+                          setMcpConfig({
+                            servers: [
+                              ...mcpConfig.servers,
+                              {
+                                id: `server_${suffix}`,
+                                name: 'New MCP Server',
+                                transport: 'stdio',
+                                command: '',
+                                args: [],
+                                env: {},
+                                url: '',
+                                headers: {},
+                                enabled: true,
+                                timeout_seconds: 30,
+                              },
+                            ],
+                          });
+                        }}
+                        className="px-3 py-1.5 rounded-lg text-xs border border-dark-border text-gray-300 hover:border-brand-primary hover:text-white"
+                      >
+                        + Add Server
+                      </button>
+                    </div>
+
+                    {mcpWarnings.length > 0 && (
+                      <div className="bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs p-3 rounded-lg space-y-1">
+                        <div className="font-semibold">Saved, but discovery reported:</div>
+                        {mcpWarnings.map((warning) => <div key={warning}>{warning}</div>)}
+                      </div>
+                    )}
+
+                    {mcpConfig.servers.map((server, index) => (
+                      <div key={`${server.id}-${index}`} className="p-3 rounded-lg bg-dark-bg border border-dark-border space-y-3">
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={server.enabled}
+                            onChange={(event) => setMcpConfig({
+                              servers: mcpConfig.servers.map((item, itemIndex) =>
+                                itemIndex === index ? { ...item, enabled: event.target.checked } : item),
+                            })}
+                            className="w-4 h-4 accent-brand-primary"
+                            title="Enable server"
+                          />
+                          <input
+                            value={server.name}
+                            onChange={(event) => setMcpConfig({
+                              servers: mcpConfig.servers.map((item, itemIndex) =>
+                                itemIndex === index ? { ...item, name: event.target.value } : item),
+                            })}
+                            className="flex-1 bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-sm text-gray-200"
+                            placeholder="Display name"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setMcpConfig({ servers: mcpConfig.servers.filter((_, itemIndex) => itemIndex !== index) })}
+                            className="text-xs text-red-400 hover:text-red-300 px-2"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3">
+                          <label className="space-y-1">
+                            <span className="text-xs text-gray-400">Server ID</span>
+                            <input
+                              value={server.id}
+                              onChange={(event) => setMcpConfig({
+                                servers: mcpConfig.servers.map((item, itemIndex) =>
+                                  itemIndex === index ? { ...item, id: event.target.value } : item),
+                              })}
+                              className="w-full bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-xs font-mono text-gray-200"
+                              placeholder="filesystem"
+                            />
+                          </label>
+                          <label className="space-y-1">
+                            <span className="text-xs text-gray-400">Transport</span>
+                            <select
+                              value={server.transport}
+                              onChange={(event) => setMcpConfig({
+                                servers: mcpConfig.servers.map((item, itemIndex) =>
+                                  itemIndex === index
+                                    ? { ...item, transport: event.target.value as 'stdio' | 'streamable_http' }
+                                    : item),
+                              })}
+                              className="w-full bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-xs text-gray-200"
+                            >
+                              <option value="stdio">stdio</option>
+                              <option value="streamable_http">Streamable HTTP</option>
+                            </select>
+                          </label>
+                          <label className="space-y-1">
+                            <span className="text-xs text-gray-400">Timeout (seconds)</span>
+                            <input
+                              type="number"
+                              min="1"
+                              max="120"
+                              value={server.timeout_seconds}
+                              onChange={(event) => setMcpConfig({
+                                servers: mcpConfig.servers.map((item, itemIndex) =>
+                                  itemIndex === index ? { ...item, timeout_seconds: Number(event.target.value) } : item),
+                              })}
+                              className="w-full bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-xs text-gray-200"
+                            />
+                          </label>
+                        </div>
+                        {server.transport === 'stdio' ? (
+                          <>
+                            <label className="block space-y-1">
+                              <span className="text-xs text-gray-400">Command</span>
+                              <input
+                                value={server.command}
+                                onChange={(event) => setMcpConfig({
+                                  servers: mcpConfig.servers.map((item, itemIndex) =>
+                                    itemIndex === index ? { ...item, command: event.target.value } : item),
+                                })}
+                                className="w-full bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-xs font-mono text-gray-200"
+                                placeholder="npx or /absolute/path/to/server"
+                              />
+                            </label>
+                            <label className="block space-y-1">
+                              <span className="text-xs text-gray-400">Arguments (one per line)</span>
+                              <textarea
+                                rows={Math.max(2, Math.min(5, server.args.length + 1))}
+                                value={server.args.join('\n')}
+                                onChange={(event) => setMcpConfig({
+                                  servers: mcpConfig.servers.map((item, itemIndex) =>
+                                    itemIndex === index
+                                      ? { ...item, args: event.target.value.split('\n').filter((argument) => argument.length > 0) }
+                                      : item),
+                                })}
+                                className="w-full bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-xs font-mono text-gray-200 resize-y"
+                              />
+                            </label>
+                            <label className="block space-y-1">
+                              <span className="text-xs text-gray-400">Environment (NAME=VALUE, one per line)</span>
+                              <textarea
+                                rows={Math.max(2, Math.min(5, Object.keys(server.env).length + 1))}
+                                value={Object.entries(server.env).map(([key, value]) => `${key}=${value}`).join('\n')}
+                                onChange={(event) => {
+                                  const env = Object.fromEntries(event.target.value.split('\n').flatMap((line) => {
+                                    const separator = line.indexOf('=');
+                                    return separator > 0 ? [[line.slice(0, separator).trim(), line.slice(separator + 1)]] : [];
+                                  }));
+                                  setMcpConfig({
+                                    servers: mcpConfig.servers.map((item, itemIndex) =>
+                                      itemIndex === index ? { ...item, env } : item),
+                                  });
+                                }}
+                                className="w-full bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-xs font-mono text-gray-200 resize-y"
+                              />
+                            </label>
+                          </>
+                        ) : (
+                          <>
+                            <label className="block space-y-1">
+                              <span className="text-xs text-gray-400">MCP Endpoint URL</span>
+                              <input
+                                value={server.url}
+                                onChange={(event) => setMcpConfig({
+                                  servers: mcpConfig.servers.map((item, itemIndex) =>
+                                    itemIndex === index ? { ...item, url: event.target.value } : item),
+                                })}
+                                className="w-full bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-xs font-mono text-gray-200"
+                                placeholder="https://example.com/mcp"
+                              />
+                            </label>
+                            <label className="block space-y-1">
+                              <span className="text-xs text-gray-400">HTTP Headers (NAME=VALUE, one per line)</span>
+                              <textarea
+                                rows={Math.max(2, Math.min(5, Object.keys(server.headers).length + 1))}
+                                value={Object.entries(server.headers).map(([key, value]) => `${key}=${value}`).join('\n')}
+                                onChange={(event) => {
+                                  const headers = Object.fromEntries(event.target.value.split('\n').flatMap((line) => {
+                                    const separator = line.indexOf('=');
+                                    return separator > 0 ? [[line.slice(0, separator).trim(), line.slice(separator + 1)]] : [];
+                                  }));
+                                  setMcpConfig({
+                                    servers: mcpConfig.servers.map((item, itemIndex) =>
+                                      itemIndex === index ? { ...item, headers } : item),
+                                  });
+                                }}
+                                className="w-full bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-xs font-mono text-gray-200 resize-y"
+                                placeholder="Authorization=Bearer ..."
+                              />
+                            </label>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  )}
+
+                  <div className="sticky bottom-0 -mx-6 flex items-center justify-between border-t border-dark-border bg-dark-surface/95 px-6 pb-1 pt-4 backdrop-blur">
+                    <span className={`text-xs ${aiSaved ? 'text-emerald-400' : 'text-gray-500'}`}>{aiSaved ? '✓ Configuration saved' : 'Changes are validated before they are saved.'}</span>
                     <button
                       onClick={handleSaveAi}
                       disabled={isSavingAi}
@@ -520,7 +858,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </>
               ) : (
-                <div className="text-gray-500 animate-pulse">Loading AI config...</div>
+                isLoadingAi ? (
+                  <div className="space-y-3 animate-pulse"><div className="h-10 rounded-lg bg-dark-border/50" /><div className="h-32 rounded-xl bg-dark-border/30" /></div>
+                ) : (
+                  <div className="rounded-xl border border-red-500/25 bg-red-500/5 p-6 text-center">
+                    <p className="text-sm font-semibold text-red-300">AI configuration could not be loaded</p>
+                    <p className="mt-1 text-xs text-gray-500">Check the desktop runtime and try again.</p>
+                    <button type="button" onClick={() => setAiReloadNonce((value) => value + 1)} className="mt-4 rounded-lg border border-dark-border px-4 py-2 text-xs font-semibold text-gray-200 hover:bg-dark-border">Retry</button>
+                  </div>
+                )
               )}
             </div>
           )}

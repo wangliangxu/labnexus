@@ -77,6 +77,16 @@ impl KernelWsManager {
         tx.subscribe()
     }
 
+    /// Verify that a kernel WebSocket is connected to the expected server.
+    pub async fn is_connected_to_server(&self, kernel_id: &str, server_id: &str) -> bool {
+        self.connections
+            .read()
+            .await
+            .get(kernel_id)
+            .map(|connection| connection.server_id == server_id)
+            .unwrap_or(false)
+    }
+
     /// Connect to a kernel's WebSocket channel and start read/write tasks.
     pub async fn connect(
         &self,

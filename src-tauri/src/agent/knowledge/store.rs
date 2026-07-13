@@ -36,6 +36,9 @@ impl KnowledgeStore {
                 content TEXT NOT NULL,
                 category TEXT NOT NULL,
                 tags_json TEXT NOT NULL,
+                source TEXT NOT NULL DEFAULT 'user',
+                trust_level TEXT NOT NULL DEFAULT 'unverified',
+                enabled INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );",
@@ -43,6 +46,15 @@ impl KnowledgeStore {
         .execute(&pool)
         .await
         .map_err(|e| format!("Failed to initialize knowledge_entries table: {}", e))?;
+
+        // Lightweight migrations for databases created by earlier LabNexus versions.
+        for migration in [
+            "ALTER TABLE knowledge_entries ADD COLUMN source TEXT NOT NULL DEFAULT 'user'",
+            "ALTER TABLE knowledge_entries ADD COLUMN trust_level TEXT NOT NULL DEFAULT 'unverified'",
+            "ALTER TABLE knowledge_entries ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1",
+        ] {
+            let _ = sqlx::query(migration).execute(&pool).await;
+        }
 
         let store = Self { pool };
         store.seed_defaults_if_empty().await?;
@@ -66,6 +78,9 @@ impl KnowledgeStore {
                     content: "When loading large CSV datasets in pandas, use `dtype` parameter or downcast numerical types (`pd.to_numeric(df[col], downcast='integer'|'float')`) and convert low-cardinality strings to `'category'` dtype to reduce memory consumption by up to 70%.".to_string(),
                     category: "Scientific Computing".to_string(),
                     tags: vec!["pandas".to_string(), "memory".to_string(), "dataframe".to_string(), "optimization".to_string(), "csv".to_string()],
+                    source: "builtin".to_string(),
+                    trust_level: "verified".to_string(),
+                    enabled: true,
                     created_at: now.clone(),
                     updated_at: now.clone(),
                 },
@@ -75,6 +90,9 @@ impl KnowledgeStore {
                     content: "In remote JupyterLab kernels, never run interactive GUI plot commands like `plt.show(block=True)` or `cv2.imshow()`, as they will freeze or crash the headless remote kernel. Always use inline matplotlib backend `%matplotlib inline` or save figures to files.".to_string(),
                     category: "Jupyter Rules".to_string(),
                     tags: vec!["matplotlib".to_string(), "plot".to_string(), "kernel".to_string(), "gui".to_string(), "inline".to_string(), "remote".to_string()],
+                    source: "builtin".to_string(),
+                    trust_level: "verified".to_string(),
+                    enabled: true,
                     created_at: now.clone(),
                     updated_at: now.clone(),
                 },
@@ -84,6 +102,9 @@ impl KnowledgeStore {
                     content: "In Jupyter notebooks, PyTorch tensors remain in GPU memory even after cell execution if referenced in the global namespace. To free GPU memory without restarting the kernel, use `del tensor_var; import gc; gc.collect(); torch.cuda.empty_cache()`.".to_string(),
                     category: "Scientific Computing".to_string(),
                     tags: vec!["pytorch".to_string(), "gpu".to_string(), "cuda".to_string(), "memory".to_string(), "cleanup".to_string(), "tensor".to_string()],
+                    source: "builtin".to_string(),
+                    trust_level: "verified".to_string(),
+                    enabled: true,
                     created_at: now.clone(),
                     updated_at: now.clone(),
                 },
@@ -97,7 +118,7 @@ impl KnowledgeStore {
     }
 
     pub async fn list_entries(&self) -> Result<Vec<KnowledgeEntry>, String> {
-        let rows = sqlx::query("SELECT id, title, content, category, tags_json, created_at, updated_at FROM knowledge_entries ORDER BY updated_at DESC")
+        let rows = sqlx::query("SELECT id, title, content, category, tags_json, source, trust_level, enabled, created_at, updated_at FROM knowledge_entries ORDER BY updated_at DESC")
             .fetch_all(&self.pool)
             .await
             .map_err(|e| format!("Failed to list knowledge entries: {}", e))?;
@@ -112,6 +133,9 @@ impl KnowledgeStore {
                 content: row.get("content"),
                 category: row.get("category"),
                 tags,
+                source: row.get("source"),
+                trust_level: row.get("trust_level"),
+                enabled: row.get::<i64, _>("enabled") != 0,
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
             });
@@ -122,14 +146,17 @@ impl KnowledgeStore {
     pub async fn save_entry(&self, entry: &KnowledgeEntry) -> Result<(), String> {
         let tags_json = serde_json::to_string(&entry.tags).unwrap_or_else(|_| "[]".to_string());
         sqlx::query(
-            "INSERT OR REPLACE INTO knowledge_entries (id, title, content, category, tags_json, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)"
+            "INSERT OR REPLACE INTO knowledge_entries (id, title, content, category, tags_json, source, trust_level, enabled, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)"
         )
         .bind(&entry.id)
         .bind(&entry.title)
         .bind(&entry.content)
         .bind(&entry.category)
         .bind(&tags_json)
+        .bind(&entry.source)
+        .bind(&entry.trust_level)
+        .bind(if entry.enabled { 1_i64 } else { 0_i64 })
         .bind(&entry.created_at)
         .bind(&entry.updated_at)
         .execute(&self.pool)

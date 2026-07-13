@@ -145,6 +145,16 @@
   min-width: 0;
 }
 
+.workbench__assistant {
+  grid-row: 2;
+  grid-column: 3;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border-default);
+  z-index: var(--z-sticky);
+}
+
 /* Status Bar */
 .workbench__statusbar {
   grid-row: 3;
@@ -167,4 +177,17 @@
 
 .workbench:not(:has(> .workbench__panel)) {
   grid-template-columns: 0px 1fr;
+}
+
+.workbench.workbench--with-assistant:has(> .workbench__panel) {
+  grid-template-columns: var(--panel-width) minmax(280px, 1fr) var(--assistant-width);
+}
+
+.workbench.workbench--with-assistant:not(:has(> .workbench__panel)) {
+  grid-template-columns: 0 minmax(280px, 1fr) var(--assistant-width);
+}
+
+.workbench--assistant-fullscreen .workbench__assistant {
+  grid-column: 1 / -1;
+  z-index: calc(var(--z-sticky) + 1);
 }

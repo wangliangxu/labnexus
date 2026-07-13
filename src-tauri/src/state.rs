@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{oneshot, RwLock};
 
 use crate::jupyter::client::JupyterClient;
 use crate::jupyter::terminal_ws::TerminalWsManager;
@@ -30,6 +30,9 @@ pub struct AppState {
     pub knowledge_store: Arc<RwLock<Option<crate::agent::KnowledgeStore>>>,
     /// Trace store (lazy initialized).
     pub trace_store: Arc<RwLock<Option<crate::agent::TraceStore>>>,
+    /// Pending notebook UI actions awaiting an acknowledgement from NotebookEditor.
+    pub pending_notebook_actions:
+        Arc<RwLock<HashMap<String, oneshot::Sender<Result<String, String>>>>>,
 }
 
 /// A managed connection to a single Jupyter server.
@@ -58,7 +61,24 @@ impl AppState {
             skills: Arc::new(crate::agent::SkillRegistry::new()),
             knowledge_store: Arc::new(RwLock::new(None)),
             trace_store: Arc::new(RwLock::new(None)),
+            pending_notebook_actions: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    pub async fn complete_notebook_action(
+        &self,
+        action_id: &str,
+        result: Result<String, String>,
+    ) -> Result<(), String> {
+        let sender = self
+            .pending_notebook_actions
+            .write()
+            .await
+            .remove(action_id)
+            .ok_or_else(|| "No matching pending notebook action found".to_string())?;
+        sender
+            .send(result)
+            .map_err(|_| "Notebook action receiver is no longer available".to_string())
     }
 
     pub async fn get_knowledge_store(&self) -> Result<crate::agent::KnowledgeStore, String> {

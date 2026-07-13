@@ -9,6 +9,8 @@ pub struct AgentMessage {
     pub role: String, // "system", "user", "assistant", "tool"
     pub content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCall>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
@@ -23,6 +25,7 @@ impl AgentMessage {
             id: uuid::Uuid::new_v4().to_string(),
             role: "system".to_string(),
             content: content.into(),
+            reasoning_content: None,
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -35,6 +38,7 @@ impl AgentMessage {
             id: uuid::Uuid::new_v4().to_string(),
             role: "user".to_string(),
             content: content.into(),
+            reasoning_content: None,
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -47,6 +51,7 @@ impl AgentMessage {
             id: uuid::Uuid::new_v4().to_string(),
             role: "assistant".to_string(),
             content: content.into(),
+            reasoning_content: None,
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -59,6 +64,7 @@ impl AgentMessage {
             id: uuid::Uuid::new_v4().to_string(),
             role: "assistant".to_string(),
             content: content.into(),
+            reasoning_content: None,
             tool_calls: Some(tool_calls),
             tool_call_id: None,
             name: None,
@@ -75,6 +81,7 @@ impl AgentMessage {
             id: uuid::Uuid::new_v4().to_string(),
             role: "tool".to_string(),
             content: output.into(),
+            reasoning_content: None,
             tool_calls: None,
             tool_call_id: Some(tool_call_id.into()),
             name: Some(name.into()),
@@ -118,7 +125,11 @@ pub struct FunctionDefinition {
 /// Jupyter-aware context optionally attached to chat messages.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AgentChatContext {
+    pub server_id: Option<String>,
     pub notebook_path: Option<String>,
+    pub session_id: Option<String>,
+    pub kernel_id: Option<String>,
+    pub active_cell_id: Option<String>,
     pub active_cell_index: Option<usize>,
     pub active_cell_code: Option<String>,
     pub kernel_status: Option<String>,
@@ -129,6 +140,7 @@ pub struct AgentChatContext {
 #[derive(Debug, Clone, Serialize)]
 pub struct AgentStreamEvent {
     pub session_id: String,
+    pub run_id: String,
     pub chunk_type: String, // "thought", "answer", "done", "error"
     pub content: String,
 }
@@ -137,9 +149,16 @@ pub struct AgentStreamEvent {
 #[derive(Debug, Clone, Serialize)]
 pub struct AgentToolCallEvent {
     pub session_id: String,
+    pub run_id: String,
     pub tool_call_id: String,
     pub tool_name: String,
     pub arguments: serde_json::Value,
     pub status: String, // "pending", "running", "completed", "error", "requires_confirmation"
     pub result: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub risk_level: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confirmation_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allow_session: Option<bool>,
 }

@@ -15,6 +15,7 @@ export interface AgentMessage {
   id: string;
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
+  reasoning_content?: string;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
   name?: string;
@@ -22,26 +23,43 @@ export interface AgentMessage {
 }
 
 export interface AgentChatContext {
+  server_id?: string;
   notebook_path?: string;
+  session_id?: string;
+  kernel_id?: string;
+  active_cell_id?: string;
   active_cell_index?: number;
   active_cell_code?: string;
   kernel_status?: string;
   last_error?: string;
 }
 
+export interface AgentSessionListItem {
+  session_id: string;
+  title: string;
+  updated_at: string;
+  message_count: number;
+  notebook_path?: string;
+}
+
 export interface AgentStreamEvent {
   session_id: string;
+  run_id: string;
   chunk_type: 'thought' | 'answer' | 'done' | 'error';
   content: string;
 }
 
 export interface AgentToolCallEvent {
   session_id: string;
+  run_id: string;
   tool_call_id: string;
   tool_name: string;
   arguments: Record<string, any>;
   status: 'pending' | 'running' | 'completed' | 'error' | 'requires_confirmation';
   result?: string;
+  risk_level?: 'compute' | 'mutation' | 'sensitive' | 'high' | 'critical';
+  confirmation_reason?: string;
+  allow_session?: boolean;
 }
 
 export interface RemoteApiConfig {
@@ -53,6 +71,8 @@ export interface RemoteApiConfig {
   temperature: number;
   top_p: number;
   timeout_seconds: number;
+  context_window_tokens: number;
+  max_output_tokens: number;
 }
 
 export interface OllamaConfig {
@@ -62,12 +82,40 @@ export interface OllamaConfig {
   temperature: number;
   top_p: number;
   timeout_seconds: number;
+  context_window_tokens: number;
+  max_output_tokens: number;
+}
+
+export interface ResilienceConfig {
+  fallback_enabled: boolean;
+  max_retries: number;
+  retry_base_delay_ms: number;
+  circuit_breaker_threshold: number;
+  circuit_breaker_cooldown_seconds: number;
 }
 
 export interface AiConfig {
   provider: 'remote' | 'ollama';
   remote: RemoteApiConfig;
   ollama: OllamaConfig;
+  resilience: ResilienceConfig;
+}
+
+export interface ExternalMcpServerConfig {
+  id: string;
+  name: string;
+  transport: 'stdio' | 'streamable_http';
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  url: string;
+  headers: Record<string, string>;
+  enabled: boolean;
+  timeout_seconds: number;
+}
+
+export interface ExternalMcpConfigFile {
+  servers: ExternalMcpServerConfig[];
 }
 
 export interface SkillParameter {
@@ -101,6 +149,9 @@ export interface KnowledgeEntry {
   content: string;
   category: string;
   tags: string[];
+  source: string;
+  trust_level: 'verified' | 'reviewed' | 'unverified';
+  enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -124,4 +175,9 @@ export interface AgentTrace {
   steps: TraceStep[];
   matched_skill?: string;
   used_knowledge_ids: string[];
+  provider: string;
+  model: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  reasoning_chars: number;
 }

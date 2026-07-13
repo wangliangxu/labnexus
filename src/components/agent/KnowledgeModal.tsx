@@ -16,12 +16,14 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [editingEntry, setEditingEntry] = useState<Partial<KnowledgeEntry> | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadEntries = () => {
     setLoading(true);
+    setLoadError(null);
     agentListKnowledge()
       .then(setEntries)
-      .catch((err) => console.error('Failed to load knowledge:', err))
+      .catch((err) => setLoadError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false));
   };
 
@@ -37,6 +39,9 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
       content: editingEntry.content,
       category: editingEntry.category || 'general',
       tags: editingEntry.tags || [],
+      source: editingEntry.source || 'user',
+      trust_level: editingEntry.trust_level || 'unverified',
+      enabled: editingEntry.enabled ?? true,
       created_at: editingEntry.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -119,6 +124,38 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
                 />
               </div>
             </div>
+            <label className="flex items-center gap-2 text-xs text-gray-300">
+              <input
+                type="checkbox"
+                checked={editingEntry.enabled ?? true}
+                onChange={(e) => setEditingEntry({ ...editingEntry, enabled: e.target.checked })}
+                className="accent-brand-primary"
+              />
+              Use this entry for Agent retrieval
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Source</label>
+                <input
+                  type="text"
+                  value={editingEntry.source || 'user'}
+                  onChange={(e) => setEditingEntry({ ...editingEntry, source: e.target.value })}
+                  className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-primary"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Trust Level</label>
+                <select
+                  value={editingEntry.trust_level || 'unverified'}
+                  onChange={(e) => setEditingEntry({ ...editingEntry, trust_level: e.target.value as KnowledgeEntry['trust_level'] })}
+                  className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-primary"
+                >
+                  <option value="unverified">Unverified</option>
+                  <option value="reviewed">Reviewed</option>
+                  <option value="verified">Verified</option>
+                </select>
+              </div>
+            </div>
             <div className="flex-1 flex flex-col">
               <label className="text-xs text-gray-400 block mb-1">Content / Rule / Guidance</label>
               <textarea
@@ -154,7 +191,7 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
                 className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-primary"
               />
               <button
-                onClick={() => setEditingEntry({ title: '', content: '', category: 'general', tags: [] })}
+                onClick={() => setEditingEntry({ title: '', content: '', category: 'general', tags: [], source: 'user', trust_level: 'unverified', enabled: true })}
                 className="px-4 py-2 text-xs font-bold text-white bg-brand-primary hover:bg-brand-primary/80 rounded-lg shrink-0 flex items-center gap-1 shadow-sm"
               >
                 <span>+</span> Add Knowledge
@@ -165,6 +202,12 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
               {loading ? (
                 <div className="text-center py-8 text-gray-400 text-sm">
                   Loading knowledge base...
+                </div>
+              ) : loadError ? (
+                <div className="rounded-xl border border-red-500/25 bg-red-500/5 p-4 text-sm text-red-300">
+                  <p>Unable to load the knowledge base.</p>
+                  <details className="mt-2 text-xs text-red-200/70"><summary>Technical details</summary><pre className="mt-2 whitespace-pre-wrap">{loadError}</pre></details>
+                  <button type="button" onClick={loadEntries} className="mt-3 rounded-lg border border-red-500/30 px-3 py-1.5 text-xs font-semibold hover:bg-red-500/10">Retry</button>
                 </div>
               ) : filtered.length === 0 ? (
                 <div className="text-center py-12 text-gray-500 text-sm">
@@ -182,6 +225,12 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
                         <span className="text-[10px] uppercase font-bold bg-brand-primary/20 text-brand-primary px-2 py-0.5 rounded">
                           {entry.category}
                         </span>
+                        <span className="text-[10px] text-gray-400">
+                          {entry.trust_level} · {entry.source}
+                        </span>
+                        {!entry.enabled && (
+                          <span className="text-[10px] text-amber-400">disabled</span>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         <button

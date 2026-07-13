@@ -161,22 +161,47 @@ export async function jupyterDisconnectKernelWs(
 
 // ─── AI Agent API ──────────────────────────────────────────────────
 
-import type { AgentChatContext, AgentMessage, AiConfig, Skill, KnowledgeEntry, AgentTrace } from '../types/agent';
+import type { AgentChatContext, AgentMessage, AgentSessionListItem, AiConfig, ExternalMcpConfigFile, Skill, KnowledgeEntry, AgentTrace } from '../types/agent';
 
 export async function agentRunTask(
   sessionId: string,
+  runId: string,
   prompt: string,
   context?: AgentChatContext
 ): Promise<void> {
-  return invoke('agent_run_task', { sessionId, prompt, context });
+  return invoke('agent_run_task', { sessionId, runId, prompt, context });
 }
 
 export async function agentConfirmTool(
   sessionId: string,
+  runId: string,
   toolCallId: string,
-  approved: boolean
+  approved: boolean,
+  approvalScope: 'once' | 'session' = 'once'
 ): Promise<void> {
-  return invoke('agent_confirm_tool', { sessionId, toolCallId, approved });
+  return invoke('agent_confirm_tool', {
+    sessionId,
+    runId,
+    toolCallId,
+    approved,
+    approvalScope,
+  });
+}
+
+export async function agentCancelTask(
+  sessionId: string,
+  runId?: string,
+  interruptKernel: boolean = false
+): Promise<void> {
+  return invoke('agent_cancel_task', { sessionId, runId, interruptKernel });
+}
+
+export async function agentCompleteNotebookAction(
+  actionId: string,
+  success: boolean,
+  message: string
+): Promise<void> {
+  return invoke('agent_complete_notebook_action', { actionId, success, message });
 }
 
 export async function agentGetConfig(): Promise<AiConfig> {
@@ -187,6 +212,42 @@ export async function agentSaveConfig(config: AiConfig): Promise<void> {
   return invoke('agent_save_config', { config });
 }
 
+export async function agentGetMcpConfig(): Promise<ExternalMcpConfigFile> {
+  return invoke('agent_get_mcp_config');
+}
+
+export async function agentSaveMcpConfig(config: ExternalMcpConfigFile): Promise<string[]> {
+  return invoke('agent_save_mcp_config', { config });
+}
+
+export async function agentMcpCapabilities(serverId: string): Promise<Record<string, unknown>> {
+  return invoke('agent_mcp_capabilities', { serverId });
+}
+
+export async function agentMcpListResources(serverId: string): Promise<Record<string, unknown>> {
+  return invoke('agent_mcp_list_resources', { serverId });
+}
+
+export async function agentMcpListResourceTemplates(serverId: string): Promise<Record<string, unknown>> {
+  return invoke('agent_mcp_list_resource_templates', { serverId });
+}
+
+export async function agentMcpReadResource(serverId: string, uri: string): Promise<Record<string, unknown>> {
+  return invoke('agent_mcp_read_resource', { serverId, uri });
+}
+
+export async function agentMcpListPrompts(serverId: string): Promise<Record<string, unknown>> {
+  return invoke('agent_mcp_list_prompts', { serverId });
+}
+
+export async function agentMcpGetPrompt(
+  serverId: string,
+  name: string,
+  promptArguments: Record<string, unknown> = {}
+): Promise<Record<string, unknown>> {
+  return invoke('agent_mcp_get_prompt', { serverId, name, arguments: promptArguments });
+}
+
 export async function agentGetHistory(
   sessionId: string
 ): Promise<AgentMessage[]> {
@@ -195,6 +256,22 @@ export async function agentGetHistory(
 
 export async function agentClearSession(sessionId: string): Promise<void> {
   return invoke('agent_clear_session', { sessionId });
+}
+
+export async function agentListSessions(): Promise<AgentSessionListItem[]> {
+  return invoke('agent_list_sessions');
+}
+
+export async function agentCreateSession(
+  sessionId: string,
+  title: string,
+  context?: AgentChatContext
+): Promise<void> {
+  return invoke('agent_create_session', { sessionId, title, context });
+}
+
+export async function agentRenameSession(sessionId: string, title: string): Promise<void> {
+  return invoke('agent_rename_session', { sessionId, title });
 }
 
 export async function agentListSkills(): Promise<Skill[]> {

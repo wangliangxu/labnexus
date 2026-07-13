@@ -1,8 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import { Loader2, AlertTriangle, FileCode } from 'lucide-react';
 import type { Cell, CellType, CellOutput } from '../../types/jupyter';
 import type { AgentChatContext } from '../../types/agent';
-import { jupyterGetContent, jupyterSaveContent } from '../../services/tauriIpc';
+import {
+  agentCompleteNotebookAction,
+  jupyterGetContent,
+  jupyterSaveContent,
+} from '../../services/tauriIpc';
 import { useKernel } from '../../hooks/useKernel';
 import { NotebookToolbar } from './NotebookToolbar';
 import { CellEditor } from './CellEditor';
@@ -51,6 +56,20 @@ interface NotebookEditorProps {
   tocOwnerId?: string;
   tocScrollRequest?: NotebookTocScrollRequest | null;
   onTocChange?: (ownerId: string, state: NotebookTocState) => void;
+}
+
+interface AgentNotebookActionEvent {
+  action_id: string;
+  action: 'add_cell' | 'save';
+  server_id: string;
+  notebook_path: string;
+  active_cell_id?: string;
+  active_cell_index?: number;
+  arguments: {
+    cell_type?: CellType;
+    source?: string;
+    position?: 'above' | 'below' | 'end';
+  };
 }
 
 export const NotebookEditor: React.FC<NotebookEditorProps> = ({
@@ -245,13 +264,17 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
       }
     }
     onContextChange({
+      server_id: serverId,
       notebook_path: path,
+      session_id: kernel.session?.id,
+      kernel_id: kernel.kernel?.id,
+      active_cell_id: activeCell?.id,
       active_cell_index: activeCellIndex,
       active_cell_code: code,
       kernel_status: kernel.status,
       last_error: lastErr,
     });
-  }, [path, activeCellIndex, cells, kernel.status, onContextChange]);
+  }, [path, serverId, activeCellIndex, cells, kernel.session?.id, kernel.kernel?.id, kernel.status, onContextChange]);
 
   // Load Notebook content
   useEffect(() => {
@@ -307,7 +330,10 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
 
   // Save Notebook
   const handleSave = useCallback(async () => {
-    if (isSaving || !isDirty) return;
+    if (isSaving) {
+      throw new Error('Notebook save is already in progress');
+    }
+    if (!isDirty) return;
     flushSourceCommits();
     setIsSaving(true);
     try {
@@ -329,10 +355,79 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
       setIsDirty(false);
     } catch (e: unknown) {
       console.error('Failed to save notebook:', e);
+      throw e;
     } finally {
       setIsSaving(false);
     }
   }, [flushSourceCommits, nbMetadata, path, serverId, isSaving, isDirty]);
+
+  // Execute notebook mutations requested by the Agent and acknowledge the real result.
+  useEffect(() => {
+    const unlisten = listen<AgentNotebookActionEvent>(
+      'agent:notebook_action',
+      async ({ payload }) => {
+        if (payload.notebook_path !== path || payload.server_id !== serverId) return;
+
+        try {
+          if (payload.action === 'save') {
+            await handleSave();
+            await agentCompleteNotebookAction(
+              payload.action_id,
+              true,
+              `Notebook '${path}' saved successfully.`
+            );
+            return;
+          }
+
+          if (payload.action === 'add_cell') {
+            const cellType = payload.arguments.cell_type ?? 'code';
+            const position = payload.arguments.position ?? 'below';
+            const newCell = {
+              ...createNotebookCell(cellType),
+              source: payload.arguments.source ?? '',
+            };
+            const requestedIndex = payload.active_cell_id
+              ? cellsRef.current.findIndex((cell) => cell.id === payload.active_cell_id)
+              : (payload.active_cell_index ?? activeCellIndex);
+            const anchorIndex = requestedIndex >= 0 ? requestedIndex : activeCellIndex;
+            const insertIndex = position === 'end'
+              ? cellsRef.current.length
+              : position === 'above'
+                ? Math.max(0, anchorIndex)
+                : Math.min(cellsRef.current.length, anchorIndex + 1);
+
+            updateCellsSnapshot((current) => [
+              ...current.slice(0, insertIndex),
+              newCell,
+              ...current.slice(insertIndex),
+            ]);
+            setActiveCellIndex(insertIndex);
+            setCursorPosition({ cellIndex: insertIndex, line: 0 });
+            setIsDirty(true);
+            await agentCompleteNotebookAction(
+              payload.action_id,
+              true,
+              `Added a ${cellType} cell at index ${insertIndex} in '${path}'.`
+            );
+            return;
+          }
+
+          throw new Error(`Unsupported notebook action: ${payload.action}`);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          try {
+            await agentCompleteNotebookAction(payload.action_id, false, message);
+          } catch (ackError) {
+            console.error('Failed to acknowledge Agent notebook action:', ackError);
+          }
+        }
+      }
+    );
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [activeCellIndex, handleSave, path, serverId, updateCellsSnapshot]);
 
   // Ctrl+S / Cmd+S shortcut
   useEffect(() => {

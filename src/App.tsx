@@ -60,6 +60,11 @@ function App() {
   const [tabs, setTabs] = useState<TabItem[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [isAgentOpen, setIsAgentOpen] = useState<boolean>(false);
+  const [agentWidth, setAgentWidth] = useState<number>(() => {
+    const saved = Number(localStorage.getItem('labnexus:agent-width'));
+    return Number.isFinite(saved) && saved >= 400 ? saved : 500;
+  });
+  const [isAgentFullscreen, setIsAgentFullscreen] = useState(false);
   const workspaceContextRef = useRef<AgentChatContext>({});
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [settingsTab, setSettingsTab] = useState<'global' | 'ai'>('global');
@@ -146,6 +151,10 @@ function App() {
       activeHeadingId: null,
     });
   }, [activeTab?.type]);
+
+  useEffect(() => {
+    localStorage.setItem('labnexus:agent-width', String(agentWidth));
+  }, [agentWidth]);
 
   // Explorer panels are unmounted when another side panel is shown. Keep the
   // expanded tree for each live server at app level, and discard it once that
@@ -464,6 +473,23 @@ function App() {
         sidebar={null}
         panel={renderPanelContent()}
         activePanel={activePanel}
+        assistantOpen={isAgentOpen}
+        assistantWidth={agentWidth}
+        assistantFullscreen={isAgentFullscreen}
+        assistant={isAgentOpen ? (
+          <AgentChatPanel
+            isOpen
+            onClose={() => {
+              setIsAgentOpen(false);
+              setIsAgentFullscreen(false);
+            }}
+            getWorkspaceContext={getWorkspaceContext}
+            width={agentWidth}
+            onWidthChange={setAgentWidth}
+            isFullscreen={isAgentFullscreen}
+            onToggleFullscreen={() => setIsAgentFullscreen((value) => !value)}
+          />
+        ) : undefined}
         onPanelChange={handlePanelChange}
         editor={
           <div className="app-editor-shell">
@@ -536,11 +562,6 @@ function App() {
             isAgentOpen={isAgentOpen}
           />
         }
-      />
-      <AgentChatPanel
-        isOpen={isAgentOpen}
-        onClose={() => setIsAgentOpen(false)}
-        getWorkspaceContext={getWorkspaceContext}
       />
       <SettingsModal
         isOpen={isSettingsOpen}

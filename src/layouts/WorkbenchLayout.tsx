@@ -18,6 +18,10 @@ interface WorkbenchLayoutProps {
   statusBar: ReactNode;
   activePanel?: PanelId;
   onPanelChange?: (panel: PanelId) => void;
+  assistant?: ReactNode;
+  assistantWidth?: number;
+  assistantFullscreen?: boolean;
+  assistantOpen?: boolean;
 }
 
 export function WorkbenchLayout({
@@ -27,6 +31,10 @@ export function WorkbenchLayout({
   statusBar,
   activePanel: controlledPanel,
   onPanelChange,
+  assistant,
+  assistantWidth = 500,
+  assistantFullscreen = false,
+  assistantOpen = false,
 }: WorkbenchLayoutProps) {
   const [internalPanel, setInternalPanel] = useState<PanelId>('explorer');
   const currentPanel = controlledPanel !== undefined ? controlledPanel : internalPanel;
@@ -84,8 +92,11 @@ export function WorkbenchLayout({
 
   return (
     <div
-      className="workbench"
-      style={currentPanel ? { '--panel-width': `${panelWidth}px` } as React.CSSProperties : undefined}
+      className={`workbench ${assistant ? 'workbench--with-assistant' : ''} ${assistantFullscreen ? 'workbench--assistant-fullscreen' : ''}`}
+      style={{
+        ...(currentPanel ? { '--panel-width': `${panelWidth}px` } : {}),
+        '--assistant-width': `${assistantWidth}px`,
+      } as React.CSSProperties}
     >
       {/* Title Bar (replaces Activity Bar) */}
       <div
@@ -135,7 +146,7 @@ export function WorkbenchLayout({
         <div className="titlebar__right">
           <button
             data-no-drag
-            className={`titlebar__item ${currentPanel === 'agent' ? 'active' : ''}`}
+            className={`titlebar__item ${assistantOpen ? 'active' : ''}`}
             onClick={() => handlePanelClick('agent')}
             title="AI Agent"
             aria-label="AI Agent"
@@ -175,6 +186,8 @@ export function WorkbenchLayout({
       <div className="workbench__editor">
         {editor}
       </div>
+
+      {assistant && <div className="workbench__assistant">{assistant}</div>}
 
       {/* Status Bar */}
       <div className="workbench__statusbar">

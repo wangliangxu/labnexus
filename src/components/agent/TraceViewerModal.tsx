@@ -11,6 +11,9 @@ export const TraceViewerModal: React.FC<TraceViewerModalProps> = ({ onClose }) =
   const [traces, setTraces] = useState<AgentTrace[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTrace, setSelectedTrace] = useState<AgentTrace | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'failed'>('all');
 
   useEffect(() => {
     agentListTraces(30)
@@ -18,13 +21,13 @@ export const TraceViewerModal: React.FC<TraceViewerModalProps> = ({ onClose }) =
         setTraces(data);
         if (data.length > 0) setSelectedTrace(data[0]);
       })
-      .catch((err) => console.error('Failed to load traces:', err))
+      .catch((err) => setLoadError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false));
   }, []);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-full max-w-4xl bg-dark-surface border border-dark-border rounded-2xl p-6 shadow-2xl animate-scale-up flex flex-col max-h-[85vh]">
+      <div className="w-full max-w-6xl bg-dark-surface border border-dark-border rounded-2xl p-6 shadow-2xl animate-scale-up flex flex-col max-h-[88vh]">
         <div className="flex items-center justify-between pb-4 border-b border-dark-border">
           <div className="flex items-center gap-2">
             <span className="text-xl">📊</span>
@@ -46,16 +49,27 @@ export const TraceViewerModal: React.FC<TraceViewerModalProps> = ({ onClose }) =
             <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
               Recent Executions
             </h4>
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search traces…" aria-label="Search traces" className="w-full rounded-lg border border-dark-border bg-dark-bg px-3 py-2 text-xs text-gray-200 outline-none focus:border-brand-primary" />
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} aria-label="Filter traces by status" className="mb-1 w-full rounded-lg border border-dark-border bg-dark-bg px-3 py-2 text-xs text-gray-300 outline-none">
+              <option value="all">All statuses</option><option value="completed">Completed</option><option value="failed">Failed / cancelled</option>
+            </select>
             {loading ? (
               <div className="text-xs text-gray-400 py-4 text-center">Loading audit traces...</div>
+            ) : loadError ? (
+              <div className="rounded-lg border border-red-500/25 bg-red-500/5 p-3 text-xs text-red-300">Unable to load traces: {loadError}</div>
             ) : traces.length === 0 ? (
               <div className="text-xs text-gray-500 py-8 text-center">No execution traces recorded yet.</div>
             ) : (
-              traces.map((trace) => (
-                <div
+              traces.filter((trace) => {
+                const matchesQuery = !query.trim() || trace.task_prompt.toLowerCase().includes(query.toLowerCase()) || trace.model.toLowerCase().includes(query.toLowerCase());
+                const completed = trace.status.toLowerCase() === 'completed';
+                const matchesStatus = statusFilter === 'all' || (statusFilter === 'completed' ? completed : !completed);
+                return matchesQuery && matchesStatus;
+              }).map((trace) => (
+                <button type="button"
                   key={trace.id}
                   onClick={() => setSelectedTrace(trace)}
-                  className={`p-3 rounded-xl border cursor-pointer transition-all flex flex-col gap-1.5 ${
+                  className={`p-3 rounded-xl border cursor-pointer transition-all flex flex-col gap-1.5 text-left ${
                     selectedTrace?.id === trace.id
                       ? 'border-brand-primary bg-brand-primary/10'
                       : 'border-dark-border hover:bg-dark-border/50'
@@ -80,7 +94,7 @@ export const TraceViewerModal: React.FC<TraceViewerModalProps> = ({ onClose }) =
                       <span className="text-brand-primary font-mono">/{trace.matched_skill}</span>
                     )}
                   </div>
-                </div>
+                </button>
               ))
             )}
           </div>
@@ -100,6 +114,13 @@ export const TraceViewerModal: React.FC<TraceViewerModalProps> = ({ onClose }) =
                     <span>Steps: <strong className="text-white">{selectedTrace.steps.length}</strong></span>
                     {selectedTrace.matched_skill && (
                       <span>Skill: <strong className="text-brand-primary">{selectedTrace.matched_skill}</strong></span>
+                    )}
+                  </div>
+                  <div className="flex gap-3 text-[11px] text-gray-500 mt-1">
+                    <span>Model: <strong className="text-gray-300">{selectedTrace.provider || 'unknown'} / {selectedTrace.model || 'unknown'}</strong></span>
+                    <span>Tokens: <strong className="text-gray-300">{selectedTrace.prompt_tokens || 0} in / {selectedTrace.completion_tokens || 0} out</strong></span>
+                    {selectedTrace.reasoning_chars > 0 && (
+                      <span>Reasoning: <strong className="text-gray-300">{selectedTrace.reasoning_chars} chars</strong></span>
                     )}
                   </div>
                 </div>

@@ -24,7 +24,8 @@ impl SkillRegistry {
         let query_lower = query.trim().to_lowercase();
 
         // Check if explicit slash command like "/data-analysis" or "/notebook.data_analysis"
-        if let Some(cmd) = query_lower.strip_prefix('/') {
+        if let Some(cmd_and_args) = query_lower.strip_prefix('/') {
+            let cmd = cmd_and_args.split_whitespace().next().unwrap_or_default();
             for skill in &self.skills {
                 if skill.id.to_lowercase() == cmd
                     || skill.id.to_lowercase().ends_with(cmd)
@@ -77,6 +78,26 @@ impl SkillRegistry {
         }
 
         prompt
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SkillRegistry;
+
+    #[test]
+    fn explicit_skill_command_allows_following_prompt() {
+        let registry = SkillRegistry::new();
+        let skill = registry
+            .list_skills()
+            .into_iter()
+            .next()
+            .expect("built-in skill");
+        let query = format!("/{} analyze this dataset", skill.id);
+        assert_eq!(
+            registry.match_query(&query).map(|item| item.id),
+            Some(skill.id)
+        );
     }
 }
 
