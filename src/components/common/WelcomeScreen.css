@@ -22,8 +22,12 @@
 }
 
 .welcome-screen__logo {
-  filter: drop-shadow(0 4px 16px rgba(99, 102, 241, 0.2));
+  overflow: hidden;
+  border-radius: 18px;
+  filter: drop-shadow(0 8px 22px color-mix(in srgb, var(--color-primary) 28%, transparent));
 }
+
+.welcome-screen__logo img { display: block; }
 
 .welcome-screen__title {
   font-size: 2rem;

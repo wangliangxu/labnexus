@@ -10,11 +10,46 @@ mod state;
 
 use state::AppState;
 
+#[cfg(desktop)]
+fn app_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+    use tauri::menu::{AboutMetadataBuilder, Menu, PredefinedMenuItem};
+
+    let menu = Menu::default(app)?;
+
+    #[cfg(target_os = "macos")]
+    if let Some(app_submenu) = menu
+        .items()?
+        .first()
+        .and_then(|item| item.as_submenu())
+    {
+        let metadata = AboutMetadataBuilder::new()
+            .name(Some(app.package_info().name.clone()))
+            .version(Some(app.package_info().version.to_string()))
+            .copyright(app.config().bundle.copyright.clone())
+            .icon(Some(tauri::include_image!("./icons/128x128.png")))
+            .build();
+        let about = PredefinedMenuItem::about(app, None, Some(metadata))?;
+
+        // The first item in Tauri's macOS application menu is its default About item.
+        // Replace it so the native NSAboutPanel receives our icon explicitly instead
+        // of relying on macOS application-icon discovery and its persistent cache.
+        app_submenu.remove_at(0)?;
+        app_submenu.insert(&about, 0)?;
+    }
+
+    Ok(menu)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .manage(AppState::new())
+        .manage(AppState::new());
+
+    #[cfg(desktop)]
+    let builder = builder.menu(app_menu);
+
+    builder
         .invoke_handler(tauri::generate_handler![
             // Jupyter connection management
             commands::jupyter::jupyter_connect,

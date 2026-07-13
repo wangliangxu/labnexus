@@ -3,7 +3,10 @@
  */
 
 import { useState, type ReactNode } from 'react';
+import { isTauri } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { TableOfContents } from 'lucide-react';
+import { BrandLogo } from '../components/common/BrandLogo';
 import './WorkbenchLayout.css';
 
 export type PanelId = 'explorer' | 'terminal' | 'toc' | 'agent' | 'settings' | null;
@@ -73,27 +76,40 @@ export function WorkbenchLayout({
     }
   };
 
+  const handleTitlebarPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || !isTauri()) return;
+    if ((event.target as HTMLElement).closest('[data-no-drag]')) return;
+    void getCurrentWindow().startDragging();
+  };
+
   return (
     <div
       className="workbench"
       style={currentPanel ? { '--panel-width': `${panelWidth}px` } as React.CSSProperties : undefined}
     >
       {/* Title Bar (replaces Activity Bar) */}
-      <div className="workbench__titlebar" data-tauri-drag-region>
-        <div className="titlebar__left" data-tauri-drag-region>
+      <div
+        className="workbench__titlebar"
+        onPointerDown={handleTitlebarPointerDown}
+      >
+        <div className="titlebar__left">
           <button
+            data-no-drag
             className={`titlebar__item ${currentPanel === 'explorer' ? 'active' : ''}`}
             onClick={() => handlePanelClick('explorer')}
             title="Explorer"
+            aria-label="Explorer"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V9C21 7.89543 20.1046 7 19 7H13L11 5H5C3.89543 5 3 5.89543 3 7Z" />
             </svg>
           </button>
           <button
+            data-no-drag
             className={`titlebar__item ${currentPanel === 'terminal' ? 'active' : ''}`}
             onClick={() => handlePanelClick('terminal')}
             title="Remote Terminals"
+            aria-label="Remote Terminals"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <polyline points="4 17 10 11 4 5" />
@@ -101,26 +117,37 @@ export function WorkbenchLayout({
             </svg>
           </button>
           <button
+            data-no-drag
             className={`titlebar__item ${currentPanel === 'toc' ? 'active' : ''}`}
             onClick={() => handlePanelClick('toc')}
             title="Table of Contents"
+            aria-label="Table of Contents"
           >
             <TableOfContents size={18} strokeWidth={1.6} />
           </button>
         </div>
-        <div className="titlebar__center" data-tauri-drag-region></div>
-        <div className="titlebar__right" data-tauri-drag-region>
+        <div className="titlebar__center">
+          <div className="titlebar__brand" aria-hidden="true">
+            <BrandLogo size={18} />
+            <span>LabNexus</span>
+          </div>
+        </div>
+        <div className="titlebar__right">
           <button
+            data-no-drag
             className={`titlebar__item ${currentPanel === 'agent' ? 'active' : ''}`}
             onClick={() => handlePanelClick('agent')}
             title="AI Agent"
+            aria-label="AI Agent"
           >
             <span className="titlebar__agent-icon">⚡️</span>
           </button>
           <button
+            data-no-drag
             className={`titlebar__item ${currentPanel === 'settings' ? 'active' : ''}`}
             onClick={() => handlePanelClick('settings')}
             title="Settings"
+            aria-label="Settings"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <circle cx="12" cy="12" r="3" />

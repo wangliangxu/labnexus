@@ -3,26 +3,14 @@
  */
 
 import './WelcomeScreen.css';
+import { BrandLogo } from './BrandLogo';
 
 export function WelcomeScreen() {
   return (
     <div className="welcome-screen">
       <div className="welcome-screen__content animate-fade-in">
         <div className="welcome-screen__logo">
-          <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
-            <rect width="64" height="64" rx="16" fill="url(#gradient)" />
-            <path
-              d="M20 44V20L32 28L44 20V44L32 36L20 44Z"
-              fill="white"
-              fillOpacity="0.9"
-            />
-            <defs>
-              <linearGradient id="gradient" x1="0" y1="0" x2="64" y2="64">
-                <stop stopColor="#6366f1" />
-                <stop offset="1" stopColor="#22d3ee" />
-              </linearGradient>
-            </defs>
-          </svg>
+          <BrandLogo size={72} />
         </div>
         <h1 className="welcome-screen__title">LabNexus</h1>
         <p className="welcome-screen__subtitle">
