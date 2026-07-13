@@ -2,7 +2,7 @@
  * FileExplorer — Remote file browser for Jupyter server.
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, type Dispatch, type SetStateAction } from 'react';
 import type { ContentItem, ServerConnection } from '../../types/jupyter';
 import { jupyterListContents } from '../../services/tauriIpc';
 import {
@@ -14,6 +14,8 @@ import './FileExplorer.css';
 
 interface FileExplorerProps {
   activeServer: ServerConnection | null;
+  tree: TreeNode[] | null;
+  onTreeChange: Dispatch<SetStateAction<TreeNode[]>>;
   onFileOpen: (path: string, type: string) => void;
   onReconnect?: () => Promise<void> | void;
   onRestartServer?: (restartUrl: string) => Promise<void> | void;
@@ -23,26 +25,18 @@ interface FileExplorerProps {
 
 export function FileExplorer({
   activeServer,
+  tree,
+  onTreeChange: setTree,
   onFileOpen,
   onReconnect,
   onRestartServer,
   onConnectionLost,
   isReconnecting = false,
 }: FileExplorerProps) {
-  const [tree, setTree] = useState<TreeNode[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const errorRecovery = getExplorerErrorRecovery(error);
   const errorMessage = error ? normalizeExplorerErrorMessage(error) : null;
-
-  // Load root directory when server connects
-  useEffect(() => {
-    if (activeServer?.status === 'connected') {
-      loadDirectory('');
-    } else {
-      setTree([]);
-    }
-  }, [activeServer?.config.id, activeServer?.status]);
 
   const loadDirectory = useCallback(
     async (path: string) => {
@@ -91,6 +85,14 @@ export function FileExplorer({
     },
     [activeServer, onConnectionLost]
   );
+
+  // The parent keeps one tree per connected server. Only fetch the root when
+  // this connection does not already have a session tree to restore.
+  useEffect(() => {
+    if (activeServer?.status === 'connected' && tree === null) {
+      void loadDirectory('');
+    }
+  }, [activeServer?.config.id, activeServer?.status, loadDirectory, tree]);
 
   const handleReconnect = useCallback(async () => {
     if (!onReconnect) return;
@@ -311,7 +313,7 @@ export function FileExplorer({
       )}
 
       <div className="file-tree">
-        {isLoading ? (
+        {isLoading || tree === null ? (
           <div className="file-explorer__loading">
             <span className="animate-spin">⟳</span> Loading...
           </div>

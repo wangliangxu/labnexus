@@ -3,10 +3,11 @@
  * Integrated with multi-tab workbench, remote terminals, dynamic theme system, and AI Agent.
  */
 
-import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import { useState, useMemo, useRef, useCallback, useEffect, type SetStateAction } from 'react';
 import { WorkbenchLayout, type PanelId } from './layouts/WorkbenchLayout';
 import { ConnectionPanel } from './components/explorer/ConnectionPanel';
 import { FileExplorer } from './components/explorer/FileExplorer';
+import type { TreeNode } from './components/explorer/fileExplorerTree';
 import { StatusBar } from './components/common/StatusBar';
 import { WelcomeScreen } from './components/common/WelcomeScreen';
 import { WorkbenchTabs, type TabItem } from './components/common/WorkbenchTabs';
@@ -54,6 +55,8 @@ function App() {
 
   const [viewMode, setViewMode] = useState<ViewMode>('connect');
   const [activePanel, setActivePanel] = useState<PanelId>('explorer');
+  const [explorerTrees, setExplorerTrees] = useState<Record<string, TreeNode[]>>({});
+  const connectedServerIdsRef = useRef<Set<string>>(new Set());
   const [tabs, setTabs] = useState<TabItem[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [isAgentOpen, setIsAgentOpen] = useState<boolean>(false);
@@ -74,6 +77,16 @@ function App() {
     () => servers.find((s) => s.config.id === activeServerId) ?? null,
     [servers, activeServerId]
   );
+  const connectedServerIds = useMemo(
+    () =>
+      new Set(
+        servers
+          .filter((server) => server.status === 'connected')
+          .map((server) => server.config.id)
+      ),
+    [servers]
+  );
+  connectedServerIdsRef.current = connectedServerIds;
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeTabId) ?? null,
     [activeTabId, tabs]
@@ -133,6 +146,35 @@ function App() {
       activeHeadingId: null,
     });
   }, [activeTab?.type]);
+
+  // Explorer panels are unmounted when another side panel is shown. Keep the
+  // expanded tree for each live server at app level, and discard it once that
+  // server is no longer connected.
+  useEffect(() => {
+    setExplorerTrees((current) => {
+      const retained = Object.fromEntries(
+        Object.entries(current).filter(([serverId]) => connectedServerIds.has(serverId))
+      );
+      return Object.keys(retained).length === Object.keys(current).length
+        ? current
+        : retained;
+    });
+  }, [connectedServerIds]);
+
+  const handleExplorerTreeChange = useCallback(
+    (serverId: string, update: SetStateAction<TreeNode[]>) => {
+      setExplorerTrees((current) => {
+        // Ignore a late directory response from a connection that was closed
+        // while its request was still in flight.
+        if (!connectedServerIdsRef.current.has(serverId)) return current;
+
+        const currentTree = current[serverId] ?? [];
+        const nextTree = typeof update === 'function' ? update(currentTree) : update;
+        return { ...current, [serverId]: nextTree };
+      });
+    },
+    []
+  );
 
   // Auto-switch to explorer view after connection
   const handleConnect = async (config: Parameters<typeof connect>[0]) => {
@@ -352,6 +394,16 @@ function App() {
           ) : (
             <FileExplorer
               activeServer={activeServer}
+              tree={
+                activeServer && Object.prototype.hasOwnProperty.call(explorerTrees, activeServer.config.id)
+                  ? explorerTrees[activeServer.config.id]
+                  : null
+              }
+              onTreeChange={(update) => {
+                if (activeServer) {
+                  handleExplorerTreeChange(activeServer.config.id, update);
+                }
+              }}
               onFileOpen={handleFileOpen}
               onReconnect={
                 activeServer ? () => reconnect(activeServer.config.id) : undefined
