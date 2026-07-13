@@ -392,7 +392,19 @@ export function useKernel({
     kernel: session?.kernel ?? null,
     status,
     isConnecting,
-    isReady: Boolean(kernelId) && isWsConnected && !isConnecting && status === 'idle',
+    // A busy Jupyter kernel can still accept execute_request messages: they are
+    // queued by the kernel and run in order. Only connection/lifecycle states
+    // should disable execution controls.
+    isReady:
+      Boolean(kernelId) &&
+      isWsConnected &&
+      !isConnecting &&
+      status !== 'starting' &&
+      status !== 'restarting' &&
+      status !== 'dead' &&
+      status !== 'disconnected' &&
+      status !== 'unknown' &&
+      status !== 'error',
     error,
     startSession,
     stopSession,

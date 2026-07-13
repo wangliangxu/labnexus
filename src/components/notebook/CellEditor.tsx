@@ -256,6 +256,10 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
     (update: ViewUpdate) => {
       if (!onCursorChange) return;
       if (!update.selectionSet && !update.docChanged && !update.focusChanged) return;
+      // A pointer press in another cell selects that cell before CodeMirror
+      // reports this editor's blur. Do not let the stale blur notification
+      // select the previous cell again.
+      if (!update.view.hasFocus) return;
 
       const head = update.state.selection.main.head;
       const line = update.state.doc.lineAt(head).number - 1;
