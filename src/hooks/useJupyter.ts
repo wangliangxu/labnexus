@@ -27,10 +27,8 @@ import {
   toDisconnectedConnections,
 } from './jupyterServerStorage';
 import { markServerConnectionError } from './jupyterConnectionState';
-import {
-  getJupyterConnectionErrorRecovery,
-  normalizeJupyterConnectionErrorMessage,
-} from '../jupyterConnectionErrors';
+import { normalizeJupyterConnectionErrorMessage } from '../jupyterConnectionErrors';
+import { connectWithStoppedServerAutoStart } from '../jupyterAutoStart';
 
 interface UseJupyterReturn {
   /** All server connections */
@@ -114,7 +112,11 @@ export function useJupyter(): UseJupyterReturn {
       setIsConnecting(true);
       setError(null);
       try {
-        const connection = await jupyterConnect(config);
+        const connection = await connectWithStoppedServerAutoStart(
+          config,
+          jupyterConnect,
+          jupyterRestartHubServer
+        );
         saveServerConfig(connection.config);
         setServers((prev) => {
           const existing = prev.findIndex((s) => s.config.id === config.id);
@@ -136,9 +138,7 @@ export function useJupyter(): UseJupyterReturn {
             : String(e);
         const msg = normalizeJupyterConnectionErrorMessage(rawMsg);
         setError(msg);
-        if (getJupyterConnectionErrorRecovery(rawMsg).canReconnect) {
-          setServers((prev) => markServerConnectionError(prev, config.id, msg));
-        }
+        setServers((prev) => markServerConnectionError(prev, config.id, msg));
       } finally {
         setIsConnecting(false);
       }
