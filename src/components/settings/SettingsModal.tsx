@@ -115,7 +115,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+    <div className="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" style={{ zIndex: 'var(--z-modal)' }}>
       <div className="bg-dark-surface border border-dark-border rounded-xl shadow-2xl max-w-4xl w-full flex flex-col animate-scale-up" style={{ maxHeight: '88vh' }}>
         {/* Header */}
         <div className="flex justify-between items-center border-b border-dark-border px-6 py-4 shrink-0">
