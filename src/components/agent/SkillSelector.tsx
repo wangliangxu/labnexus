@@ -40,13 +40,13 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
         <div className="flex items-center justify-between pb-4 border-b border-dark-border">
           <div className="flex items-center gap-2">
             <span className="text-xl">⚡</span>
-            <h3 className="text-lg font-bold text-white">
+            <h3 className="text-lg font-bold text-gray-100">
               Scientific Workflow Skills
             </h3>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white px-2 py-1 text-sm rounded hover:bg-dark-border"
+            className="text-gray-400 hover:text-gray-100 px-2 py-1 text-sm rounded hover:bg-dark-border"
           >
             ✕
           </button>
@@ -58,7 +58,7 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
             placeholder="Search skills (e.g. data analysis, debug, report)..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-primary"
+            className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-brand-primary"
           />
         </div>
 
@@ -83,7 +83,7 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-sm text-white flex items-center gap-1.5">
+                  <span className="font-bold text-sm text-gray-100 flex items-center gap-1.5">
                     <span className="text-brand-primary">⚡</span>
                     {skill.name}
                   </span>
@@ -126,7 +126,7 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
                     {st.step_number}.
                   </span>
                   <div>
-                    <span className="font-semibold text-white">{st.title}: </span>
+                    <span className="font-semibold text-gray-100">{st.title}: </span>
                     <span className="text-gray-400">{st.description}</span>
                   </div>
                 </div>
@@ -138,7 +138,7 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
         <div className="flex justify-end gap-2 pt-4 border-t border-dark-border mt-4">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-xs font-medium text-gray-400 hover:text-white rounded-lg hover:bg-dark-border transition-colors"
+            className="px-4 py-2 text-xs font-medium text-gray-400 hover:text-gray-100 rounded-lg hover:bg-dark-border transition-colors"
           >
             Cancel
           </button>

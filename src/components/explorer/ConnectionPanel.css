@@ -76,13 +76,13 @@
 
 .auth-mode-tab:hover:not(.active) {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-input);
 }
 
 .auth-mode-tab.active {
   color: var(--text-primary);
   background: var(--bg-surface);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-sm);
   font-weight: 600;
 }
 

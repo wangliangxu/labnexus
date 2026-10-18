@@ -1,4 +1,4 @@
-export type ThemeMode = 'obsidian' | 'cyberpunk' | 'nord' | 'solarized' | 'system';
+export type ThemeMode = 'light' | 'dark';
 
 export interface GlobalSettings {
   theme: ThemeMode;
@@ -13,7 +13,7 @@ export const GLOBAL_SETTINGS_STORAGE_KEY = 'labnexus:settings';
 export const GLOBAL_SETTINGS_CHANGED_EVENT = 'labnexus:settings-changed';
 
 export const DEFAULT_SETTINGS: GlobalSettings = {
-  theme: 'obsidian',
+  theme: 'light',
   defaultKernel: 'python3',
   defaultProxyHost: '127.0.0.1',
   defaultProxyPort: 1080,
@@ -21,18 +21,34 @@ export const DEFAULT_SETTINGS: GlobalSettings = {
   runCurrentCellShortcut: 'Shift-Enter',
 };
 
+// Resolve previous releases' saved themes without discarding other preferences.
+export function normalizeTheme(theme: unknown): ThemeMode {
+  if (theme === 'dark' || theme === 'obsidian' || theme === 'cyberpunk' || theme === 'nord') return 'dark';
+  if (theme === 'system' && typeof window !== 'undefined') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  return 'light';
+}
+
+export function applyTheme(theme: ThemeMode): void {
+  document.documentElement.dataset.theme = theme;
+}
+
 export function loadGlobalSettings(): GlobalSettings {
   try {
     const saved = localStorage.getItem(GLOBAL_SETTINGS_STORAGE_KEY);
-    return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
+    const settings = saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : { ...DEFAULT_SETTINGS };
+    return { ...settings, theme: normalizeTheme(settings.theme) };
   } catch {
     return DEFAULT_SETTINGS;
   }
 }
 
 export function saveGlobalSettings(settings: GlobalSettings) {
-  localStorage.setItem(GLOBAL_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
-  window.dispatchEvent(new CustomEvent(GLOBAL_SETTINGS_CHANGED_EVENT, { detail: settings }));
+  const normalized = { ...settings, theme: normalizeTheme(settings.theme) };
+  localStorage.setItem(GLOBAL_SETTINGS_STORAGE_KEY, JSON.stringify(normalized));
+  applyTheme(normalized.theme);
+  window.dispatchEvent(new CustomEvent(GLOBAL_SETTINGS_CHANGED_EVENT, { detail: normalized }));
 }
 
 export function shortcutFromKeyboardEvent(event: KeyboardEvent): string | null {

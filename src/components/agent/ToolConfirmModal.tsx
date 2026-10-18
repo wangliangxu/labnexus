@@ -37,7 +37,7 @@ export const ToolConfirmModal: React.FC<ToolConfirmModalProps> = ({ toolCall, on
               <p className="mt-1 text-xs leading-relaxed text-gray-400">{summary.description}</p>
             </div>
           </div>
-          <button type="button" onClick={() => onConfirm(false, 'once')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-gray-400 hover:bg-dark-border hover:text-white" aria-label="Deny and close"><X size={17} /></button>
+          <button type="button" onClick={() => onConfirm(false, 'once')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-gray-400 hover:bg-dark-border hover:text-gray-100" aria-label="Deny and close"><X size={17} /></button>
         </div>
 
         <div className="space-y-4 px-5 py-4">
@@ -54,7 +54,7 @@ export const ToolConfirmModal: React.FC<ToolConfirmModalProps> = ({ toolCall, on
           {summary.targets.length > 0 && <div><h3 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-gray-500">Affected targets</h3><div className="flex flex-wrap gap-1.5">{summary.targets.map((target) => <span key={target} className="inline-flex max-w-full items-center gap-1 rounded-md border border-dark-border bg-dark-bg px-2 py-1 font-mono text-[11px] text-gray-300"><ChevronRight size={11} /><span className="truncate">{target}</span></span>)}</div></div>}
 
           <details className="group rounded-lg border border-dark-border bg-dark-bg/50">
-            <summary className="cursor-pointer px-3 py-2.5 text-xs font-medium text-gray-300 hover:text-white">Review raw parameters</summary>
+            <summary className="cursor-pointer px-3 py-2.5 text-xs font-medium text-gray-300 hover:text-gray-100">Review raw parameters</summary>
             <pre className="max-h-56 overflow-auto border-t border-dark-border p-3 text-[11px] leading-relaxed text-gray-300">{JSON.stringify(toolCall.arguments, null, 2)}</pre>
           </details>
         </div>

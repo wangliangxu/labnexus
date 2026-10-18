@@ -2,7 +2,8 @@ import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import CodeMirror from '@uiw/react-codemirror';
 import { python } from '@codemirror/lang-python';
 import { markdown } from '@codemirror/lang-markdown';
-import { oneDark } from '@codemirror/theme-one-dark';
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { tags } from '@lezer/highlight';
 import { keymap, EditorView, type ViewUpdate } from '@codemirror/view';
 import { Prec } from '@codemirror/state';
 import { marked } from 'marked';
@@ -21,15 +22,50 @@ import { CellOutputView } from './CellOutputView';
 /* ── Configure marked ───────────────────────────────────────────── */
 marked.setOptions({ breaks: true, gfm: true });
 
-/* ── JupyterLab-like light theme for CodeMirror ─────────────────── */
-const jupyterLight = EditorView.theme({
-  '&': { backgroundColor: 'var(--color-nb-editor)' },
-  '.cm-gutters': {
-    backgroundColor: 'var(--color-nb-gutter)',
-    color: 'var(--color-nb-gutter-text)',
-    borderRight: '1px solid var(--color-nb-editor-border)',
-  },
-});
+/* Both editors use the same live palette as the workbench. */
+function createJupyterTheme(dark: boolean) {
+  return [
+    EditorView.theme({
+      '&': { backgroundColor: 'var(--color-nb-editor)', color: 'var(--color-nb-text)' },
+      '.cm-content': { caretColor: 'var(--text-primary)' },
+      '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--text-primary)' },
+      '.cm-gutters': {
+        backgroundColor: 'var(--color-nb-gutter)',
+        color: 'var(--color-nb-gutter-text)',
+        borderRight: '1px solid var(--color-nb-editor-border)',
+      },
+      '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'var(--bg-active)' },
+      '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
+        backgroundColor: 'var(--bg-selected)',
+      },
+      '.cm-tooltip, .cm-panels': {
+        backgroundColor: 'var(--bg-tooltip)', color: 'var(--text-primary)',
+        border: '1px solid var(--border-default)',
+      },
+      '.cm-tooltip-autocomplete > ul > li[aria-selected]': {
+        backgroundColor: 'var(--bg-selected)', color: 'var(--text-primary)',
+      },
+      '.cm-searchMatch': { backgroundColor: 'var(--color-warning-subtle)' },
+      '.cm-searchMatch.cm-searchMatch-selected': { outline: '1px solid var(--color-warning)' },
+    }, { dark }),
+    syntaxHighlighting(HighlightStyle.define([
+      { tag: tags.keyword, color: 'var(--syntax-keyword)', fontWeight: 'bold' },
+      { tag: [tags.atom, tags.bool, tags.null], color: 'var(--syntax-atom)' },
+      { tag: tags.number, color: 'var(--syntax-number)' },
+      { tag: [tags.definition(tags.variableName), tags.function(tags.variableName)], color: 'var(--syntax-def)' },
+      { tag: [tags.string, tags.regexp], color: 'var(--syntax-string)' },
+      { tag: tags.comment, color: 'var(--syntax-comment)', fontStyle: 'italic' },
+      { tag: [tags.meta, tags.annotation], color: 'var(--syntax-meta)' },
+      { tag: tags.heading, color: 'var(--text-link)', fontWeight: 'bold' },
+      { tag: tags.link, color: 'var(--text-link)', textDecoration: 'underline' },
+      { tag: tags.strong, fontWeight: 'bold' },
+      { tag: tags.emphasis, fontStyle: 'italic' },
+      { tag: tags.invalid, color: 'var(--color-error)' },
+    ])),
+  ];
+}
+const jupyterLight = createJupyterTheme(false);
+const jupyterDark = createJupyterTheme(true);
 
 /* ── Shared button class tokens ──────────────────────────────────── */
 const cellBtn =
@@ -151,13 +187,13 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
   /* ── Dark theme detection for CodeMirror ─────────────────────── */
   const [isDarkTheme, setIsDarkTheme] = useState(() => {
     const theme = document.documentElement.getAttribute('data-theme');
-    return theme !== 'solarized';
+    return theme === 'dark';
   });
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
       const theme = document.documentElement.getAttribute('data-theme');
-      setIsDarkTheme(theme !== 'solarized');
+      setIsDarkTheme(theme === 'dark');
     });
     observer.observe(document.documentElement, {
       attributes: true,
@@ -435,7 +471,7 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
               extensions={extensions}
               onChange={handleEditorChange}
               onUpdate={handleEditorUpdate}
-              theme={isDarkTheme ? oneDark : jupyterLight}
+              theme={isDarkTheme ? jupyterDark : jupyterLight}
               basicSetup={basicSetup}
               autoFocus={isMarkdown && isEditingMarkdown}
               className="notebook-codemirror"

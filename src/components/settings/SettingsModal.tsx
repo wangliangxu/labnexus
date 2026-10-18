@@ -72,16 +72,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   }, [isOpen, defaultTab, aiReloadNonce]);
 
-  useEffect(() => {
-    // Apply theme to document root
-    if (settings.theme === 'system') {
-      const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      document.documentElement.setAttribute('data-theme', isDark ? 'obsidian' : 'solarized');
-    } else {
-      document.documentElement.setAttribute('data-theme', settings.theme);
-    }
-  }, [settings.theme]);
-
   if (!isOpen) return null;
 
   // Global Settings Handlers
@@ -93,11 +83,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const themes: { id: ThemeMode; name: string; color: string; desc: string }[] = [
-    { id: 'obsidian', name: 'Obsidian Dark', color: '#6366f1', desc: 'Sleek deep indigo dark theme (Default)' },
-    { id: 'cyberpunk', name: 'Cyberpunk Neon', color: '#ec4899', desc: 'Vibrant pink & neon cyan high-contrast' },
-    { id: 'nord', name: 'Nord Frost', color: '#88c0d0', desc: 'Arctic blue calm muted tones' },
-    { id: 'solarized', name: 'Solarized Light', color: '#268bd2', desc: 'Warm cream light theme for daytime' },
-    { id: 'system', name: 'System Auto', color: '#9ca3af', desc: 'Follow macOS system appearance' },
+    { id: 'light', name: '浅色 · JupyterLab Light', color: '#ffffff', desc: '白色工作区、浅灰面板与蓝色强调' },
+    { id: 'dark', name: '深色 · JupyterLab Dark', color: '#212121', desc: '中性深灰工作区与蓝色强调' },
   ];
 
   // AI Settings Handlers
@@ -135,7 +122,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white text-lg px-2"
+            className="text-gray-400 hover:text-gray-100 text-lg px-2"
           >
             ✕
           </button>
@@ -179,10 +166,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {themes.map((t) => (
-                    <div
+                    <button
+                      type="button"
+                      aria-pressed={settings.theme === t.id}
                       key={t.id}
                       onClick={() => saveGlobalSettings({ ...settings, theme: t.id })}
-                      className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all ${
+                      className={`flex items-center justify-between p-3 rounded-lg border text-left cursor-pointer transition-all ${
                         settings.theme === t.id
                           ? 'bg-brand-primary/10 border-brand-primary shadow-sm'
                           : 'bg-dark-bg border-transparent hover:bg-dark-surface hover:border-dark-border'
@@ -190,7 +179,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     >
                       <div className="flex items-center gap-3">
                         <span
-                          className="w-4 h-4 rounded-full border border-white/20 shrink-0 shadow-sm"
+                          className="w-4 h-4 rounded-full border border-dark-border shrink-0 shadow-sm"
                           style={{ backgroundColor: t.color }}
                         />
                         <div className="flex flex-col">
@@ -199,7 +188,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </div>
                       </div>
                       {settings.theme === t.id && <span className="text-sm text-brand-primary font-bold">✓</span>}
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -672,7 +661,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             ],
                           });
                         }}
-                        className="px-3 py-1.5 rounded-lg text-xs border border-dark-border text-gray-300 hover:border-brand-primary hover:text-white"
+                        className="px-3 py-1.5 rounded-lg text-xs border border-dark-border text-gray-300 hover:border-brand-primary hover:text-gray-100"
                       >
                         + Add Server
                       </button>

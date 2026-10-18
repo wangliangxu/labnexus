@@ -31,13 +31,13 @@ export const TraceViewerModal: React.FC<TraceViewerModalProps> = ({ onClose }) =
         <div className="flex items-center justify-between pb-4 border-b border-dark-border">
           <div className="flex items-center gap-2">
             <span className="text-xl">📊</span>
-            <h3 className="text-lg font-bold text-white">
+            <h3 className="text-lg font-bold text-gray-100">
               Agent Execution Audit Logs & Traces
             </h3>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white px-2 py-1 text-sm rounded hover:bg-dark-border"
+            className="text-gray-400 hover:text-gray-100 px-2 py-1 text-sm rounded hover:bg-dark-border"
           >
             ✕
           </button>
@@ -85,7 +85,7 @@ export const TraceViewerModal: React.FC<TraceViewerModalProps> = ({ onClose }) =
                       {trace.total_duration_ms}ms
                     </span>
                   </div>
-                  <p className="text-xs text-white font-medium truncate">
+                  <p className="text-xs text-gray-100 font-medium truncate">
                     {trace.task_prompt}
                   </p>
                   <div className="flex items-center justify-between text-[10px] text-gray-500">
@@ -108,10 +108,10 @@ export const TraceViewerModal: React.FC<TraceViewerModalProps> = ({ onClose }) =
                     <span className="text-xs font-bold text-gray-300">Task Prompt</span>
                     <span className="text-[10px] text-gray-400 font-mono">ID: {selectedTrace.id}</span>
                   </div>
-                  <p className="text-sm text-white font-semibold">{selectedTrace.task_prompt}</p>
+                  <p className="text-sm text-gray-100 font-semibold">{selectedTrace.task_prompt}</p>
                   <div className="flex gap-3 text-xs text-gray-400 mt-2 pt-2 border-t border-dark-border">
-                    <span>Duration: <strong className="text-white">{selectedTrace.total_duration_ms} ms</strong></span>
-                    <span>Steps: <strong className="text-white">{selectedTrace.steps.length}</strong></span>
+                    <span>Duration: <strong className="text-gray-100">{selectedTrace.total_duration_ms} ms</strong></span>
+                    <span>Steps: <strong className="text-gray-100">{selectedTrace.steps.length}</strong></span>
                     {selectedTrace.matched_skill && (
                       <span>Skill: <strong className="text-brand-primary">{selectedTrace.matched_skill}</strong></span>
                     )}
@@ -140,7 +140,7 @@ export const TraceViewerModal: React.FC<TraceViewerModalProps> = ({ onClose }) =
                           <span className="w-5 h-5 rounded-full bg-brand-primary/20 text-brand-primary flex items-center justify-center font-bold font-mono text-[11px]">
                             {step.step_number}
                           </span>
-                          <span className="font-bold text-xs text-white">{step.step_type}</span>
+                          <span className="font-bold text-xs text-gray-100">{step.step_type}</span>
                           {step.tool_name && (
                             <span className="text-[11px] font-mono bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded">
                               {step.tool_name}
@@ -169,7 +169,7 @@ export const TraceViewerModal: React.FC<TraceViewerModalProps> = ({ onClose }) =
         <div className="flex justify-end pt-4 border-t border-dark-border mt-4">
           <button
             onClick={onClose}
-            className="px-5 py-2 text-xs font-bold text-gray-300 hover:text-white bg-dark-border/50 hover:bg-dark-border rounded-lg"
+            className="px-5 py-2 text-xs font-bold text-gray-300 hover:text-gray-100 bg-dark-border/50 hover:bg-dark-border rounded-lg"
           >
             Close
           </button>

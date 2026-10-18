@@ -24,7 +24,7 @@
 .welcome-screen__logo {
   overflow: hidden;
   border-radius: 18px;
-  filter: drop-shadow(0 8px 22px color-mix(in srgb, var(--color-primary) 28%, transparent));
+  filter: none;
 }
 
 .welcome-screen__logo img { display: block; }
@@ -32,10 +32,7 @@
 .welcome-screen__title {
   font-size: 2rem;
   font-weight: 700;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--text-primary);
   letter-spacing: -0.5px;
 }
 

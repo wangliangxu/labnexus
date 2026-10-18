@@ -1,16 +1,5 @@
-/* ─── Notebook Theme Tokens (Tailwind v4) ────────────────────────────
- *  Registers --color-nb-* semantic variables for notebook components.
- *  Default values target dark themes (obsidian / cyberpunk / nord).
- *  Light theme (solarized) overrides follow below.
- * ──────────────────────────────────────────────────────────────────── */
+/* Notebook colors and CodeMirror share the global light/dark palette. */
 
-
-
-/* ─── CodeMirror Overrides ───────────────────────────────────────────
- *  CodeMirror's internal DOM cannot receive Tailwind classes directly.
- *  Editor background & gutter styling are handled via CodeMirror themes
- *  (oneDark for dark, jupyterLight for light) in CellEditor.tsx.
- * ──────────────────────────────────────────────────────────────────── */
 .notebook-codemirror {
   font-size: 13px;
 }

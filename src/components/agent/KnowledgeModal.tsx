@@ -70,13 +70,13 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
         <div className="flex items-center justify-between pb-4 border-b border-dark-border">
           <div className="flex items-center gap-2">
             <span className="text-xl">📚</span>
-            <h3 className="text-lg font-bold text-white">
+            <h3 className="text-lg font-bold text-gray-100">
               Domain Knowledge Base
             </h3>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white px-2 py-1 text-sm rounded hover:bg-dark-border"
+            className="text-gray-400 hover:text-gray-100 px-2 py-1 text-sm rounded hover:bg-dark-border"
           >
             ✕
           </button>
@@ -84,7 +84,7 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
 
         {editingEntry ? (
           <div className="pt-4 flex flex-col gap-3 flex-1 overflow-y-auto">
-            <h4 className="text-sm font-bold text-white">
+            <h4 className="text-sm font-bold text-gray-100">
               {editingEntry.id ? 'Edit Entry' : 'New Knowledge Entry'}
             </h4>
             <div>
@@ -94,7 +94,7 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
                 placeholder="e.g. Astropy FITS File Convention"
                 value={editingEntry.title || ''}
                 onChange={(e) => setEditingEntry({ ...editingEntry, title: e.target.value })}
-                className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-primary"
+                className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-brand-primary"
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -105,7 +105,7 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
                   placeholder="astronomy, genomics, python..."
                   value={editingEntry.category || ''}
                   onChange={(e) => setEditingEntry({ ...editingEntry, category: e.target.value })}
-                  className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-primary"
+                  className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-brand-primary"
                 />
               </div>
               <div>
@@ -120,7 +120,7 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
                       tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean),
                     })
                   }
-                  className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-primary"
+                  className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-brand-primary"
                 />
               </div>
             </div>
@@ -140,7 +140,7 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
                   type="text"
                   value={editingEntry.source || 'user'}
                   onChange={(e) => setEditingEntry({ ...editingEntry, source: e.target.value })}
-                  className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-primary"
+                  className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-brand-primary"
                 />
               </div>
               <div>
@@ -148,7 +148,7 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
                 <select
                   value={editingEntry.trust_level || 'unverified'}
                   onChange={(e) => setEditingEntry({ ...editingEntry, trust_level: e.target.value as KnowledgeEntry['trust_level'] })}
-                  className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-primary"
+                  className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-brand-primary"
                 >
                   <option value="unverified">Unverified</option>
                   <option value="reviewed">Reviewed</option>
@@ -168,7 +168,7 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
             <div className="flex justify-end gap-2 pt-3 border-t border-dark-border mt-2">
               <button
                 onClick={() => setEditingEntry(null)}
-                className="px-4 py-2 text-xs font-medium text-gray-400 hover:text-white rounded-lg hover:bg-dark-border"
+                className="px-4 py-2 text-xs font-medium text-gray-400 hover:text-gray-100 rounded-lg hover:bg-dark-border"
               >
                 Cancel
               </button>
@@ -188,7 +188,7 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
                 placeholder="Search knowledge by keyword or tag..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-primary"
+                className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-brand-primary"
               />
               <button
                 onClick={() => setEditingEntry({ title: '', content: '', category: 'general', tags: [], source: 'user', trust_level: 'unverified', enabled: true })}
@@ -221,7 +221,7 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-white">{entry.title}</span>
+                        <span className="font-bold text-sm text-gray-100">{entry.title}</span>
                         <span className="text-[10px] uppercase font-bold bg-brand-primary/20 text-brand-primary px-2 py-0.5 rounded">
                           {entry.category}
                         </span>
@@ -235,7 +235,7 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => setEditingEntry(entry)}
-                          className="text-xs text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-dark-border"
+                          className="text-xs text-gray-400 hover:text-gray-100 px-2 py-1 rounded hover:bg-dark-border"
                         >
                           Edit
                         </button>
@@ -270,7 +270,7 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
             <div className="flex justify-end pt-4 border-t border-dark-border mt-4">
               <button
                 onClick={onClose}
-                className="px-5 py-2 text-xs font-bold text-gray-300 hover:text-white bg-dark-border/50 hover:bg-dark-border rounded-lg"
+                className="px-5 py-2 text-xs font-bold text-gray-300 hover:text-gray-100 bg-dark-border/50 hover:bg-dark-border rounded-lg"
               >
                 Close
               </button>
