@@ -1,3 +1,4 @@
+import { t, getLocale, localizeStatus } from '../../i18n';
 import React, { useEffect, useState } from 'react';
 import type { AgentTrace } from '../../types/agent';
 import { agentListTraces } from '../../services/tauriIpc';
@@ -32,7 +33,7 @@ export const TraceViewerModal: React.FC<TraceViewerModalProps> = ({ onClose }) =
           <div className="flex items-center gap-2">
             <span className="text-xl">📊</span>
             <h3 className="text-lg font-bold text-gray-100">
-              Agent Execution Audit Logs & Traces
+              {t('Agent Execution Audit Logs & Traces')}
             </h3>
           </div>
           <button
@@ -47,18 +48,18 @@ export const TraceViewerModal: React.FC<TraceViewerModalProps> = ({ onClose }) =
           {/* Left list: Traces */}
           <div className="col-span-1 border-r border-dark-border pr-3 overflow-y-auto flex flex-col gap-2">
             <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
-              Recent Executions
+              {t('Recent Executions')}
             </h4>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search traces…" aria-label="Search traces" className="w-full rounded-lg border border-dark-border bg-dark-bg px-3 py-2 text-xs text-gray-200 outline-none focus:border-brand-primary" />
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} aria-label="Filter traces by status" className="mb-1 w-full rounded-lg border border-dark-border bg-dark-bg px-3 py-2 text-xs text-gray-300 outline-none">
-              <option value="all">All statuses</option><option value="completed">Completed</option><option value="failed">Failed / cancelled</option>
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('Search traces…')} aria-label={t('Search traces')} className="w-full rounded-lg border border-dark-border bg-dark-bg px-3 py-2 text-xs text-gray-200 outline-none focus:border-brand-primary" />
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} aria-label={t('Filter traces by status')} className="mb-1 w-full rounded-lg border border-dark-border bg-dark-bg px-3 py-2 text-xs text-gray-300 outline-none">
+              <option value="all">{t('All statuses')}</option><option value="completed">{t('Completed')}</option><option value="failed">{t('Failed / cancelled')}</option>
             </select>
             {loading ? (
-              <div className="text-xs text-gray-400 py-4 text-center">Loading audit traces...</div>
+              <div className="text-xs text-gray-400 py-4 text-center">{t('Loading audit traces...')}</div>
             ) : loadError ? (
-              <div className="rounded-lg border border-red-500/25 bg-red-500/5 p-3 text-xs text-red-300">Unable to load traces: {loadError}</div>
+              <div className="rounded-lg border border-red-500/25 bg-red-500/5 p-3 text-xs text-red-300">{t('Unable to load traces:')} {loadError}</div>
             ) : traces.length === 0 ? (
-              <div className="text-xs text-gray-500 py-8 text-center">No execution traces recorded yet.</div>
+              <div className="text-xs text-gray-500 py-8 text-center">{t('No execution traces recorded yet.')}</div>
             ) : (
               traces.filter((trace) => {
                 const matchesQuery = !query.trim() || trace.task_prompt.toLowerCase().includes(query.toLowerCase()) || trace.model.toLowerCase().includes(query.toLowerCase());
@@ -79,7 +80,7 @@ export const TraceViewerModal: React.FC<TraceViewerModalProps> = ({ onClose }) =
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
                       trace.status === 'Completed' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
                     }`}>
-                      {trace.status}
+                      {localizeStatus(trace.status)}
                     </span>
                     <span className="text-[10px] text-gray-400 font-mono">
                       {trace.total_duration_ms}ms
@@ -89,7 +90,7 @@ export const TraceViewerModal: React.FC<TraceViewerModalProps> = ({ onClose }) =
                     {trace.task_prompt}
                   </p>
                   <div className="flex items-center justify-between text-[10px] text-gray-500">
-                    <span>{new Date(trace.start_time).toLocaleTimeString()}</span>
+                    <span>{new Date(trace.start_time).toLocaleTimeString(getLocale())}</span>
                     {trace.matched_skill && (
                       <span className="text-brand-primary font-mono">/{trace.matched_skill}</span>
                     )}
@@ -105,28 +106,28 @@ export const TraceViewerModal: React.FC<TraceViewerModalProps> = ({ onClose }) =
               <>
                 <div className="bg-dark-bg/50 p-3 rounded-xl border border-dark-border flex flex-col gap-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-gray-300">Task Prompt</span>
-                    <span className="text-[10px] text-gray-400 font-mono">ID: {selectedTrace.id}</span>
+                    <span className="text-xs font-bold text-gray-300">{t('Task Prompt')}</span>
+                    <span className="text-[10px] text-gray-400 font-mono">{t('ID:')} {selectedTrace.id}</span>
                   </div>
                   <p className="text-sm text-gray-100 font-semibold">{selectedTrace.task_prompt}</p>
                   <div className="flex gap-3 text-xs text-gray-400 mt-2 pt-2 border-t border-dark-border">
-                    <span>Duration: <strong className="text-gray-100">{selectedTrace.total_duration_ms} ms</strong></span>
-                    <span>Steps: <strong className="text-gray-100">{selectedTrace.steps.length}</strong></span>
+                    <span>{t('Duration:')} <strong className="text-gray-100">{selectedTrace.total_duration_ms} ms</strong></span>
+                    <span>{t('Steps:')} <strong className="text-gray-100">{selectedTrace.steps.length}</strong></span>
                     {selectedTrace.matched_skill && (
-                      <span>Skill: <strong className="text-brand-primary">{selectedTrace.matched_skill}</strong></span>
+                      <span>{t('Skill:')} <strong className="text-brand-primary">{selectedTrace.matched_skill}</strong></span>
                     )}
                   </div>
                   <div className="flex gap-3 text-[11px] text-gray-500 mt-1">
-                    <span>Model: <strong className="text-gray-300">{selectedTrace.provider || 'unknown'} / {selectedTrace.model || 'unknown'}</strong></span>
-                    <span>Tokens: <strong className="text-gray-300">{selectedTrace.prompt_tokens || 0} in / {selectedTrace.completion_tokens || 0} out</strong></span>
+                    <span>{t('Model:')} <strong className="text-gray-300">{selectedTrace.provider || t('Unknown')} / {selectedTrace.model || t('Unknown')}</strong></span>
+                    <span>{t('Tokens:')} <strong className="text-gray-300">{selectedTrace.prompt_tokens || 0} {t('in /')} {selectedTrace.completion_tokens || 0} {t('out')}</strong></span>
                     {selectedTrace.reasoning_chars > 0 && (
-                      <span>Reasoning: <strong className="text-gray-300">{selectedTrace.reasoning_chars} chars</strong></span>
+                      <span>{t('Reasoning:')} <strong className="text-gray-300">{selectedTrace.reasoning_chars} {t('chars')}</strong></span>
                     )}
                   </div>
                 </div>
 
                 <h4 className="text-xs font-bold text-brand-primary uppercase tracking-wider mt-2">
-                  ReAct Step Timeline
+                  {t('ReAct Step Timeline')}
                 </h4>
 
                 <div className="flex flex-col gap-2.5">
@@ -140,7 +141,7 @@ export const TraceViewerModal: React.FC<TraceViewerModalProps> = ({ onClose }) =
                           <span className="w-5 h-5 rounded-full bg-brand-primary/20 text-brand-primary flex items-center justify-center font-bold font-mono text-[11px]">
                             {step.step_number}
                           </span>
-                          <span className="font-bold text-xs text-gray-100">{step.step_type}</span>
+                          <span className="font-bold text-xs text-gray-100">{localizeStatus(step.step_type)}</span>
                           {step.tool_name && (
                             <span className="text-[11px] font-mono bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded">
                               {step.tool_name}
@@ -160,7 +161,7 @@ export const TraceViewerModal: React.FC<TraceViewerModalProps> = ({ onClose }) =
               </>
             ) : (
               <div className="flex items-center justify-center h-full text-gray-500 text-sm">
-                Select an execution trace from the left panel to inspect the ReAct timeline.
+                {t('Select an execution trace from the left panel to inspect the ReAct timeline.')}
               </div>
             )}
           </div>
@@ -171,7 +172,7 @@ export const TraceViewerModal: React.FC<TraceViewerModalProps> = ({ onClose }) =
             onClick={onClose}
             className="px-5 py-2 text-xs font-bold text-gray-300 hover:text-gray-100 bg-dark-border/50 hover:bg-dark-border rounded-lg"
           >
-            Close
+            {t('Close')}
           </button>
         </div>
       </div>

@@ -1,3 +1,4 @@
+import { t, localizeStatus } from '../../i18n';
 /**
  * TerminalPanel — xterm.js terminal control panel for remote Jupyter terminal sessions.
  */
@@ -111,7 +112,7 @@ export function TerminalPanel({ serverId, terminalName, onClose }: TerminalPanel
       <div className="flex items-center justify-between px-4 py-2 border-b border-dark-border bg-dark-surface">
         <div className="flex items-center gap-2">
           <span className="text-xs font-mono px-2 py-0.5 bg-dark-bg text-brand-primary rounded">
-            terminal: {terminalName}
+            {t('terminal:')} {terminalName}
           </span>
           <span
             className={`w-2 h-2 rounded-full ${
@@ -121,18 +122,18 @@ export function TerminalPanel({ serverId, terminalName, onClose }: TerminalPanel
                 ? 'bg-amber-500'
                 : 'bg-red-500'
             }`}
-            title={`Status: ${status}`}
+            title={t('Status: {status}', { status: localizeStatus(status) })}
           />
-          <span className="text-xs text-gray-400 capitalize">{status}</span>
+          <span className="text-xs text-gray-400 capitalize">{localizeStatus(status)}</span>
         </div>
         <div className="flex items-center gap-2">
           {onClose && (
             <button
               onClick={onClose}
               className="p-1 hover:bg-dark-bg text-gray-400 hover:text-gray-200 rounded transition-colors text-xs"
-              title="Close Terminal"
+              title={t('Close Terminal')}
             >
-              ✕ Close
+              {t('✕ Close')}
             </button>
           )}
         </div>
@@ -143,7 +144,7 @@ export function TerminalPanel({ serverId, terminalName, onClose }: TerminalPanel
         <div className="px-4 py-2 bg-red-500/10 border-b border-red-500/20 text-red-400 text-xs flex items-center justify-between">
           <span>⚠️ {error}</span>
           <button onClick={connect} className="underline hover:text-red-300">
-            Retry
+            {t('Retry')}
           </button>
         </div>
       )}

@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 /**
  * StatusBar — Bottom bar showing connection status and app info.
  */
@@ -38,7 +39,7 @@ export function StatusBar({
             )}
           </div>
         ) : (
-          <span className="statusbar__disconnected">No server connected</span>
+          <span className="statusbar__disconnected">{t('No server connected')}</span>
         )}
       </div>
 
@@ -51,15 +52,15 @@ export function StatusBar({
               ? 'bg-brand-primary text-white shadow-brand-primary/30'
               : 'bg-dark-surface hover:bg-dark-border text-gray-300 border border-dark-border'
           }`}
-          title="Toggle ReAct AI Agent Panel"
+          title={t('Toggle ReAct AI Agent Panel')}
         >
           <Sparkles size={13} strokeWidth={1.5} aria-hidden="true" />
-          <span>AI Agent</span>
+          <span>{t('AI Agent')}</span>
         </button>
 
         {serverCount > 0 && (
           <span className="statusbar__info">
-            {serverCount} server{serverCount !== 1 ? 's' : ''}
+            {t(serverCount === 1 ? '{count} server' : '{count} servers', { count: serverCount })}
           </span>
         )}
         <span className="statusbar__brand">LabNexus</span>

@@ -1,3 +1,4 @@
+import { t, useLocale } from '../../i18n';
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { python } from '@codemirror/lang-python';
@@ -117,6 +118,7 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
   canMoveUp,
   canMoveDown,
 }) => {
+  const locale = useLocale();
   const isCode = cell.cell_type === 'code';
   const isMarkdown = cell.cell_type === 'markdown';
   const onRunRef = useRef(onRun);
@@ -207,9 +209,9 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
   const renderedMarkdown = useMemo(() => {
     if (!isMarkdown) return '';
     const raw = draftSource.trim();
-    if (!raw) return '<p class="nb-md-placeholder">Double-click to edit…</p>';
+    if (!raw) return `<p class="nb-md-placeholder">${t('Double-click to edit…')}</p>`;
     return marked.parse(raw) as string;
-  }, [isMarkdown, draftSource]);
+  }, [isMarkdown, draftSource, locale]);
 
   const extensions = useMemo(() => {
     const exitEditOnRun = () => {
@@ -218,7 +220,7 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
     return [
       isCode ? python() : markdown(),
       ...(isMarkdown ? [EditorView.lineWrapping] : []),
-      EditorView.contentAttributes.of({ 'aria-label': isMarkdown ? 'Markdown cell editor' : 'Code cell editor' }),
+      EditorView.contentAttributes.of({ 'aria-label': isMarkdown ? t('Markdown cell editor') : t('Code cell editor') }),
       Prec.highest(keymap.of([
         {
           key: runCurrentCellShortcut,
@@ -270,7 +272,7 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
         },
       ])),
     ];
-  }, [isCode, isMarkdown, canRun, runCurrentCellShortcut]);
+  }, [isCode, isMarkdown, canRun, runCurrentCellShortcut, locale]);
 
   const basicSetup = useMemo(
     () => ({
@@ -317,11 +319,11 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
       tabIndex={-1}
       onPointerDown={onSelect}
       onDoubleClick={handleMarkdownDoubleClick}
-      aria-label={`Cell ${index + 1}, ${cell.cell_type}`}
+      aria-label={t('Cell {index}, {type}', { index: index + 1, type: t(cell.cell_type === 'code' ? 'Code cell' : cell.cell_type === 'markdown' ? 'Markdown cell' : 'Raw cell') })}
       className={`group notebook-cell ${isCode ? 'notebook-cell--code' : ''} ${isActive ? 'notebook-cell--active' : ''} ${isExecuting ? 'notebook-cell--executing' : ''} mb-2`}
     >
       {isCode && (
-        <div className="notebook-cell__prompt" title={`Cell ${index + 1} execution count`} aria-label={isExecuting ? 'Cell executing' : `Execution count ${cell.execution_count ?? 'not run'}`}>
+        <div className="notebook-cell__prompt" title={t('Cell {index} execution count', { index: index + 1 })} aria-label={isExecuting ? t('Cell executing') : t('Execution count {count}', { count: cell.execution_count ?? t('not run') })}>
           [{isExecuting ? '*' : cell.execution_count ?? ' '}]:
         </div>
       )}
@@ -331,37 +333,37 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
         <div
           className="notebook-cell__toolbar"
           role="group"
-          aria-label={`Cell ${index + 1} actions`}
+          aria-label={t('Cell {index} actions', { index: index + 1 })}
           onDoubleClick={(event) => event.stopPropagation()}
         >
           {isCode && <>
             <button type="button" onClick={(event) => { event.stopPropagation(); onRun(); }}
-              disabled={isExecuting || !canRun} aria-label="Run cell"
-              title={canRun ? 'Run Cell (Ctrl/Cmd+Enter)' : 'Kernel is not ready'}
+              disabled={isExecuting || !canRun} aria-label={t('Run cell')}
+              title={canRun ? t('Run Cell (Ctrl/Cmd+Enter)') : t('Kernel is not ready')}
               className={`${cellBtn} text-nb-prompt`}>
               {isExecuting ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
             </button>
             <span className="notebook-cell__toolbar-divider" aria-hidden="true" />
           </>}
           <button type="button" onClick={(event) => { event.stopPropagation(); onAddCell('code'); }}
-            title="Add code cell below" aria-label="Add code cell below" className={cellBtn}>
+            title={t('Add code cell below')} aria-label={t('Add code cell below')} className={cellBtn}>
             <Plus size={11} /><Code2 size={14} />
           </button>
           <button type="button" onClick={(event) => { event.stopPropagation(); onAddCell('markdown'); }}
-            title="Add Markdown cell below" aria-label="Add Markdown cell below" className={cellBtn}>
+            title={t('Add Markdown cell below')} aria-label={t('Add Markdown cell below')} className={cellBtn}>
             <Plus size={11} /><FileText size={14} />
           </button>
           <span className="notebook-cell__toolbar-divider" aria-hidden="true" />
           <button type="button" onClick={(event) => { event.stopPropagation(); onMoveUp(); }}
-            disabled={!canMoveUp} title="Move Cell Up" aria-label="Move cell up" className={cellBtn}>
+            disabled={!canMoveUp} title={t('Move Cell Up')} aria-label={t('Move cell up')} className={cellBtn}>
             <ChevronUp size={15} />
           </button>
           <button type="button" onClick={(event) => { event.stopPropagation(); onMoveDown(); }}
-            disabled={!canMoveDown} title="Move Cell Down" aria-label="Move cell down" className={cellBtn}>
+            disabled={!canMoveDown} title={t('Move Cell Down')} aria-label={t('Move cell down')} className={cellBtn}>
             <ChevronDown size={15} />
           </button>
           <button type="button" onClick={(event) => { event.stopPropagation(); onDelete(); }}
-            title="Delete Cell" aria-label="Delete cell"
+            title={t('Delete Cell')} aria-label={t('Delete cell')}
             className={`${cellBtn} hover:border-nb-error-border hover:bg-nb-error hover:text-nb-error-text`}>
             <Trash2 size={15} />
           </button>
@@ -373,7 +375,7 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
             <div
               className="nb-markdown-rendered cursor-text"
               dangerouslySetInnerHTML={{ __html: renderedMarkdown }}
-              title="Double-click to edit"
+              title={t('Double-click to edit')}
             />
           ) : (
             /* Editor */

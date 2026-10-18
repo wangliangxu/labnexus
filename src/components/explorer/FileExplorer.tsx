@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 /**
  * FileExplorer — Remote file browser for Jupyter server.
  */
@@ -61,7 +62,7 @@ export function FileExplorer({
           setTree((prev) => updateTreeNode(prev, path, items));
         }
       } catch (e: unknown) {
-        let msg = 'An unknown error occurred';
+        let msg = t('An unknown error occurred');
         if (typeof e === 'string') {
           msg = e;
         } else if (e instanceof Error) {
@@ -246,12 +247,12 @@ export function FileExplorer({
     return (
       <div className="file-explorer">
         <div className="panel-header">
-          <h3 className="panel-header__title">Explorer</h3>
+          <h3 className="panel-header__title">{t('Explorer')}</h3>
         </div>
         <div className="file-explorer__empty">
-          <p>No server connected</p>
+          <p>{t('No server connected')}</p>
           <p className="file-explorer__hint">
-            Connect to a Jupyter server to browse files
+            {t('Connect to a Jupyter server to browse files')}
           </p>
         </div>
       </div>
@@ -261,12 +262,12 @@ export function FileExplorer({
   return (
     <div className="file-explorer">
       <div className="panel-header">
-        <h3 className="panel-header__title">Explorer</h3>
+        <h3 className="panel-header__title">{t('Explorer')}</h3>
         <div className="panel-header__actions">
           <button
             className="btn btn-icon btn-ghost"
             onClick={() => loadDirectory('')}
-            title="Refresh"
+            title={t('Refresh')}
           >
             ↻
           </button>
@@ -295,7 +296,7 @@ export function FileExplorer({
                 disabled={isReconnecting}
                 type="button"
               >
-                {isReconnecting ? 'Reconnecting...' : 'Reconnect'}
+                {isReconnecting ? 'Reconnecting...' : t('Reconnect')}
               </button>
               {errorRecovery.restartUrl && onRestartServer && (
                 <button
@@ -304,7 +305,7 @@ export function FileExplorer({
                   disabled={isReconnecting}
                   type="button"
                 >
-                  {isReconnecting ? 'Restarting...' : 'Restart server'}
+                  {isReconnecting ? t('Restarting...') : t('Restart server')}
                 </button>
               )}
             </div>
@@ -315,11 +316,10 @@ export function FileExplorer({
       <div className="file-tree">
         {isLoading || tree === null ? (
           <div className="file-explorer__loading">
-            <span className="animate-spin">⟳</span> Loading...
-          </div>
+            <span className="animate-spin">⟳</span> {t('Loading...')}</div>
         ) : tree.length === 0 ? (
           <div className="file-explorer__empty">
-            <p>Empty directory</p>
+            <p>{t('Empty directory')}</p>
           </div>
         ) : (
           renderTree(tree)

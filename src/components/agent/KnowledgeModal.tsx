@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import React, { useEffect, useState } from 'react';
 import type { KnowledgeEntry } from '../../types/agent';
 import {
@@ -51,7 +52,7 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('Delete this knowledge entry?')) {
+    if (window.confirm(t('Delete this knowledge entry?'))) {
       await agentDeleteKnowledge(id);
       loadEntries();
     }
@@ -71,7 +72,7 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
           <div className="flex items-center gap-2">
             <span className="text-xl">📚</span>
             <h3 className="text-lg font-bold text-gray-100">
-              Domain Knowledge Base
+              {t('Domain Knowledge Base')}
             </h3>
           </div>
           <button
@@ -85,13 +86,13 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
         {editingEntry ? (
           <div className="pt-4 flex flex-col gap-3 flex-1 overflow-y-auto">
             <h4 className="text-sm font-bold text-gray-100">
-              {editingEntry.id ? 'Edit Entry' : 'New Knowledge Entry'}
+              {editingEntry.id ? t('Edit Entry') : t('New Knowledge Entry')}
             </h4>
             <div>
-              <label className="text-xs text-gray-400 block mb-1">Title</label>
+              <label className="text-xs text-gray-400 block mb-1">{t('Title')}</label>
               <input
                 type="text"
-                placeholder="e.g. Astropy FITS File Convention"
+                placeholder={t('e.g. Astropy FITS File Convention')}
                 value={editingEntry.title || ''}
                 onChange={(e) => setEditingEntry({ ...editingEntry, title: e.target.value })}
                 className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-brand-primary"
@@ -99,7 +100,7 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-gray-400 block mb-1">Category</label>
+                <label className="text-xs text-gray-400 block mb-1">{t('Category')}</label>
                 <input
                   type="text"
                   placeholder="astronomy, genomics, python..."
@@ -109,7 +110,7 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-400 block mb-1">Tags (comma-separated)</label>
+                <label className="text-xs text-gray-400 block mb-1">{t('Tags (comma-separated)')}</label>
                 <input
                   type="text"
                   placeholder="fits, astropy, headers"
@@ -131,11 +132,11 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
                 onChange={(e) => setEditingEntry({ ...editingEntry, enabled: e.target.checked })}
                 className="accent-brand-primary"
               />
-              Use this entry for Agent retrieval
+              {t('Use this entry for Agent retrieval')}
             </label>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-gray-400 block mb-1">Source</label>
+                <label className="text-xs text-gray-400 block mb-1">{t('Source')}</label>
                 <input
                   type="text"
                   value={editingEntry.source || 'user'}
@@ -144,22 +145,22 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-400 block mb-1">Trust Level</label>
+                <label className="text-xs text-gray-400 block mb-1">{t('Trust Level')}</label>
                 <select
                   value={editingEntry.trust_level || 'unverified'}
                   onChange={(e) => setEditingEntry({ ...editingEntry, trust_level: e.target.value as KnowledgeEntry['trust_level'] })}
                   className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-brand-primary"
                 >
-                  <option value="unverified">Unverified</option>
-                  <option value="reviewed">Reviewed</option>
-                  <option value="verified">Verified</option>
+                  <option value="unverified">{t('Unverified')}</option>
+                  <option value="reviewed">{t('Reviewed')}</option>
+                  <option value="verified">{t('Verified')}</option>
                 </select>
               </div>
             </div>
             <div className="flex-1 flex flex-col">
-              <label className="text-xs text-gray-400 block mb-1">Content / Rule / Guidance</label>
+              <label className="text-xs text-gray-400 block mb-1">{t('Content / Rule / Guidance')}</label>
               <textarea
-                placeholder="Write detailed domain guidance, code snippets, or formulas..."
+                placeholder={t('Write detailed domain guidance, code snippets, or formulas...')}
                 value={editingEntry.content || ''}
                 onChange={(e) => setEditingEntry({ ...editingEntry, content: e.target.value })}
                 className="w-full flex-1 min-h-[140px] bg-dark-bg border border-dark-border rounded-lg p-3 text-sm font-mono text-gray-200 focus:outline-none focus:border-brand-primary resize-none"
@@ -170,13 +171,13 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
                 onClick={() => setEditingEntry(null)}
                 className="px-4 py-2 text-xs font-medium text-gray-400 hover:text-gray-100 rounded-lg hover:bg-dark-border"
               >
-                Cancel
+                {t('Cancel')}
               </button>
               <button
                 onClick={handleSave}
                 className="px-5 py-2 text-xs font-bold text-white bg-brand-primary hover:bg-brand-primary/80 rounded-lg shadow-brand-primary/20"
               >
-                Save Entry
+                {t('Save Entry')}
               </button>
             </div>
           </div>
@@ -185,7 +186,7 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
             <div className="pt-4 pb-2 flex items-center justify-between gap-3">
               <input
                 type="text"
-                placeholder="Search knowledge by keyword or tag..."
+                placeholder={t('Search knowledge by keyword or tag...')}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-brand-primary"
@@ -194,25 +195,23 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
                 onClick={() => setEditingEntry({ title: '', content: '', category: 'general', tags: [], source: 'user', trust_level: 'unverified', enabled: true })}
                 className="px-4 py-2 text-xs font-bold text-white bg-brand-primary hover:bg-brand-primary/80 rounded-lg shrink-0 flex items-center gap-1 shadow-sm"
               >
-                <span>+</span> Add Knowledge
-              </button>
+                <span>+</span> {t('Add Knowledge')}</button>
             </div>
 
             <div className="flex-1 overflow-y-auto pt-2 flex flex-col gap-2">
               {loading ? (
                 <div className="text-center py-8 text-gray-400 text-sm">
-                  Loading knowledge base...
+                  {t('Loading knowledge base...')}
                 </div>
               ) : loadError ? (
                 <div className="rounded-xl border border-red-500/25 bg-red-500/5 p-4 text-sm text-red-300">
-                  <p>Unable to load the knowledge base.</p>
-                  <details className="mt-2 text-xs text-red-200/70"><summary>Technical details</summary><pre className="mt-2 whitespace-pre-wrap">{loadError}</pre></details>
-                  <button type="button" onClick={loadEntries} className="mt-3 rounded-lg border border-red-500/30 px-3 py-1.5 text-xs font-semibold hover:bg-red-500/10">Retry</button>
+                  <p>{t('Unable to load the knowledge base.')}</p>
+                  <details className="mt-2 text-xs text-red-200/70"><summary>{t('Technical details')}</summary><pre className="mt-2 whitespace-pre-wrap">{loadError}</pre></details>
+                  <button type="button" onClick={loadEntries} className="mt-3 rounded-lg border border-red-500/30 px-3 py-1.5 text-xs font-semibold hover:bg-red-500/10">{t('Retry')}</button>
                 </div>
               ) : filtered.length === 0 ? (
                 <div className="text-center py-12 text-gray-500 text-sm">
-                  No knowledge entries found. Click "+ Add Knowledge" to create domain guidelines.
-                </div>
+                  {t('No knowledge entries found. Click "+ Add Knowledge" to create domain guidelines.')}</div>
               ) : (
                 filtered.map((entry) => (
                   <div
@@ -229,7 +228,7 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
                           {entry.trust_level} · {entry.source}
                         </span>
                         {!entry.enabled && (
-                          <span className="text-[10px] text-amber-400">disabled</span>
+                          <span className="text-[10px] text-amber-400">{t('disabled')}</span>
                         )}
                       </div>
                       <div className="flex items-center gap-2">
@@ -237,13 +236,13 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
                           onClick={() => setEditingEntry(entry)}
                           className="text-xs text-gray-400 hover:text-gray-100 px-2 py-1 rounded hover:bg-dark-border"
                         >
-                          Edit
+                          {t('Edit')}
                         </button>
                         <button
                           onClick={() => handleDelete(entry.id)}
                           className="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded hover:bg-red-500/20"
                         >
-                          Delete
+                          {t('Delete')}
                         </button>
                       </div>
                     </div>
@@ -272,7 +271,7 @@ export const KnowledgeModal: React.FC<KnowledgeModalProps> = ({ onClose }) => {
                 onClick={onClose}
                 className="px-5 py-2 text-xs font-bold text-gray-300 hover:text-gray-100 bg-dark-border/50 hover:bg-dark-border rounded-lg"
               >
-                Close
+                {t('Close')}
               </button>
             </div>
           </>

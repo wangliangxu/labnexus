@@ -1,7 +1,10 @@
+import { normalizeLocale, type Locale } from '../i18n/locale';
+
 export type ThemeMode = 'light' | 'dark';
 
 export interface GlobalSettings {
   theme: ThemeMode;
+  language: Locale;
   defaultKernel: string;
   defaultProxyHost: string;
   defaultProxyPort: number;
@@ -14,6 +17,7 @@ export const GLOBAL_SETTINGS_CHANGED_EVENT = 'labnexus:settings-changed';
 
 export const DEFAULT_SETTINGS: GlobalSettings = {
   theme: 'light',
+  language: normalizeLocale(undefined),
   defaultKernel: 'python3',
   defaultProxyHost: '127.0.0.1',
   defaultProxyPort: 1080,
@@ -37,15 +41,15 @@ export function applyTheme(theme: ThemeMode): void {
 export function loadGlobalSettings(): GlobalSettings {
   try {
     const saved = localStorage.getItem(GLOBAL_SETTINGS_STORAGE_KEY);
-    const settings = saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : { ...DEFAULT_SETTINGS };
-    return { ...settings, theme: normalizeTheme(settings.theme) };
+    const settings = saved ? { ...DEFAULT_SETTINGS, language: undefined, ...JSON.parse(saved) } : { ...DEFAULT_SETTINGS, language: undefined };
+    return { ...settings, theme: normalizeTheme(settings.theme), language: normalizeLocale(settings.language) };
   } catch {
-    return DEFAULT_SETTINGS;
+    return { ...DEFAULT_SETTINGS, language: normalizeLocale(undefined) };
   }
 }
 
 export function saveGlobalSettings(settings: GlobalSettings) {
-  const normalized = { ...settings, theme: normalizeTheme(settings.theme) };
+  const normalized = { ...settings, theme: normalizeTheme(settings.theme), language: normalizeLocale(settings.language) };
   localStorage.setItem(GLOBAL_SETTINGS_STORAGE_KEY, JSON.stringify(normalized));
   applyTheme(normalized.theme);
   window.dispatchEvent(new CustomEvent(GLOBAL_SETTINGS_CHANGED_EVENT, { detail: normalized }));

@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { Loader2, AlertTriangle, FileCode } from 'lucide-react';
@@ -598,7 +599,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     return (
       <div className="flex flex-1 items-center justify-center flex-col gap-3 bg-nb-shell text-nb-text-secondary text-[13px]">
         <Loader2 size={30} className="animate-spin" />
-        <span>Loading Notebook {notebookName}...</span>
+        <span>{t('Loading Notebook')} {notebookName}...</span>
       </div>
     );
   }
@@ -608,7 +609,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
       <div className="flex flex-1 items-center justify-center flex-col gap-3 bg-nb-shell text-nb-error-text text-[13px]">
         <AlertTriangle size={44} />
         <div className="max-w-[620px] text-center">
-          <h3 className="mb-2 text-nb-text">Failed to Load Notebook</h3>
+          <h3 className="mb-2 text-nb-text">{t('Failed to Load Notebook')}</h3>
           <p className="m-0 py-2.5 px-3 border border-nb-error-border bg-nb-cell text-nb-error-text font-mono text-xs text-left">
             {loadError}
           </p>
@@ -692,19 +693,19 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
           {cells.length === 0 && (
             <div className="flex flex-col items-center justify-center min-h-[220px] gap-3 border border-dashed border-nb-cell-border bg-nb-cell text-nb-text-secondary">
               <FileCode size={40} />
-              <span>This notebook has no cells yet.</span>
+              <span>{t('This notebook has no cells yet.')}</span>
               <div className="flex flex-wrap justify-center gap-1.5">
                 <button
                   onClick={() => handleAddCell('code')}
                   className={nbBtnPrimary}
                 >
-                  + Add Code Cell
+                  {t('+ Add Code Cell')}
                 </button>
                 <button
                   onClick={() => handleAddCell('markdown')}
                   className={nbBtn}
                 >
-                  + Add Markdown Cell
+                  {t('+ Add Markdown Cell')}
                 </button>
               </div>
             </div>

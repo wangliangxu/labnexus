@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import React, { useMemo, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, Copy, CornerDownLeft, Wrench } from 'lucide-react';
 import { marked } from 'marked';
@@ -68,12 +69,11 @@ const CodeBlock: React.FC<{ code: string; language: string; onUse?: (code: strin
         <span>{language}</span>
         <div className="flex items-center gap-1">
           {onUse && (
-            <button type="button" onClick={() => onUse(code)} aria-label="Use code in prompt" title="Use code in prompt">
-              <CornerDownLeft size={13} /> Use
-            </button>
+            <button type="button" onClick={() => onUse(code)} aria-label={t('Use code in prompt')} title={t('Use code in prompt')}>
+              <CornerDownLeft size={13} /> {t('Use')}</button>
           )}
-          <button type="button" onClick={copy} aria-label="Copy code" title="Copy code">
-            {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'Copied' : 'Copy'}
+          <button type="button" onClick={copy} aria-label={t('Copy code')} title={t('Copy code')}>
+            {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? t('Copied') : t('Copy')}
           </button>
         </div>
       </div>
@@ -90,7 +90,7 @@ interface ToolExecutionCardProps {
 export const ToolExecutionCard: React.FC<ToolExecutionCardProps> = ({ call, result }) => {
   const [expanded, setExpanded] = useState(false);
   const failed = result?.content.toLowerCase().includes('error') || result?.content.toLowerCase().includes('failed');
-  const state = result ? (failed ? 'Failed' : 'Completed') : 'Requested';
+  const state = result ? (failed ? t('Failed') : t('Completed')) : t('Requested');
   return (
     <div className={`agent-tool-card ${failed ? 'agent-tool-card--error' : ''}`}>
       <button type="button" className="agent-tool-card__summary" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>
@@ -101,8 +101,8 @@ export const ToolExecutionCard: React.FC<ToolExecutionCardProps> = ({ call, resu
       </button>
       {expanded && (
         <div className="agent-tool-card__details">
-          <div><span>Arguments</span><pre>{formatJson(call.function.arguments)}</pre></div>
-          {result && <div><span>Result</span><pre>{result.content}</pre></div>}
+          <div><span>{t('Arguments')}</span><pre>{formatJson(call.function.arguments)}</pre></div>
+          {result && <div><span>{t('Result')}</span><pre>{result.content}</pre></div>}
         </div>
       )}
     </div>

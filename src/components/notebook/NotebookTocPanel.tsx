@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import React, { useCallback, useMemo, useState } from 'react';
 import { ChevronDown, TableOfContents } from 'lucide-react';
 import {
@@ -43,7 +44,7 @@ export const NotebookTocPanel: React.FC<NotebookTocPanelProps> = ({
     <div className="nb-toc-panel">
       <div className="nb-toc-panel__header">
         <div className="nb-toc-panel__title-group">
-          <h3 className="nb-toc-panel__title">Table of Contents</h3>
+          <h3 className="nb-toc-panel__title">{t('Table of Contents')}</h3>
           {notebookName && (
             <div className="nb-toc-panel__subtitle" title={notebookName}>
               {notebookName}
@@ -56,10 +57,10 @@ export const NotebookTocPanel: React.FC<NotebookTocPanelProps> = ({
       {headings.length === 0 ? (
         <div className="nb-toc-empty">
           <TableOfContents size={26} />
-          <span>No markdown headings</span>
+          <span>{t('No markdown headings')}</span>
         </div>
       ) : (
-        <div className="nb-toc-tree" role="tree" aria-label="Notebook headings">
+        <div className="nb-toc-tree" role="tree" aria-label={t('Notebook headings')}>
           {visibleHeadings.map((heading) => {
             const headingIndex = headings.findIndex((item) => item.id === heading.id);
             const isActive = heading.id === activeHeadingId;
@@ -86,7 +87,7 @@ export const NotebookTocPanel: React.FC<NotebookTocPanelProps> = ({
                       event.stopPropagation();
                       toggleHeading(heading.id);
                     }}
-                    aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${heading.text}`}
+                    aria-label={`${isCollapsed ? t('Expand') : t('Collapse')} ${heading.text}`}
                   >
                     <ChevronDown size={13} />
                   </button>

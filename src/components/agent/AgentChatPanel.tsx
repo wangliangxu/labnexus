@@ -1,3 +1,4 @@
+import { t, useLocale, localizeStatus } from '../../i18n';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
 import {
@@ -31,6 +32,7 @@ type ContextChip = { id: string; label: string; value: string; keys: Array<keyof
 export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
   isOpen, onClose, getWorkspaceContext, width, onWidthChange, isFullscreen, onToggleFullscreen,
 }) => {
+  const locale = useLocale();
   const [sessionId, setSessionId] = useState('default');
   const [sessions, setSessions] = useState<AgentSessionListItem[]>([]);
   const [sessionMenuOpen, setSessionMenuOpen] = useState(false);
@@ -64,7 +66,7 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
         setSessionId(loaded[0].session_id);
       }
     } catch (cause) {
-      setPanelError(`Unable to load conversations: ${readableError(cause)}`);
+      setPanelError(t('Unable to load conversations: {error}', { error: readableError(cause) }));
     }
   };
 
@@ -134,27 +136,27 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
   };
 
   const currentSession = sessions.find((session) => session.session_id === sessionId);
-  const contextChips = useMemo(() => buildContextChips(workspaceContext), [workspaceContext]);
+  const contextChips = useMemo(() => buildContextChips(workspaceContext), [workspaceContext, locale]);
   const visibleContextChips = contextChips.filter((chip) => !excludedContext.includes(chip.id));
   const providerName = aiConfig?.provider === 'ollama'
     ? `Ollama · ${aiConfig.ollama.chat_model}`
-    : aiConfig ? `Remote · ${aiConfig.remote.chat_model}` : 'Provider unavailable';
+    : aiConfig ? t('Remote · {model}', { model: aiConfig.remote.chat_model }) : t('Provider unavailable');
   const runLabel = status === 'running'
-    ? activeToolCall?.status === 'requires_confirmation' ? 'Waiting for approval' : activeToolCall?.status === 'running' ? 'Running tool' : 'Thinking'
-    : 'Needs attention';
+    ? activeToolCall?.status === 'requires_confirmation' ? t('Waiting for approval') : activeToolCall?.status === 'running' ? t('Running tool') : t('Thinking')
+    : t('Needs attention');
 
   if (!isOpen) return null;
 
   const createSession = async () => {
     try {
       const id = `session-${crypto.randomUUID()}`;
-      await agentCreateSession(id, 'New Chat', getWorkspaceContext?.());
+      await agentCreateSession(id, t('New Chat'), getWorkspaceContext?.());
       await refreshSessions();
       setSessionId(id);
       setSessionMenuOpen(false);
       setPanelError(null);
     } catch (cause) {
-      setPanelError(`Unable to create conversation: ${readableError(cause)}`);
+      setPanelError(t('Unable to create conversation: {error}', { error: readableError(cause) }));
     }
   };
 
@@ -165,7 +167,7 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
       setRenameTitle(null);
       await refreshSessions();
     } catch (cause) {
-      setPanelError(`Unable to rename conversation: ${readableError(cause)}`);
+      setPanelError(t('Unable to rename conversation: {error}', { error: readableError(cause) }));
     }
   };
 
@@ -178,7 +180,7 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
       setDeleteConfirmOpen(false);
       await refreshSessions();
     } catch (cause) {
-      setPanelError(`Unable to delete conversation: ${readableError(cause)}`);
+      setPanelError(t('Unable to delete conversation: {error}', { error: readableError(cause) }));
     }
   };
 
@@ -217,8 +219,8 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
 
   return (
     <>
-      <section className="agent-workspace" aria-label="LabNexus AI Agent">
-        {!isFullscreen && <div className="agent-workspace__resizer" onMouseDown={startResize} role="separator" aria-label="Resize AI Agent panel"><GripVertical size={16} /></div>}
+      <section className="agent-workspace" aria-label={t('LabNexus AI Agent')}>
+        {!isFullscreen && <div className="agent-workspace__resizer" onMouseDown={startResize} role="separator" aria-label={t('Resize AI Agent panel')}><GripVertical size={16} /></div>}
         <header className="agent-workspace__header">
           <div className="agent-workspace__identity">
             <Sparkles size={18} strokeWidth={1.5} aria-hidden="true" />
@@ -226,17 +228,17 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
               <button type="button" className="agent-session-picker__trigger" onClick={() => {
                 setSessionMenuOpen((value) => !value);
                 if (moreMenuRef.current) moreMenuRef.current.open = false;
-              }} aria-label="Choose conversation" aria-expanded={sessionMenuOpen} aria-controls="agent-conversations">
-                <span>{currentSession?.title || 'Assistant'}</span><ChevronDown size={14} />
+              }} aria-label={t('Choose conversation')} aria-expanded={sessionMenuOpen} aria-controls="agent-conversations">
+                <span>{currentSession?.title || t('Assistant')}</span><ChevronDown size={14} />
               </button>
               {sessionMenuOpen && (
                 <div className="agent-session-menu" id="agent-conversations">
-                  <div className="agent-session-menu__heading"><span>Conversations</span></div>
+                  <div className="agent-session-menu__heading"><span>{t('Conversations')}</span></div>
                   <div className="agent-session-menu__list">
-                    {sessions.length === 0 && <p className="agent-menu-empty">No saved conversations yet.</p>}
+                    {sessions.length === 0 && <p className="agent-menu-empty">{t('No saved conversations yet.')}</p>}
                     {sessions.map((session) => (
                       <button type="button" key={session.session_id} className={session.session_id === sessionId ? 'active' : ''} onClick={() => { setSessionId(session.session_id); setSessionMenuOpen(false); }}>
-                        <span>{session.title}</span><small>{formatRelativeTime(session.updated_at)} · {session.message_count} messages</small>
+                        <span>{session.title}</span><small>{formatRelativeTime(session.updated_at)} · {t('{count} messages', { count: session.message_count })}</small>
                       </button>
                     ))}
                   </div>
@@ -245,24 +247,24 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
             </div>
           </div>
           <div className="agent-workspace__header-actions">
-            <button type="button" onClick={createSession} disabled={status === 'running'} aria-label="New conversation" title="New conversation"><MessageSquarePlus size={16} strokeWidth={1.5} /></button>
+            <button type="button" onClick={createSession} disabled={status === 'running'} aria-label={t('New conversation')} title={t('New conversation')}><MessageSquarePlus size={16} strokeWidth={1.5} /></button>
             <details className="agent-more-menu" ref={moreMenuRef} onToggle={(event) => { if (event.currentTarget.open) setSessionMenuOpen(false); }}>
-              <summary aria-label="More assistant options" title="More options"><MoreHorizontal size={18} strokeWidth={1.5} /></summary>
+              <summary aria-label={t('More assistant options')} title={t('More options')}><MoreHorizontal size={18} strokeWidth={1.5} /></summary>
               <div className="agent-more-menu__content">
-                <button type="button" onClick={() => openFromMenu(() => setIsSkillOpen(true))}><Zap size={15} />Skills</button>
-                <button type="button" onClick={() => openFromMenu(() => setIsKnowledgeOpen(true))}><Database size={15} />Knowledge</button>
-                <button type="button" onClick={() => openFromMenu(() => setIsTraceOpen(true))}><Activity size={15} />Execution traces</button>
+                <button type="button" onClick={() => openFromMenu(() => setIsSkillOpen(true))}><Zap size={15} />{t('Skills')}</button>
+                <button type="button" onClick={() => openFromMenu(() => setIsKnowledgeOpen(true))}><Database size={15} />{t('Knowledge')}</button>
+                <button type="button" onClick={() => openFromMenu(() => setIsTraceOpen(true))}><Activity size={15} />{t('Execution traces')}</button>
                 <hr />
-                <button type="button" onClick={() => openFromMenu(onToggleFullscreen)}>{isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}{isFullscreen ? 'Exit full screen' : 'Full screen'}</button>
-                <button type="button" disabled={status === 'running'} onClick={() => openFromMenu(() => setRenameTitle(currentSession?.title || 'New Chat'))}><Pencil size={15} />Rename conversation</button>
-                <button type="button" className="danger" disabled={status === 'running'} onClick={() => openFromMenu(() => setDeleteConfirmOpen(true))}><Trash2 size={15} />Delete conversation</button>
+                <button type="button" onClick={() => openFromMenu(onToggleFullscreen)}>{isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}{isFullscreen ? t('Exit full screen') : t('Full screen')}</button>
+                <button type="button" disabled={status === 'running'} onClick={() => openFromMenu(() => setRenameTitle(currentSession?.title || t('New Chat')))}><Pencil size={15} />{t('Rename conversation')}</button>
+                <button type="button" className="danger" disabled={status === 'running'} onClick={() => openFromMenu(() => setDeleteConfirmOpen(true))}><Trash2 size={15} />{t('Delete conversation')}</button>
                 <div className="agent-more-menu__runtime">
                   <span title={providerName}>{providerName}</span>
-                  <span>{mcpCount} MCP · {workspaceContext.kernel_status || (workspaceContext.kernel_id ? 'Kernel connected' : 'No kernel')}</span>
+                  <span>{mcpCount} MCP · {localizeStatus(workspaceContext.kernel_status) || (workspaceContext.kernel_id ? t('Kernel connected') : t('No kernel'))}</span>
                 </div>
               </div>
             </details>
-            <button type="button" onClick={onClose} aria-label="Close AI Agent" title="Close"><X size={17} strokeWidth={1.5} /></button>
+            <button type="button" onClick={onClose} aria-label={t('Close AI Agent')} title={t('Close')}><X size={17} strokeWidth={1.5} /></button>
           </div>
         </header>
         {status !== 'idle' && <div className="agent-workspace__status" role="status"><span className={`agent-status-dot ${status}`} />{runLabel}</div>}
@@ -270,11 +272,11 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
         <main className="agent-conversation" aria-live="polite">
           {messages.length === 0 && !currentStreamingAnswer && (
             <div className="agent-empty-state">
-              <h3>How can I help?</h3>
-              <p>Ask about your notebook or describe a task.</p>
+              <h3>{t('How can I help?')}</h3>
+              <p>{t('Ask about your notebook or describe a task.')}</p>
               <div className="agent-empty-state__actions">
-                <button type="button" onClick={() => setInputPrompt('Summarize the current notebook and identify the next useful analysis step.')}>Summarize notebook</button>
-                <button type="button" onClick={() => setInputPrompt('Inspect the current error and propose a safe fix.')}>Diagnose error</button>
+                <button type="button" onClick={() => setInputPrompt(t('Summarize the current notebook and identify the next useful analysis step.'))}>{t('Summarize notebook')}</button>
+                <button type="button" onClick={() => setInputPrompt(t('Inspect the current error and propose a safe fix.'))}>{t('Diagnose error')}</button>
               </div>
             </div>
           )}
@@ -289,7 +291,7 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
                   {message.content && <MarkdownMessage content={message.content} onUseCode={(code) => setInputPrompt((current) => `${current}${current ? '\n\n' : ''}${code}`)} />}
                   {message.tool_calls && message.tool_calls.length > 0 && (
                     <details className="agent-tool-timeline">
-                      <summary><History size={13} />{message.tool_calls.length} tool {message.tool_calls.length === 1 ? 'call' : 'calls'}</summary>
+                      <summary><History size={13} />{message.tool_calls.length} {t('tool')} {message.tool_calls.length === 1 ? 'call' : 'calls'}</summary>
                       {message.tool_calls.map((call) => <ToolExecutionCard key={call.id} call={call} result={messages.find((candidate) => candidate.role === 'tool' && candidate.tool_call_id === call.id)} />)}
                     </details>
                   )}
@@ -303,37 +305,37 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
           )}
 
           {activeToolCall?.status === 'running' && (
-            <div className="agent-running-card"><span className="agent-spinner" /><div><strong>Running tool</strong><code>{activeToolCall.tool_name}</code></div></div>
+            <div className="agent-running-card"><span className="agent-spinner" /><div><strong>{t('Running tool')}</strong><code>{activeToolCall.tool_name}</code></div></div>
           )}
 
           {(error || panelError) && (
-            <div className="agent-error-card" role="alert"><div><strong>Agent needs attention</strong><p>{error || panelError}</p></div><button type="button" onClick={() => { dismissError(); setPanelError(null); }} aria-label="Dismiss error"><X size={15} /></button></div>
+            <div className="agent-error-card" role="alert"><div><strong>{t('Agent needs attention')}</strong><p>{error || panelError}</p></div><button type="button" onClick={() => { dismissError(); setPanelError(null); }} aria-label={t('Dismiss error')}><X size={15} /></button></div>
           )}
           <div ref={messagesEndRef} />
         </main>
 
         <footer className="agent-composer">
           <details className="agent-context-options">
-            <summary><FileText size={13} /><span>Notebook context</span><small>{injectContext ? `${visibleContextChips.length} attached` : 'Off'}</small><ChevronDown size={12} /></summary>
+            <summary><FileText size={13} /><span>{t('Notebook context')}</span><small>{injectContext ? t('{count} attached', { count: visibleContextChips.length }) : t('Off')}</small><ChevronDown size={12} /></summary>
             <div className="agent-context-options__content">
-              <label><input type="checkbox" checked={injectContext} onChange={(event) => setInjectContext(event.target.checked)} />Include notebook context</label>
+              <label><input type="checkbox" checked={injectContext} onChange={(event) => setInjectContext(event.target.checked)} />{t('Include notebook context')}</label>
               {injectContext && <>
                 {visibleContextChips.length > 0 ? <div className="agent-context-chips">
-                  {visibleContextChips.map((chip) => <span key={chip.id} title={chip.value}><FileText size={11} />{chip.label}<button type="button" onClick={() => setExcludedContext((items) => [...items, chip.id])} aria-label={`Remove ${chip.label} context`}><X size={11} /></button></span>)}
-                </div> : <p>No notebook context attached.</p>}
-                {excludedContext.length > 0 && <button type="button" className="agent-context-reset" onClick={() => setExcludedContext([])}>Restore context</button>}
+                  {visibleContextChips.map((chip) => <span key={chip.id} title={chip.value}><FileText size={11} />{chip.label}<button type="button" onClick={() => setExcludedContext((items) => [...items, chip.id])} aria-label={t('Remove {name} context', { name: chip.label })}><X size={11} /></button></span>)}
+                </div> : <p>{t('No notebook context attached.')}</p>}
+                {excludedContext.length > 0 && <button type="button" className="agent-context-reset" onClick={() => setExcludedContext([])}>{t('Restore context')}</button>}
               </>}
             </div>
           </details>
           <div className="agent-composer__input">
             <textarea ref={inputRef} rows={1} value={inputPrompt} onChange={(event) => setInputPrompt(event.target.value)} onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); handleSend(); }
-            }} placeholder="Ask anything about your notebook…" title="Enter to send · Shift+Enter for newline" disabled={status === 'running'} aria-label="Agent prompt" />
+            }} placeholder={t('Ask anything about your notebook…')} title={t('Enter to send · Shift+Enter for newline')} disabled={status === 'running'} aria-label={t('Agent prompt')} />
             <div className="agent-composer__actions">
-              <span>Shift+Enter for a new line</span>
+              <span>{t('Shift+Enter for a new line')}</span>
               {status === 'running' ? (
-                <div><button type="button" className="stop" onClick={() => cancelTask(false)} title="Stop Agent"><Square size={14} />Stop</button><button type="button" className="interrupt" onClick={() => cancelTask(true)} title="Stop Agent and interrupt kernel"><Zap size={14} /></button></div>
-              ) : <button type="button" className="send" onClick={handleSend} disabled={!inputPrompt.trim()} aria-label="Send prompt"><Send size={15} /></button>}
+                <div><button type="button" className="stop" onClick={() => cancelTask(false)} title={t('Stop Agent')}><Square size={14} />{t('Stop')}</button><button type="button" className="interrupt" onClick={() => cancelTask(true)} title={t('Stop Agent and interrupt kernel')}><Zap size={14} /></button></div>
+              ) : <button type="button" className="send" onClick={handleSend} disabled={!inputPrompt.trim()} aria-label={t('Send prompt')}><Send size={15} /></button>}
             </div>
           </div>
         </footer>
@@ -344,24 +346,24 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
       {isKnowledgeOpen && <KnowledgeModal onClose={() => setIsKnowledgeOpen(false)} />}
       {isTraceOpen && <TraceViewerModal onClose={() => setIsTraceOpen(false)} />}
 
-      {renameTitle !== null && <AgentDialog title="Rename conversation" onClose={() => setRenameTitle(null)} actions={<><button type="button" onClick={() => setRenameTitle(null)}>Cancel</button><button type="button" className="primary" onClick={renameSession}>Save</button></>}><input autoFocus value={renameTitle} onChange={(event) => setRenameTitle(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && void renameSession()} /></AgentDialog>}
-      {deleteConfirmOpen && <AgentDialog title="Delete this conversation?" onClose={() => setDeleteConfirmOpen(false)} actions={<><button type="button" onClick={() => setDeleteConfirmOpen(false)}>Cancel</button><button type="button" className="danger" onClick={deleteSession}>Delete</button></>}><p>This removes the conversation and its history. This action cannot be undone.</p></AgentDialog>}
+      {renameTitle !== null && <AgentDialog title={t('Rename conversation')} onClose={() => setRenameTitle(null)} actions={<><button type="button" onClick={() => setRenameTitle(null)}>{t('Cancel')}</button><button type="button" className="primary" onClick={renameSession}>{t('Save')}</button></>}><input autoFocus value={renameTitle} onChange={(event) => setRenameTitle(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && void renameSession()} /></AgentDialog>}
+      {deleteConfirmOpen && <AgentDialog title={t('Delete this conversation?')} onClose={() => setDeleteConfirmOpen(false)} actions={<><button type="button" onClick={() => setDeleteConfirmOpen(false)}>{t('Cancel')}</button><button type="button" className="danger" onClick={deleteSession}>{t('Delete')}</button></>}><p>{t('This removes the conversation and its history. This action cannot be undone.')}</p></AgentDialog>}
     </>
   );
 };
 
 const AgentDialog: React.FC<{ title: string; onClose: () => void; actions: React.ReactNode; children: React.ReactNode }> = ({ title, onClose, actions, children }) => (
   <div className="agent-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-    <div className="agent-dialog" role="dialog" aria-modal="true" aria-label={title}><div className="agent-dialog__header"><h3>{title}</h3><button type="button" onClick={onClose} aria-label="Close dialog"><X size={16} /></button></div><div className="agent-dialog__content">{children}</div><div className="agent-dialog__actions">{actions}</div></div>
+    <div className="agent-dialog" role="dialog" aria-modal="true" aria-label={title}><div className="agent-dialog__header"><h3>{title}</h3><button type="button" onClick={onClose} aria-label={t('Close dialog')}><X size={16} /></button></div><div className="agent-dialog__content">{children}</div><div className="agent-dialog__actions">{actions}</div></div>
   </div>
 );
 
 function buildContextChips(context: AgentChatContext): ContextChip[] {
   const chips: ContextChip[] = [];
   if (context.notebook_path) chips.push({ id: 'notebook', label: context.notebook_path.split('/').pop() || context.notebook_path, value: context.notebook_path, keys: ['notebook_path', 'server_id', 'session_id'] });
-  if (context.kernel_id) chips.push({ id: 'kernel', label: context.kernel_status || 'Kernel', value: context.kernel_id, keys: ['kernel_id', 'kernel_status'] });
-  if (context.active_cell_code) chips.push({ id: 'cell', label: `Cell ${typeof context.active_cell_index === 'number' ? context.active_cell_index + 1 : ''}`.trim(), value: context.active_cell_code, keys: ['active_cell_id', 'active_cell_index', 'active_cell_code'] });
-  if (context.last_error) chips.push({ id: 'error', label: 'Last error', value: context.last_error, keys: ['last_error'] });
+  if (context.kernel_id) chips.push({ id: 'kernel', label: localizeStatus(context.kernel_status) || t('Kernel'), value: context.kernel_id, keys: ['kernel_id', 'kernel_status'] });
+  if (context.active_cell_code) chips.push({ id: 'cell', label: t('Cell {index}', { index: typeof context.active_cell_index === 'number' ? context.active_cell_index + 1 : '' }).trim(), value: context.active_cell_code, keys: ['active_cell_id', 'active_cell_index', 'active_cell_code'] });
+  if (context.last_error) chips.push({ id: 'error', label: t('Last error'), value: context.last_error, keys: ['last_error'] });
   return chips;
 }
 
@@ -369,10 +371,10 @@ function formatRelativeTime(value: string): string {
   const time = new Date(value).getTime();
   if (!Number.isFinite(time)) return '';
   const minutes = Math.max(0, Math.round((Date.now() - time) / 60_000));
-  if (minutes < 1) return 'now';
-  if (minutes < 60) return `${minutes}m ago`;
-  if (minutes < 1_440) return `${Math.round(minutes / 60)}h ago`;
-  return `${Math.round(minutes / 1_440)}d ago`;
+  if (minutes < 1) return t('now');
+  if (minutes < 60) return t('{count}m ago', { count: minutes });
+  if (minutes < 1_440) return t('{count}h ago', { count: Math.round(minutes / 60) });
+  return t('{count}d ago', { count: Math.round(minutes / 1_440) });
 }
 
 function readableError(error: unknown): string {

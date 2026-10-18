@@ -1,3 +1,4 @@
+import { t, localizeStatus } from '../i18n';
 /**
  * useKernel — Hook for managing remote Jupyter kernel WebSocket and cell executions.
  */
@@ -267,8 +268,8 @@ export function useKernel({
     async (cellId: string, code: string) => {
       if (!kernelId || !isWsConnected) {
         const msg = kernelId
-          ? 'Kernel WebSocket is not connected'
-          : 'Kernel not connected';
+          ? t('Kernel WebSocket is not connected')
+          : t('No kernel');
         console.error('[useKernel] Cannot execute:', msg);
         setError(msg);
         onDoneRef.current?.(cellId);
@@ -283,7 +284,7 @@ export function useKernel({
         status === 'unknown' ||
         status === 'error'
       ) {
-        const msg = `Kernel is not ready (status: ${status})`;
+        const msg = t('Kernel is not ready (status: {status})', { status: localizeStatus(status) });
         console.error('[useKernel] Cannot execute:', msg);
         setError(msg);
         onDoneRef.current?.(cellId);
@@ -354,7 +355,7 @@ export function useKernel({
 
   const restart = useCallback(async () => {
     if (!kernelId) {
-      setError('Kernel not connected');
+      setError(t('No kernel'));
       return;
     }
     try {

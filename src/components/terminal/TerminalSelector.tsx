@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 /**
  * TerminalSelector — Modal/Panel to list active remote terminals or create a new one.
  */
@@ -28,7 +29,7 @@ export function TerminalSelector({ serverId, onSelectTerminal, onClose: _onClose
       const list = await jupyterListTerminals(serverId);
       setTerminals(list);
     } catch (err: any) {
-      setError(typeof err === 'string' ? err : err.message || 'Failed to fetch terminals');
+      setError(typeof err === 'string' ? err : err.message || t('Failed to fetch terminals'));
     } finally {
       setLoading(false);
     }
@@ -57,7 +58,7 @@ export function TerminalSelector({ serverId, onSelectTerminal, onClose: _onClose
       const newTerm = await jupyterCreateTerminal(serverId);
       onSelectTerminal(newTerm.name);
     } catch (err: any) {
-      setError(typeof err === 'string' ? err : err.message || 'Failed to create terminal');
+      setError(typeof err === 'string' ? err : err.message || t('Failed to create terminal'));
       setLoading(false);
     }
   };
@@ -68,7 +69,7 @@ export function TerminalSelector({ serverId, onSelectTerminal, onClose: _onClose
       await jupyterDeleteTerminal(name, serverId);
       await fetchTerminals();
     } catch (err: any) {
-      setError(typeof err === 'string' ? err : err.message || 'Failed to delete terminal');
+      setError(typeof err === 'string' ? err : err.message || t('Failed to delete terminal'));
     }
   };
 
@@ -76,13 +77,13 @@ export function TerminalSelector({ serverId, onSelectTerminal, onClose: _onClose
     <div className="flex flex-col h-full bg-dark-surface border-r border-dark-border text-gray-200 select-none">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-dark-border bg-dark-bg/50">
-        <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">Remote Terminals</h3>
+        <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">{t('Remote Terminals')}</h3>
         <div className="flex items-center gap-1">
           <button
             onClick={fetchTerminals}
             disabled={loading}
             className="p-1 hover:bg-dark-bg text-gray-400 hover:text-gray-200 rounded transition-colors text-xs"
-            title="Refresh List"
+            title={t('Refresh List')}
           >
             ↻
           </button>
@@ -90,10 +91,9 @@ export function TerminalSelector({ serverId, onSelectTerminal, onClose: _onClose
             onClick={handleCreate}
             disabled={loading}
             className="px-2 py-0.5 bg-brand-primary hover:bg-brand-primary/80 text-white rounded text-xs font-medium transition-colors flex items-center gap-1 shadow-sm"
-            title="Create New Terminal"
+            title={t('Create New Terminal')}
           >
-            <span>+</span> New
-          </button>
+            <span>+</span> {t('New')}</button>
         </div>
       </div>
 
@@ -107,16 +107,16 @@ export function TerminalSelector({ serverId, onSelectTerminal, onClose: _onClose
       {/* Terminal List */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {loading && terminals.length === 0 ? (
-          <div className="p-4 text-center text-xs text-gray-500">Loading terminal sessions...</div>
+          <div className="p-4 text-center text-xs text-gray-500">{t('Loading terminal sessions...')}</div>
         ) : terminals.length === 0 ? (
           <div className="p-6 text-center flex flex-col items-center gap-2 text-gray-500">
             <span className="text-2xl">💻</span>
-            <p className="text-xs">No active terminal sessions.</p>
+            <p className="text-xs">{t('No active terminal sessions.')}</p>
             <button
               onClick={handleCreate}
               className="mt-1 px-3 py-1 bg-dark-bg hover:bg-dark-border text-gray-200 rounded text-xs font-medium transition-colors"
             >
-              + Launch First Terminal
+              {t('+ Launch First Terminal')}
             </button>
           </div>
         ) : (
@@ -130,15 +130,15 @@ export function TerminalSelector({ serverId, onSelectTerminal, onClose: _onClose
                 <span className="text-emerald-400 font-mono text-sm">$&gt;</span>
                 <div className="flex flex-col min-w-0">
                   <span className="text-xs font-mono font-medium text-gray-200 truncate">
-                    terminal: {term.name}
+                    {t('terminal:')} {term.name}
                   </span>
-                  <span className="text-[10px] text-gray-500">Active bash/zsh session</span>
+                  <span className="text-[10px] text-gray-500">{t('Active bash/zsh session')}</span>
                 </div>
               </div>
               <button
                 onClick={(e) => handleDelete(e, term.name)}
                 className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-500/20 text-gray-400 hover:text-red-400 rounded transition-all text-xs"
-                title="Kill Terminal Session"
+                title={t('Kill Terminal Session')}
               >
                 ✕
               </button>

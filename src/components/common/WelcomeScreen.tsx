@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 /**
  * WelcomeScreen — Displayed in the editor area when no file is open.
  */
@@ -14,34 +15,34 @@ export function WelcomeScreen() {
         </div>
         <h1 className="welcome-screen__title">LabNexus</h1>
         <p className="welcome-screen__subtitle">
-          Remote JupyterLab Client with AI Agent
+          {t('Remote JupyterLab Client with AI Agent')}
         </p>
 
         <div className="welcome-screen__actions">
           <div className="welcome-action">
             <span className="welcome-action__icon">🔌</span>
             <div>
-              <h3 className="welcome-action__title">Connect to Server</h3>
+              <h3 className="welcome-action__title">{t('Connect to Server')}</h3>
               <p className="welcome-action__desc">
-                Open the Explorer panel to connect to a remote Jupyter server
+                {t('Open the Explorer panel to connect to a remote Jupyter server')}
               </p>
             </div>
           </div>
           <div className="welcome-action">
             <span className="welcome-action__icon">📓</span>
             <div>
-              <h3 className="welcome-action__title">Open Notebook</h3>
+              <h3 className="welcome-action__title">{t('Open Notebook')}</h3>
               <p className="welcome-action__desc">
-                Browse and open remote notebooks for editing and execution
+                {t('Browse and open remote notebooks for editing and execution')}
               </p>
             </div>
           </div>
           <div className="welcome-action">
             <span className="welcome-action__icon">🤖</span>
             <div>
-              <h3 className="welcome-action__title">AI Agent</h3>
+              <h3 className="welcome-action__title">{t('AI Agent')}</h3>
               <p className="welcome-action__desc">
-                Use the AI agent to analyze data and automate tasks
+                {t('Use the AI agent to analyze data and automate tasks')}
               </p>
             </div>
           </div>
@@ -49,7 +50,7 @@ export function WelcomeScreen() {
 
         <div className="welcome-screen__shortcuts">
           <p className="welcome-screen__shortcut-hint">
-            Press the sidebar icons to get started
+            {t('Press the sidebar icons to get started')}
           </p>
         </div>
       </div>

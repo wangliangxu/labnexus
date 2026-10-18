@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import React from 'react';
 import type { CellOutput } from '../../types/jupyter';
 
@@ -70,7 +71,7 @@ export const CellOutputView: React.FC<CellOutputViewProps> = ({ outputs }) => {
               <div key={index} className={outImage}>
                 <img
                   src={`data:image/png;base64,${base64Png}`}
-                  alt="Plot output"
+                  alt={t('Plot output')}
                   className="max-w-full max-h-[520px] object-contain"
                 />
               </div>
@@ -83,7 +84,7 @@ export const CellOutputView: React.FC<CellOutputViewProps> = ({ outputs }) => {
               <div key={index} className={outImage}>
                 <img
                   src={`data:image/jpeg;base64,${base64Jpeg}`}
-                  alt="Plot output"
+                  alt={t('Plot output')}
                   className="max-w-full max-h-[520px] object-contain"
                 />
               </div>

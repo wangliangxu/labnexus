@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 /**
  * ConnectionPanel — Server connection form with proxy configuration.
  */
@@ -64,18 +65,18 @@ export function ConnectionPanel({ onConnect, onConnectHub, isConnecting }: Conne
   return (
     <div className="connection-panel">
       <div className="panel-header">
-        <h3 className="panel-header__title">Connect to Server</h3>
+        <h3 className="panel-header__title">{t('Connect to Server')}</h3>
       </div>
 
       <form className="connection-form" onSubmit={handleSubmit}>
         <div className="form-group">
           <label className="form-label" htmlFor="conn-name">
-            Name
+            {t('Name')}
           </label>
           <input
             id="conn-name"
             type="text"
-            placeholder="My Jupyter Server"
+            placeholder={t('My Jupyter Server')}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
@@ -83,7 +84,7 @@ export function ConnectionPanel({ onConnect, onConnectHub, isConnecting }: Conne
 
         <div className="form-group">
           <label className="form-label" htmlFor="conn-url">
-            Server URL <span className="required">*</span>
+            {t('Server URL')} <span className="required">*</span>
           </label>
           <input
             id="conn-url"
@@ -102,26 +103,26 @@ export function ConnectionPanel({ onConnect, onConnectHub, isConnecting }: Conne
             className={`auth-mode-tab ${authMode === 'token' ? 'active' : ''}`}
             onClick={() => setAuthMode('token')}
           >
-            Token Auth
+            {t('Token Auth')}
           </button>
           <button
             type="button"
             className={`auth-mode-tab ${authMode === 'tljh' ? 'active' : ''}`}
             onClick={() => setAuthMode('tljh')}
           >
-            TLJH / Login
+            {t('TLJH / Login')}
           </button>
         </div>
 
         {authMode === 'token' ? (
           <div className="form-group animate-slide-in">
             <label className="form-label" htmlFor="conn-token">
-              Token
+              {t('Token')}
             </label>
             <input
               id="conn-token"
               type="password"
-              placeholder="Authentication token"
+              placeholder={t('Authentication token')}
               value={token}
               onChange={(e) => setToken(e.target.value)}
             />
@@ -130,12 +131,12 @@ export function ConnectionPanel({ onConnect, onConnectHub, isConnecting }: Conne
           <div className="tljh-auth-fields animate-slide-in">
             <div className="form-group">
               <label className="form-label" htmlFor="conn-username">
-                Username <span className="required">*</span>
+                {t('Username')} <span className="required">*</span>
               </label>
               <input
                 id="conn-username"
                 type="text"
-                placeholder="JupyterHub username"
+                placeholder={t('JupyterHub username')}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required={authMode === 'tljh'}
@@ -143,12 +144,12 @@ export function ConnectionPanel({ onConnect, onConnectHub, isConnecting }: Conne
             </div>
             <div className="form-group">
               <label className="form-label" htmlFor="conn-password">
-                Password <span className="required">*</span>
+                {t('Password')} <span className="required">*</span>
               </label>
               <input
                 id="conn-password"
                 type="password"
-                placeholder="JupyterHub password"
+                placeholder={t('JupyterHub password')}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required={authMode === 'tljh'}
@@ -165,7 +166,7 @@ export function ConnectionPanel({ onConnect, onConnectHub, isConnecting }: Conne
               checked={showProxy}
               onChange={(e) => setShowProxy(e.target.checked)}
             />
-            <span>Use Proxy (SOCKS / SSH -D)</span>
+            <span>{t('Use Proxy (SOCKS / SSH -D)')}</span>
           </label>
         </div>
 
@@ -174,7 +175,7 @@ export function ConnectionPanel({ onConnect, onConnectHub, isConnecting }: Conne
           <div className="proxy-config animate-slide-in">
             <div className="form-group">
               <label className="form-label" htmlFor="proxy-type">
-                Proxy Type
+                {t('Proxy Type')}
               </label>
               <select
                 id="proxy-type"
@@ -191,7 +192,7 @@ export function ConnectionPanel({ onConnect, onConnectHub, isConnecting }: Conne
             <div className="form-row">
               <div className="form-group form-group--flex">
                 <label className="form-label" htmlFor="proxy-host">
-                  Host
+                  {t('Host')}
                 </label>
                 <input
                   id="proxy-host"
@@ -203,7 +204,7 @@ export function ConnectionPanel({ onConnect, onConnectHub, isConnecting }: Conne
               </div>
               <div className="form-group form-group--port">
                 <label className="form-label" htmlFor="proxy-port">
-                  Port
+                  {t('Port')}
                 </label>
                 <input
                   id="proxy-port"
@@ -215,7 +216,7 @@ export function ConnectionPanel({ onConnect, onConnectHub, isConnecting }: Conne
               </div>
             </div>
             <p className="form-hint">
-              For SSH tunnel: <code>ssh -D 1080 user@server</code>
+              {t('For SSH tunnel:')} <code>ssh -D 1080 user@server</code>
             </p>
           </div>
         )}
@@ -231,10 +232,9 @@ export function ConnectionPanel({ onConnect, onConnectHub, isConnecting }: Conne
         >
           {isConnecting ? (
             <>
-              <span className="animate-spin">⟳</span> Connecting...
-            </>
+              <span className="animate-spin">⟳</span> {t('Connecting...')}</>
           ) : (
-            'Connect'
+            t('Connect')
           )}
         </button>
       </form>

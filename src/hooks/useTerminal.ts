@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 /**
  * useTerminal — Hook for managing remote Jupyter Terminal WebSocket sessions.
  */
@@ -51,7 +52,7 @@ export function useTerminal({
       await jupyterConnectTerminal(terminalName, serverId);
       setStatus('connected');
     } catch (err: any) {
-      setError(typeof err === 'string' ? err : err.message || 'Failed to connect terminal');
+      setError(typeof err === 'string' ? err : err.message || t('Failed to connect terminal'));
       setStatus('error');
     }
   }, [terminalName, serverId]);

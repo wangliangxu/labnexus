@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 /**
  * WorkbenchTabs — Multi-tab navigation bar for IDE workspace.
  * Supports Notebooks, Terminals, and Settings tabs with dirty indicator and close actions.
@@ -42,6 +43,8 @@ export function WorkbenchTabs({
       {/* Tabs List */}
       <div className="flex items-center gap-1 h-full overflow-x-auto">
         {tabs.map((tab) => {
+          const title = tab.type === 'terminal' && tab.data?.terminalName
+            ? `${t('terminal:')} ${tab.data.terminalName}` : tab.title;
           const isActive = tab.id === activeTabId;
           return (
             <div
@@ -54,7 +57,7 @@ export function WorkbenchTabs({
                 borderBottomColor: isActive ? 'var(--color-primary)' : 'transparent',
                 boxShadow: isActive ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
               }}
-              title={`${tab.title}${tab.isDirty ? ' (Unsaved changes)' : ''}`}
+              title={`${title}${tab.isDirty ? t(' (Unsaved changes)') : ''}`}
             >
               {/* Tab Icon */}
               <span className="text-sm shrink-0">
@@ -69,7 +72,7 @@ export function WorkbenchTabs({
               </span>
 
               {/* Title */}
-              <span className="truncate min-w-[40px]">{tab.title}</span>
+              <span className="truncate min-w-[40px]">{title}</span>
 
               {/* Dirty Indicator / Close Button */}
               <div className="flex items-center shrink-0 ml-1">
@@ -77,7 +80,7 @@ export function WorkbenchTabs({
                   <span
                     className="w-2 h-2 rounded-full group-hover:hidden"
                     style={{ background: 'var(--color-warning)' }}
-                    title="Unsaved changes"
+                    title={t('Unsaved changes')}
                   />
                 ) : null}
                 <button
@@ -89,7 +92,7 @@ export function WorkbenchTabs({
                     tab.isDirty ? 'hidden group-hover:block' : 'opacity-60 group-hover:opacity-100'
                   }`}
                   style={{ color: 'var(--text-tertiary)' }}
-                  title="Close Tab"
+                  title={t('Close Tab')}
                 >
                   ✕
                 </button>
@@ -106,9 +109,9 @@ export function WorkbenchTabs({
             onClick={onNewTerminal}
             className="p-1 rounded transition-colors text-xs flex items-center gap-1"
             style={{ color: 'var(--text-tertiary)' }}
-            title="Open Remote Terminal"
+            title={t('Open Remote Terminal')}
           >
-            <span>+</span> <span className="text-[11px] font-mono">💻 Terminal</span>
+            <span>+</span> <span className="text-[11px] font-mono">{t('💻 Terminal')}</span>
           </button>
         )}
       </div>

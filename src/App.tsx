@@ -1,3 +1,5 @@
+import { t } from './i18n';
+import { useLocale } from './i18n';
 /**
  * LabNexus — Main application entry point.
  * Integrated with multi-tab workbench, remote terminals, dynamic theme system, and AI Agent.
@@ -40,6 +42,7 @@ import './index.css';
 import './components/agent/Agent.css';
 
 function App() {
+  useLocale();
   const {
     servers,
     activeServerId,
@@ -324,11 +327,11 @@ function App() {
         {servers.length > 0 && (
           <div style={{ borderBottom: '1px solid var(--border-subtle)', flexShrink: 0, maxHeight: '40%', overflowY: 'auto' }}>
             <div className="panel-header" style={{ padding: '8px 12px' }}>
-              <h3 className="panel-header__title">Servers</h3>
+              <h3 className="panel-header__title">{t('Servers')}</h3>
               <button
                 className="btn btn-icon btn-ghost"
                 onClick={() => setViewMode('connect')}
-                title="Add Server"
+                title={t('Add Server')}
                 style={{ fontSize: '16px' }}
               >
                 +
@@ -373,7 +376,7 @@ function App() {
                           );
                           reconnect(server.config.id);
                         }}
-                        title="Reconnect"
+                        title={t('Reconnect')}
                         disabled={isConnecting}
                         style={{ fontSize: '12px' }}
                       >
@@ -391,8 +394,8 @@ function App() {
                         }
                       }}
                       title={server.status === 'connected'
-                        ? server.config.id === LOCAL_JUPYTER_SERVER_ID ? '停止本地服务' : 'Disconnect'
-                        : 'Forget'}
+                        ? server.config.id === LOCAL_JUPYTER_SERVER_ID ? t('Stop local server') : t('Disconnect')
+                        : t('Forget')}
                       style={{ fontSize: '12px' }}
                     >
                       ✕
@@ -470,7 +473,7 @@ function App() {
                 disabled={isConnecting}
                 type="button"
               >
-                {isConnecting ? 'Restarting...' : 'Restart server'}
+                {isConnecting ? t('Restarting...') : t('Restart server')}
               </button>
             )}
           </div>
@@ -545,7 +548,7 @@ function App() {
                           className="flex-1 flex flex-col items-center justify-center gap-3 w-full h-full"
                           style={{ background: 'var(--bg-editor)', color: 'var(--text-secondary)' }}
                         >
-                          <p className="text-sm font-medium">Text editor for {tab.title} coming soon</p>
+                          <p className="text-sm font-medium">{t('Text editor for {name} coming soon', { name: tab.title })}</p>
                           <button
                             onClick={() => handleCloseTab(tab.id)}
                             className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
@@ -555,7 +558,7 @@ function App() {
                               border: '1px solid var(--border-default)',
                             }}
                           >
-                            Close File
+                            {t('Close File')}
                           </button>
                         </div>
                       )}

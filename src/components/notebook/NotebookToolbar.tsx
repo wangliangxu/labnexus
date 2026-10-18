@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import React from 'react';
 import {
   Save,
@@ -98,14 +99,14 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
         return (
           <span style={{ ...badgeStyle, color: 'var(--color-nb-status-idle)' }}>
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'currentColor' }} />
-            Idle
+            {t('Idle')}
           </span>
         );
       case 'busy':
         return (
           <span style={{ ...badgeStyle, color: 'var(--color-nb-status-busy)' }}>
             <Loader2 size={13} className="animate-spin" />
-            Busy
+            {t('Busy')}
           </span>
         );
       case 'starting':
@@ -113,7 +114,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
         return (
           <span style={{ ...badgeStyle, color: 'var(--color-nb-status-busy)' }}>
             <Loader2 size={13} className="animate-spin" />
-            {status === 'starting' ? 'Starting...' : 'Restarting...'}
+            {status === 'starting' ? t('Starting...') : t('Restarting...')}
           </span>
         );
       case 'dead':
@@ -121,7 +122,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
         return (
           <span style={{ ...badgeStyle, color: 'var(--color-nb-status-error)' }}>
             <AlertCircle size={13} />
-            {status === 'dead' ? 'Dead' : 'Error'}
+            {status === 'dead' ? t('Dead') : t('Error')}
           </span>
         );
       case 'disconnected':
@@ -137,7 +138,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
             ) : (
               <WifiOff size={13} />
             )}
-            <span>{isConnecting ? 'Connecting...' : 'Disconnected (Connect)'}</span>
+            <span>{isConnecting ? t('Connecting...') : t('Disconnected (Connect)')}</span>
           </button>
         );
     }
@@ -162,7 +163,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
         <button
           onClick={onSave}
           disabled={!isDirty || isSaving}
-          title="Save Notebook (Ctrl+S / Cmd+S)"
+          title={t('Save Notebook (Ctrl+S / Cmd+S)')}
           style={{ ...tbBtnStyle, opacity: (!isDirty || isSaving) ? 0.45 : 1 }}
         >
           {isSaving ? (
@@ -179,14 +180,14 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
           background: 'var(--color-nb-toolbar-border)',
         }} />
 
-        <button onClick={onAddCode} title="Add Code Cell Below" style={tbBtnStyle}>
+        <button onClick={onAddCode} title={t('Add Code Cell Below')} style={tbBtnStyle}>
           <Plus size={15} />
-          <span>Code</span>
+          <span>{t('Code')}</span>
         </button>
 
-        <button onClick={onAddMarkdown} title="Add Markdown Cell Below" style={tbBtnStyle}>
+        <button onClick={onAddMarkdown} title={t('Add Markdown Cell Below')} style={tbBtnStyle}>
           <Plus size={15} />
-          <span>Markdown</span>
+          <span>{t('Markdown')}</span>
         </button>
       </div>
 
@@ -206,14 +207,14 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
             colorScheme: 'auto',
           }}
           value={activeCellType}
-          title="Cell Type"
+          title={t('Cell Type')}
           onChange={(event) =>
             onActiveCellTypeChange(event.target.value as CellType)
           }
         >
-          <option value="code">Code</option>
-          <option value="markdown">Markdown</option>
-          <option value="raw">Raw</option>
+          <option value="code">{t('Code')}</option>
+          <option value="markdown">{t('Markdown')}</option>
+          <option value="raw">{t('Raw')}</option>
         </select>
       </div>
 
@@ -222,17 +223,17 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
         <button
           onClick={onRunSelected}
           disabled={!canRun}
-          title="Run Selected Cell (Ctrl/Cmd+Enter)"
+          title={t('Run Selected Cell (Ctrl/Cmd+Enter)')}
           style={{ ...tbBtnPrimaryStyle, opacity: !canRun ? 0.45 : 1 }}
         >
           <Play size={15} fill="currentColor" />
-          <span>Run</span>
+          <span>{t('Run')}</span>
         </button>
 
         <button
           onClick={onInterrupt}
           disabled={status !== 'busy'}
-          title="Interrupt Kernel"
+          title={t('Interrupt Kernel')}
           style={{ ...tbBtnStyle, opacity: status !== 'busy' ? 0.45 : 1 }}
         >
           <Square size={14} fill="currentColor" />
@@ -240,7 +241,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
 
         <button
           onClick={onRestart}
-          title="Restart Kernel"
+          title={t('Restart Kernel')}
           style={tbBtnStyle}
         >
           <RotateCcw size={15} />
@@ -249,11 +250,11 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
         <button
           onClick={onRunAll}
           disabled={!canRun}
-          title="Run All Cells"
+          title={t('Run All Cells')}
           style={{ ...tbBtnStyle, opacity: !canRun ? 0.45 : 1 }}
         >
           <Play size={15} fill="currentColor" />
-          <span>Run All</span>
+          <span>{t('Run All')}</span>
         </button>
       </div>
 
@@ -280,7 +281,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
               width: 7, height: 7, flexShrink: 0, borderRadius: '50%',
               background: 'var(--color-nb-dirty)',
             }}
-            title="Unsaved changes"
+            title={t('Unsaved changes')}
           />
         )}
       </div>

@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import React, { useEffect, useState } from 'react';
 import type { Skill } from '../../types/agent';
 import { agentListSkills } from '../../services/tauriIpc';
@@ -41,7 +42,7 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
           <div className="flex items-center gap-2">
             <span className="text-xl">⚡</span>
             <h3 className="text-lg font-bold text-gray-100">
-              Scientific Workflow Skills
+              {t('Scientific Workflow Skills')}
             </h3>
           </div>
           <button
@@ -55,7 +56,7 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
         <div className="pt-4 pb-2">
           <input
             type="text"
-            placeholder="Search skills (e.g. data analysis, debug, report)..."
+            placeholder={t('Search skills (e.g. data analysis, debug, report)...')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-brand-primary"
@@ -65,11 +66,11 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
         <div className="flex-1 overflow-y-auto pt-2 grid grid-cols-1 gap-2">
           {loading ? (
             <div className="text-center py-8 text-gray-400 text-sm">
-              Loading built-in scientific workflows...
+              {t('Loading built-in scientific workflows...')}
             </div>
           ) : filteredSkills.length === 0 ? (
             <div className="text-center py-8 text-gray-500 text-sm">
-              No matching workflow skills found.
+              {t('No matching workflow skills found.')}
             </div>
           ) : (
             filteredSkills.map((skill) => (
@@ -96,7 +97,7 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
                 </p>
                 <div className="flex items-center gap-2 mt-1">
                   <span className="text-[10px] text-gray-400 font-medium">
-                    Steps: {skill.steps.length}
+                    {t('Steps:')} {skill.steps.length}
                   </span>
                   <div className="flex gap-1 flex-wrap">
                     {skill.trigger_keywords.slice(0, 3).map((kw, i) => (
@@ -117,7 +118,7 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
         {selectedSkill && (
           <div className="mt-4 pt-4 border-t border-dark-border bg-dark-bg/50 p-3 rounded-xl">
             <h4 className="text-xs font-bold text-brand-primary uppercase tracking-wider mb-2">
-              Workflow Steps Preview
+              {t('Workflow Steps Preview')}
             </h4>
             <div className="max-h-32 overflow-y-auto flex flex-col gap-1.5">
               {selectedSkill.steps.map((st) => (
@@ -140,7 +141,7 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
             onClick={onClose}
             className="px-4 py-2 text-xs font-medium text-gray-400 hover:text-gray-100 rounded-lg hover:bg-dark-border transition-colors"
           >
-            Cancel
+            {t('Cancel')}
           </button>
           <button
             disabled={!selectedSkill}
@@ -152,7 +153,7 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
             }}
             className="px-5 py-2 text-xs font-bold text-white bg-brand-primary hover:bg-brand-primary/80 rounded-lg shadow-brand-primary/20 transition-all disabled:opacity-50"
           >
-            Run Workflow Skill
+            {t('Run Workflow Skill')}
           </button>
         </div>
       </div>
