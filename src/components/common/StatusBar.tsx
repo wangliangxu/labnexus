@@ -2,6 +2,7 @@
  * StatusBar — Bottom bar showing connection status and app info.
  */
 
+import { Sparkles } from 'lucide-react';
 import type { ServerConnection } from '../../types/jupyter';
 import './StatusBar.css';
 
@@ -52,7 +53,7 @@ export function StatusBar({
           }`}
           title="Toggle ReAct AI Agent Panel"
         >
-          <span>⚡️</span>
+          <Sparkles size={13} strokeWidth={1.5} aria-hidden="true" />
           <span>AI Agent</span>
         </button>
 

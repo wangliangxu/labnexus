@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
 import {
-  Activity, Bot, ChevronDown, Database, FileText, GripVertical, History,
-  Maximize2, MessageSquarePlus, Minimize2, MoreHorizontal, Pencil, Plus, Send,
-  Square, Wrench, X, Zap,
+  Activity, Sparkles, ChevronDown, Database, FileText, GripVertical, History,
+  Maximize2, MessageSquarePlus, Minimize2, MoreHorizontal, Pencil, Send,
+  Square, Trash2, X, Zap,
 } from 'lucide-react';
 import { useAgent } from '../../hooks/useAgent';
 import type { AgentChatContext, AgentSessionListItem, AiConfig, Skill } from '../../types/agent';
@@ -46,6 +46,8 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
   const [isSkillOpen, setIsSkillOpen] = useState(false);
   const [isKnowledgeOpen, setIsKnowledgeOpen] = useState(false);
   const [isTraceOpen, setIsTraceOpen] = useState(false);
+  const sessionPickerRef = useRef<HTMLDivElement>(null);
+  const moreMenuRef = useRef<HTMLDetailsElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -100,6 +102,37 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
     input.style.height = `${Math.min(input.scrollHeight, 180)}px`;
   }, [inputPrompt]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const dismissMenus = (event: PointerEvent) => {
+      if (!(event.target instanceof Node)) return;
+      if (!sessionPickerRef.current?.contains(event.target)) setSessionMenuOpen(false);
+      if (moreMenuRef.current && !moreMenuRef.current.contains(event.target)) moreMenuRef.current.open = false;
+    };
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (moreMenuRef.current?.open) {
+        moreMenuRef.current.open = false;
+        moreMenuRef.current.querySelector('summary')?.focus();
+      }
+      if (sessionMenuOpen) {
+        setSessionMenuOpen(false);
+        sessionPickerRef.current?.querySelector('button')?.focus();
+      }
+    };
+    window.addEventListener('pointerdown', dismissMenus);
+    window.addEventListener('keydown', onEscape);
+    return () => {
+      window.removeEventListener('pointerdown', dismissMenus);
+      window.removeEventListener('keydown', onEscape);
+    };
+  }, [isOpen, sessionMenuOpen]);
+
+  const openFromMenu = (action: () => void) => {
+    if (moreMenuRef.current) moreMenuRef.current.open = false;
+    action();
+  };
+
   const currentSession = sessions.find((session) => session.session_id === sessionId);
   const contextChips = useMemo(() => buildContextChips(workspaceContext), [workspaceContext]);
   const visibleContextChips = contextChips.filter((chip) => !excludedContext.includes(chip.id));
@@ -108,7 +141,7 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
     : aiConfig ? `Remote · ${aiConfig.remote.chat_model}` : 'Provider unavailable';
   const runLabel = status === 'running'
     ? activeToolCall?.status === 'requires_confirmation' ? 'Waiting for approval' : activeToolCall?.status === 'running' ? 'Running tool' : 'Thinking'
-    : status === 'error' ? 'Needs attention' : workspaceContext.kernel_id ? 'Ready with kernel' : 'Ready · No kernel';
+    : 'Needs attention';
 
   if (!isOpen) return null;
 
@@ -188,56 +221,57 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
         {!isFullscreen && <div className="agent-workspace__resizer" onMouseDown={startResize} role="separator" aria-label="Resize AI Agent panel"><GripVertical size={16} /></div>}
         <header className="agent-workspace__header">
           <div className="agent-workspace__identity">
-            <div className="agent-workspace__logo"><Bot size={19} /></div>
-            <div className="min-w-0">
-              <h2>LabNexus Assistant</h2>
-              <div className="agent-workspace__status"><span className={`agent-status-dot ${status}`} />{runLabel}</div>
+            <Sparkles size={18} strokeWidth={1.5} aria-hidden="true" />
+            <div className="agent-session-picker" ref={sessionPickerRef}>
+              <button type="button" className="agent-session-picker__trigger" onClick={() => {
+                setSessionMenuOpen((value) => !value);
+                if (moreMenuRef.current) moreMenuRef.current.open = false;
+              }} aria-label="Choose conversation" aria-expanded={sessionMenuOpen} aria-controls="agent-conversations">
+                <span>{currentSession?.title || 'Assistant'}</span><ChevronDown size={14} />
+              </button>
+              {sessionMenuOpen && (
+                <div className="agent-session-menu" id="agent-conversations">
+                  <div className="agent-session-menu__heading"><span>Conversations</span></div>
+                  <div className="agent-session-menu__list">
+                    {sessions.length === 0 && <p className="agent-menu-empty">No saved conversations yet.</p>}
+                    {sessions.map((session) => (
+                      <button type="button" key={session.session_id} className={session.session_id === sessionId ? 'active' : ''} onClick={() => { setSessionId(session.session_id); setSessionMenuOpen(false); }}>
+                        <span>{session.title}</span><small>{formatRelativeTime(session.updated_at)} · {session.message_count} messages</small>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           <div className="agent-workspace__header-actions">
-            <button type="button" onClick={() => setIsTraceOpen(true)} aria-label="Open execution traces" title="Execution traces"><Activity size={16} /></button>
-            <button type="button" onClick={onToggleFullscreen} aria-label={isFullscreen ? 'Exit full screen Agent' : 'Open full screen Agent'} title={isFullscreen ? 'Exit full screen' : 'Full screen'}>
-              {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-            </button>
-            <button type="button" onClick={onClose} aria-label="Close AI Agent" title="Close"><X size={17} /></button>
-          </div>
-        </header>
-
-        <div className="agent-runtime-bar">
-          <span title={providerName}><Zap size={12} />{providerName}</span>
-          <span><Wrench size={12} />{mcpCount} MCP</span>
-          <span><Database size={12} />{workspaceContext.kernel_status || (workspaceContext.kernel_id ? 'kernel' : 'offline')}</span>
-        </div>
-
-        <div className="agent-session-bar">
-          <div className="agent-session-picker">
-            <button type="button" className="agent-session-picker__trigger" onClick={() => setSessionMenuOpen((value) => !value)} aria-expanded={sessionMenuOpen}>
-              <div><span>{currentSession?.title || 'New Chat'}</span><small>{currentSession?.message_count || messages.length} messages</small></div>
-              <ChevronDown size={15} />
-            </button>
-            {sessionMenuOpen && (
-              <div className="agent-session-menu">
-                <div className="agent-session-menu__heading"><span>Conversations</span><button type="button" onClick={createSession} aria-label="New conversation"><Plus size={15} /></button></div>
-                <div className="agent-session-menu__list">
-                  {sessions.map((session) => (
-                    <button type="button" key={session.session_id} className={session.session_id === sessionId ? 'active' : ''} onClick={() => { setSessionId(session.session_id); setSessionMenuOpen(false); }}>
-                      <span>{session.title}</span><small>{formatRelativeTime(session.updated_at)} · {session.message_count}</small>
-                    </button>
-                  ))}
+            <button type="button" onClick={createSession} disabled={status === 'running'} aria-label="New conversation" title="New conversation"><MessageSquarePlus size={16} strokeWidth={1.5} /></button>
+            <details className="agent-more-menu" ref={moreMenuRef} onToggle={(event) => { if (event.currentTarget.open) setSessionMenuOpen(false); }}>
+              <summary aria-label="More assistant options" title="More options"><MoreHorizontal size={18} strokeWidth={1.5} /></summary>
+              <div className="agent-more-menu__content">
+                <button type="button" onClick={() => openFromMenu(() => setIsSkillOpen(true))}><Zap size={15} />Skills</button>
+                <button type="button" onClick={() => openFromMenu(() => setIsKnowledgeOpen(true))}><Database size={15} />Knowledge</button>
+                <button type="button" onClick={() => openFromMenu(() => setIsTraceOpen(true))}><Activity size={15} />Execution traces</button>
+                <hr />
+                <button type="button" onClick={() => openFromMenu(onToggleFullscreen)}>{isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}{isFullscreen ? 'Exit full screen' : 'Full screen'}</button>
+                <button type="button" disabled={status === 'running'} onClick={() => openFromMenu(() => setRenameTitle(currentSession?.title || 'New Chat'))}><Pencil size={15} />Rename conversation</button>
+                <button type="button" className="danger" disabled={status === 'running'} onClick={() => openFromMenu(() => setDeleteConfirmOpen(true))}><Trash2 size={15} />Delete conversation</button>
+                <div className="agent-more-menu__runtime">
+                  <span title={providerName}>{providerName}</span>
+                  <span>{mcpCount} MCP · {workspaceContext.kernel_status || (workspaceContext.kernel_id ? 'Kernel connected' : 'No kernel')}</span>
                 </div>
               </div>
-            )}
+            </details>
+            <button type="button" onClick={onClose} aria-label="Close AI Agent" title="Close"><X size={17} strokeWidth={1.5} /></button>
           </div>
-          <button type="button" onClick={createSession} aria-label="New conversation" title="New conversation"><MessageSquarePlus size={16} /></button>
-          <button type="button" onClick={() => setRenameTitle(currentSession?.title || 'New Chat')} aria-label="Rename conversation" title="Rename"><Pencil size={15} /></button>
-          <button type="button" onClick={() => setDeleteConfirmOpen(true)} aria-label="Conversation actions" title="Delete conversation"><MoreHorizontal size={16} /></button>
-        </div>
+        </header>
+        {status !== 'idle' && <div className="agent-workspace__status" role="status"><span className={`agent-status-dot ${status}`} />{runLabel}</div>}
 
         <main className="agent-conversation" aria-live="polite">
           {messages.length === 0 && !currentStreamingAnswer && (
             <div className="agent-empty-state">
-              <div><Zap size={25} /></div><h3>What would you like to work on?</h3>
-              <p>Analyze a notebook, inspect an error, transform data, or ask the Agent to run a scientific workflow.</p>
+              <h3>How can I help?</h3>
+              <p>Ask about your notebook or describe a task.</p>
               <div className="agent-empty-state__actions">
                 <button type="button" onClick={() => setInputPrompt('Summarize the current notebook and identify the next useful analysis step.')}>Summarize notebook</button>
                 <button type="button" onClick={() => setInputPrompt('Inspect the current error and propose a safe fix.')}>Diagnose error</button>
@@ -250,14 +284,14 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
             if (message.role === 'user') return <div key={message.id} className="agent-message agent-message--user"><div>{message.content}</div></div>;
             return (
               <article key={message.id} className="agent-message agent-message--assistant">
-                <div className="agent-message__avatar"><Bot size={14} /></div>
+                <div className="agent-message__avatar"><Sparkles size={14} strokeWidth={1.5} /></div>
                 <div className="agent-message__body">
                   {message.content && <MarkdownMessage content={message.content} onUseCode={(code) => setInputPrompt((current) => `${current}${current ? '\n\n' : ''}${code}`)} />}
                   {message.tool_calls && message.tool_calls.length > 0 && (
-                    <div className="agent-tool-timeline">
-                      <div className="agent-tool-timeline__label"><History size={13} />Execution</div>
+                    <details className="agent-tool-timeline">
+                      <summary><History size={13} />{message.tool_calls.length} tool {message.tool_calls.length === 1 ? 'call' : 'calls'}</summary>
                       {message.tool_calls.map((call) => <ToolExecutionCard key={call.id} call={call} result={messages.find((candidate) => candidate.role === 'tool' && candidate.tool_call_id === call.id)} />)}
-                    </div>
+                    </details>
                   )}
                 </div>
               </article>
@@ -265,7 +299,7 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
           })}
 
           {currentStreamingAnswer && (
-            <article className="agent-message agent-message--assistant"><div className="agent-message__avatar"><Bot size={14} /></div><div className="agent-message__body"><MarkdownMessage content={currentStreamingAnswer} /><span className="agent-stream-cursor" /></div></article>
+            <article className="agent-message agent-message--assistant"><div className="agent-message__avatar"><Sparkles size={14} strokeWidth={1.5} /></div><div className="agent-message__body"><MarkdownMessage content={currentStreamingAnswer} /><span className="agent-stream-cursor" /></div></article>
           )}
 
           {activeToolCall?.status === 'running' && (
@@ -279,25 +313,24 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
         </main>
 
         <footer className="agent-composer">
-          <div className="agent-composer__topbar">
-            <div className="flex items-center gap-1">
-              <button type="button" onClick={() => setIsSkillOpen(true)}><Zap size={13} />Skills</button>
-              <button type="button" onClick={() => setIsKnowledgeOpen(true)}><Database size={13} />Knowledge</button>
+          <details className="agent-context-options">
+            <summary><FileText size={13} /><span>Notebook context</span><small>{injectContext ? `${visibleContextChips.length} attached` : 'Off'}</small><ChevronDown size={12} /></summary>
+            <div className="agent-context-options__content">
+              <label><input type="checkbox" checked={injectContext} onChange={(event) => setInjectContext(event.target.checked)} />Include notebook context</label>
+              {injectContext && <>
+                {visibleContextChips.length > 0 ? <div className="agent-context-chips">
+                  {visibleContextChips.map((chip) => <span key={chip.id} title={chip.value}><FileText size={11} />{chip.label}<button type="button" onClick={() => setExcludedContext((items) => [...items, chip.id])} aria-label={`Remove ${chip.label} context`}><X size={11} /></button></span>)}
+                </div> : <p>No notebook context attached.</p>}
+                {excludedContext.length > 0 && <button type="button" className="agent-context-reset" onClick={() => setExcludedContext([])}>Restore context</button>}
+              </>}
             </div>
-            <label><input type="checkbox" checked={injectContext} onChange={(event) => setInjectContext(event.target.checked)} />Notebook context</label>
-          </div>
-          {injectContext && visibleContextChips.length > 0 && (
-            <div className="agent-context-chips">
-              {visibleContextChips.map((chip) => <span key={chip.id} title={chip.value}><FileText size={11} />{chip.label}<button type="button" onClick={() => setExcludedContext((items) => [...items, chip.id])} aria-label={`Remove ${chip.label} context`}><X size={11} /></button></span>)}
-              {excludedContext.length > 0 && <button type="button" className="agent-context-reset" onClick={() => setExcludedContext([])}>Restore</button>}
-            </div>
-          )}
+          </details>
           <div className="agent-composer__input">
             <textarea ref={inputRef} rows={1} value={inputPrompt} onChange={(event) => setInputPrompt(event.target.value)} onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); handleSend(); }
-            }} placeholder="Ask the Agent to analyze, explain, or act…" disabled={status === 'running'} aria-label="Agent prompt" />
+            }} placeholder="Ask anything about your notebook…" title="Enter to send · Shift+Enter for newline" disabled={status === 'running'} aria-label="Agent prompt" />
             <div className="agent-composer__actions">
-              <span>Enter to send · Shift+Enter for newline</span>
+              <span>Shift+Enter for a new line</span>
               {status === 'running' ? (
                 <div><button type="button" className="stop" onClick={() => cancelTask(false)} title="Stop Agent"><Square size={14} />Stop</button><button type="button" className="interrupt" onClick={() => cancelTask(true)} title="Stop Agent and interrupt kernel"><Zap size={14} /></button></div>
               ) : <button type="button" className="send" onClick={handleSend} disabled={!inputPrompt.trim()} aria-label="Send prompt"><Send size={15} /></button>}
