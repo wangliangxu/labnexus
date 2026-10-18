@@ -154,6 +154,7 @@
   --bg-panel: #ffffff;
   --bg-editor: #ffffff;
   --bg-input: #f5f5f5;
+  --notebook-editor-active-background: #ffffff;
   --bg-hover: #e0e0e0;
   --bg-overlay: rgba(0, 0, 0, 0.4);
   --bg-card: #ffffff;
@@ -194,6 +195,7 @@
   --bg-panel: #212121;
   --bg-editor: #212121;
   --bg-input: #2b2b2b;
+  --notebook-editor-active-background: #111111;
   --bg-hover: #424242;
   --bg-overlay: rgba(0, 0, 0, 0.6);
   --bg-card: #292929;

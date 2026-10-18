@@ -506,10 +506,10 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     }
   };
 
-  const handleAddCell = (type: CellType) => {
+  const handleAddCell = (type: CellType, afterIndex = activeCellIndex) => {
     const newCell = createNotebookCell(type);
-    const insertIdx = activeCellIndex + 1;
     const currentCells = cellsRef.current;
+    const insertIdx = Math.min(afterIndex + 1, currentCells.length);
     const newCells = [
       ...currentCells.slice(0, insertIdx),
       newCell,
@@ -519,6 +519,11 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     setActiveCellIndex(insertIdx);
     setCursorPosition({ cellIndex: insertIdx, line: 0 });
     setIsDirty(true);
+    requestAnimationFrame(() => {
+      const element = cellElementsRef.current.get(newCell.id!);
+      const editor = element?.querySelector<HTMLElement>('.cm-content');
+      (editor ?? element)?.focus();
+    });
   };
 
   const handleCellTypeChange = (index: number, newType: CellType) => {
@@ -669,7 +674,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
                   onChange={(newSource) =>
                     handleCellSourceChange(cell.id || '', idx, newSource)
                   }
-                  onTypeChange={(newType) => handleCellTypeChange(idx, newType)}
+                  onAddCell={(type) => handleAddCell(type, idx)}
                   onRun={() => handleRunCell(idx, 'stay')}
                   onRunAndAdvance={() => handleRunCell(idx, 'advance')}
                   onRunAndInsert={() => handleRunCell(idx, 'insert')}

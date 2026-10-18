@@ -1,13 +1,113 @@
 /* Notebook colors and CodeMirror share the global light/dark palette. */
 
-.notebook-codemirror {
-  font-size: 13px;
+/* Cell actions overlay the top-right corner without reserving layout space. */
+.notebook-cell {
+  --notebook-cell-marker: transparent;
+  --notebook-cell-gutter: 68px;
+  position: relative;
+  container-type: inline-size;
+  margin-top: 0;
+  padding-left: 12px;
+  outline: none;
+  background: transparent;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  column-gap: 12px;
+}
+/* All cell bodies share the execution-count gutter, even without a label. */
+.notebook-cell__body { grid-column: 2; min-width: 0; }
+.notebook-cell__prompt {
+  padding-top: 10px;
+  color: var(--color-nb-prompt);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
+  user-select: none;
+}
+@media (max-width: 760px) {
+  .notebook-cell {
+    --notebook-cell-gutter: 52px;
+    grid-template-columns: 44px minmax(0, 1fr);
+    column-gap: 8px;
+  }
+}
+/* Input and output each own a marker, with a gap between the two areas. */
+.notebook-cell__input,
+.notebook-cell__output { position: relative; }
+.notebook-cell__output { margin-top: 6px; display: flow-root; }
+.notebook-cell__output > :first-child { margin-top: 0; }
+.notebook-cell__input::before,
+.notebook-cell__output::before {
+  content: '';
+  position: absolute;
+  left: calc(-12px - var(--notebook-cell-gutter));
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  border-radius: 2px;
+  background: var(--notebook-cell-marker);
+  pointer-events: none;
+}
+.notebook-cell--active { --notebook-cell-marker: var(--color-nb-cell-active-left); }
+.notebook-cell--executing { --notebook-cell-marker: var(--color-nb-cell-executing-left); }
+.notebook-cell__editor {
+  border: 1px solid var(--color-nb-editor-border);
+  background: var(--color-nb-editor);
+}
+.notebook-cell--active {
+  --color-nb-editor: var(--notebook-editor-active-background);
+  --color-nb-gutter: var(--notebook-editor-active-background);
+}
+.notebook-cell--active .notebook-cell__editor {
+  border-color: var(--color-nb-cell-active-border);
+  box-shadow: inset 0 0 2px var(--color-nb-cell-active-border);
+}
+.notebook-cell__toolbar {
+  position: absolute;
+  top: 0;
+  right: 8px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  max-width: calc(100% - 16px);
+  padding: 2px 3px;
+  border: 1px solid var(--color-nb-cell-border);
+  border-radius: 4px;
+  background: var(--color-nb-toolbar);
+  box-shadow: var(--shadow-sm);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 120ms ease, visibility 120ms ease;
+}
+.notebook-cell:hover .notebook-cell__toolbar,
+.notebook-cell:focus-within .notebook-cell__toolbar,
+.notebook-cell--active .notebook-cell__toolbar {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+.notebook-cell__toolbar button { flex: none; min-height: 24px; }
+.notebook-cell__toolbar-divider { width: 1px; height: 14px; margin: 0 2px; background: var(--color-nb-cell-border); flex: none; }
+@container (max-width: 520px) {
+  .notebook-cell__toolbar { gap: 0; }
+}
+@media (hover: none) {
+  .notebook-cell__toolbar { opacity: 1; visibility: visible; pointer-events: auto; }
 }
 
-.notebook-codemirror .cm-focused {
-  outline: 1px solid var(--color-nb-cell-active-left);
-  outline-offset: -1px;
+.notebook-codemirror {
+  min-width: 0;
+  font-size: 13px;
 }
+/* Markdown wraps at the available cell width and grows with its visual lines. */
+.notebook-codemirror--markdown .cm-editor { height: auto; }
+.notebook-codemirror--markdown .cm-scroller { overflow-x: hidden; }
+.notebook-codemirror--markdown .cm-content { overflow-wrap: anywhere; }
+
+.notebook-codemirror .cm-focused { outline: none; }
 
 .notebook-cell:not(.notebook-cell--active) .cm-activeLine,
 .notebook-cell:not(.notebook-cell--active) .cm-activeLineGutter {
