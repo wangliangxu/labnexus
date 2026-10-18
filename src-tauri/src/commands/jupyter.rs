@@ -99,6 +99,50 @@ pub async fn jupyter_connect(
     Ok(connection_info)
 }
 
+/// Detect an installed local Jupyter entry point without launching a server.
+#[tauri::command]
+pub async fn jupyter_detect_local(
+) -> Result<Option<crate::jupyter::local::LocalInstallation>, AppError> {
+    Ok(crate::jupyter::local::detect().await)
+}
+
+/// Start one owned local process and connect through the normal connection flow.
+#[tauri::command]
+pub async fn jupyter_start_local(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<ServerConnection, AppError> {
+    let mut owned = state.local_jupyter.server.lock().await;
+    if let Some(server) = owned.as_mut() {
+        if server.child.try_wait()?.is_some() {
+            *owned = None;
+        }
+    }
+    if owned.is_none() {
+        let installation = crate::jupyter::local::detect().await.ok_or_else(|| {
+            AppError::JupyterConnection(
+                "未检测到本地 Jupyter，请先运行 python -m pip install jupyterlab，然后重新检测。"
+                    .into(),
+            )
+        })?;
+        *owned = Some(crate::jupyter::local::launch(&installation).await?);
+    }
+    let config = owned.as_ref().unwrap().config.clone();
+    match jupyter_connect(state.clone(), app, config.clone()).await {
+        Ok(connection) => {
+            *state.active_server_id.write().await = Some(config.id);
+            Ok(connection)
+        }
+        Err(error) => {
+            if let Some(mut server) = owned.take() {
+                let _ = server.child.kill().await;
+            }
+            state.connections.write().await.remove(&config.id);
+            Err(error)
+        }
+    }
+}
+
 /// Log into a JupyterHub/TLJH server using username and password, obtain a token,
 /// check/spawn the user's server, and connect to it.
 #[tauri::command]
@@ -303,6 +347,9 @@ pub async fn jupyter_disconnect(
     app: AppHandle,
     server_id: String,
 ) -> Result<(), AppError> {
+    if server_id == crate::jupyter::local::LOCAL_SERVER_ID {
+        state.local_jupyter.stop().await?;
+    }
     let mut connections = state.connections.write().await;
     connections.remove(&server_id);
 

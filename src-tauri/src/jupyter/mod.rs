@@ -8,3 +8,5 @@ pub mod client;
 pub mod terminal_ws;
 pub mod types;
 pub mod ws;
+
+pub mod local;

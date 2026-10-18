@@ -199,3 +199,11 @@ export interface AppError {
   code: string;
   message: string;
 }
+
+export const LOCAL_JUPYTER_SERVER_ID = 'labnexus-local-jupyter';
+
+export interface LocalJupyterInstallation {
+  name: string;
+  executable: string;
+  version: string;
+}

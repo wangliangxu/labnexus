@@ -64,7 +64,13 @@ impl JupyterClient {
         let base_url = Url::parse(&config.base_url)
             .map_err(|e| AppError::JupyterConnection(format!("Invalid URL: {}", e)))?;
 
-        let http = build_http_client(config.proxy.as_ref())?;
+        let http = if config.id == crate::jupyter::local::LOCAL_SERVER_ID {
+            Client::builder().no_proxy()
+                .timeout(std::time::Duration::from_secs(30))
+                .connect_timeout(std::time::Duration::from_secs(10)).build()?
+        } else {
+            build_http_client(config.proxy.as_ref())?
+        };
 
         Ok(JupyterClient {
             http,

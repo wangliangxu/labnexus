@@ -14,6 +14,7 @@ use crate::jupyter::ws::KernelWsManager;
 
 /// Global application state shared across Tauri commands.
 pub struct AppState {
+    pub local_jupyter: crate::jupyter::local::LocalJupyter,
     /// Active Jupyter server connections (server_id → client).
     pub connections: Arc<RwLock<HashMap<String, ManagedConnection>>>,
     /// The currently active/focused server ID.
@@ -53,6 +54,7 @@ impl AppState {
     /// Create a new empty AppState.
     pub fn new() -> Self {
         AppState {
+            local_jupyter: Default::default(),
             connections: Arc::new(RwLock::new(HashMap::new())),
             active_server_id: Arc::new(RwLock::new(None)),
             kernel_ws: Arc::new(KernelWsManager::new()),

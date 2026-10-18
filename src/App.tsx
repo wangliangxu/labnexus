@@ -3,6 +3,8 @@
  * Integrated with multi-tab workbench, remote terminals, dynamic theme system, and AI Agent.
  */
 
+import { LocalJupyterPanel } from './components/explorer/LocalJupyterPanel';
+import { LOCAL_JUPYTER_SERVER_ID } from './types/jupyter';
 import { useState, useMemo, useRef, useCallback, useEffect, type SetStateAction } from 'react';
 import { WorkbenchLayout, type PanelId } from './layouts/WorkbenchLayout';
 import { ConnectionPanel } from './components/explorer/ConnectionPanel';
@@ -45,6 +47,7 @@ function App() {
     error,
     connect,
     connectHub,
+    startLocal,
     disconnect,
     reconnect,
     forget,
@@ -310,6 +313,13 @@ function App() {
     // Default to explorer panel
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+        <LocalJupyterPanel
+          isConnecting={isConnecting}
+          connected={servers.some((server) => server.config.id === LOCAL_JUPYTER_SERVER_ID && server.status === 'connected')}
+          onStart={async () => {
+            if (await startLocal()) setViewMode('explore');
+          }}
+        />
         {/* Server connection list */}
         {servers.length > 0 && (
           <div style={{ borderBottom: '1px solid var(--border-subtle)', flexShrink: 0, maxHeight: '40%', overflowY: 'auto' }}>
@@ -380,7 +390,9 @@ function App() {
                           forget(server.config.id);
                         }
                       }}
-                      title={server.status === 'connected' ? 'Disconnect' : 'Forget'}
+                      title={server.status === 'connected'
+                        ? server.config.id === LOCAL_JUPYTER_SERVER_ID ? '停止本地服务' : 'Disconnect'
+                        : 'Forget'}
                       style={{ fontSize: '12px' }}
                     >
                       ✕

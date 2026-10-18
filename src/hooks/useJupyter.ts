@@ -2,9 +2,10 @@
  * useJupyter — Hook for managing Jupyter server connections.
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { isTauri } from '@tauri-apps/api/core';
+import { LOCAL_JUPYTER_SERVER_ID } from '../types/jupyter';
 import type {
   JupyterServerConfig,
   JupyterHubLoginConfig,
@@ -13,6 +14,7 @@ import type {
   JupyterConnectionEvent,
 } from '../types/jupyter';
 import {
+  jupyterStartLocal,
   jupyterConnect,
   jupyterHubLogin,
   jupyterDisconnect,
@@ -31,6 +33,7 @@ import { normalizeJupyterConnectionErrorMessage } from '../jupyterConnectionErro
 import { connectWithStoppedServerAutoStart } from '../jupyterAutoStart';
 
 interface UseJupyterReturn {
+  startLocal: () => Promise<boolean>;
   /** All server connections */
   servers: ServerConnection[];
   /** ID of the active server */
@@ -62,6 +65,7 @@ interface UseJupyterReturn {
 }
 
 export function useJupyter(): UseJupyterReturn {
+  const localStartPending = useRef(false);
   const [servers, setServers] = useState<ServerConnection[]>([]);
   const [activeServerId, setActiveServerId] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -179,6 +183,31 @@ export function useJupyter(): UseJupyterReturn {
     [activeServerId]
   );
 
+  const startLocal = useCallback(async () => {
+    if (localStartPending.current) return false;
+    localStartPending.current = true;
+    setIsConnecting(true);
+    setError(null);
+    try {
+      const connection = await jupyterStartLocal();
+      setServers((prev) => [
+        ...prev.filter((server) => server.config.id !== LOCAL_JUPYTER_SERVER_ID),
+        connection,
+      ]);
+      setActiveServerId(connection.config.id);
+      return true;
+    } catch (e: unknown) {
+      const message = typeof e === 'object' && e !== null && 'message' in e
+        ? String(e.message) : String(e);
+      setError(message);
+      setServers((prev) => markServerConnectionError(prev, LOCAL_JUPYTER_SERVER_ID, message));
+      return false;
+    } finally {
+      localStartPending.current = false;
+      setIsConnecting(false);
+    }
+  }, []);
+
   const disconnect = useCallback(
     async (serverId: string) => {
       try {
@@ -203,12 +232,16 @@ export function useJupyter(): UseJupyterReturn {
 
   const reconnect = useCallback(
     async (serverId: string) => {
+      if (serverId === LOCAL_JUPYTER_SERVER_ID) {
+        await startLocal();
+        return;
+      }
       const savedServer = servers.find((server) => server.config.id === serverId);
       if (!savedServer) return;
       await connect(savedServer.config);
       setActiveServerId(serverId);
     },
-    [connect, servers]
+    [connect, servers, startLocal]
   );
 
   const forget = useCallback(
@@ -270,6 +303,7 @@ export function useJupyter(): UseJupyterReturn {
   );
 
   return {
+    startLocal,
     servers,
     activeServerId,
     isConnecting,

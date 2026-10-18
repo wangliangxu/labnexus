@@ -202,3 +202,26 @@
 .server-item:hover .server-item__actions {
   opacity: 1;
 }
+
+.local-jupyter {
+  flex-shrink: 0;
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.local-jupyter__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.local-jupyter__path {
+  overflow-wrap: anywhere;
+}
+
+.local-jupyter code {
+  overflow-wrap: anywhere;
+}

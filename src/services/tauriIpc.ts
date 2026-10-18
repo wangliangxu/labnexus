@@ -4,6 +4,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import type {
+  LocalJupyterInstallation,
   JupyterServerConfig,
   JupyterHubLoginConfig,
   ServerConnection,
@@ -44,6 +45,14 @@ export async function jupyterRestartHubServer(
   restartUrl: string
 ): Promise<ServerConnection> {
   return invoke('jupyter_restart_hub_server', { serverId, restartUrl });
+}
+
+export function jupyterDetectLocal(): Promise<LocalJupyterInstallation | null> {
+  return invoke('jupyter_detect_local');
+}
+
+export function jupyterStartLocal(): Promise<ServerConnection> {
+  return invoke('jupyter_start_local');
 }
 
 // ─── Contents API ──────────────────────────────────────────────────

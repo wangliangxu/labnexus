@@ -51,6 +51,8 @@ pub fn run() {
 
     builder
         .invoke_handler(tauri::generate_handler![
+            commands::jupyter::jupyter_detect_local,
+            commands::jupyter::jupyter_start_local,
             // Jupyter connection management
             commands::jupyter::jupyter_connect,
             commands::jupyter::jupyter_hub_login,
@@ -111,6 +113,13 @@ pub fn run() {
             commands::agent::agent_delete_knowledge,
             commands::agent::agent_list_traces,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                use tauri::Manager;
+                let state = app.state::<AppState>();
+                tauri::async_runtime::block_on(state.local_jupyter.stop()).ok();
+            }
+        });
 }
