@@ -65,6 +65,7 @@ pub fn run() {
             commands::jupyter::jupyter_get_content,
             commands::jupyter::jupyter_save_content,
             commands::jupyter::jupyter_create_content,
+            commands::jupyter::jupyter_rename_content,
             commands::jupyter::jupyter_delete_content,
             // Jupyter Kernels API
             commands::jupyter::jupyter_list_kernels,

@@ -201,23 +201,89 @@ impl JupyterClient {
         content: &serde_json::Value,
     ) -> Result<ContentItem, AppError> {
         let api_path = format!("/api/contents/{}", path.trim_start_matches('/'));
-        let response = self.put(&api_path)?.json(content).send().await?;
+        let payload = if content.get("type").is_some() && content.get("content").is_some() {
+            content.clone()
+        } else if content.get("nbformat").is_some()
+            || content.get("cells").is_some()
+            || path.ends_with(".ipynb")
+        {
+            serde_json::json!({
+                "type": "notebook",
+                "format": "json",
+                "content": content,
+            })
+        } else if content.is_string() {
+            serde_json::json!({
+                "type": "file",
+                "format": "text",
+                "content": content,
+            })
+        } else {
+            content.clone()
+        };
+        let response = self.put(&api_path)?.json(&payload).send().await?;
         self.parse_response(response).await
     }
 
-    /// Create a new file or directory.
+    /// Create a new file, notebook, or directory.
+    /// If `path` specifies a concrete target name (not empty and not ending with `/`),
+    /// uses `PUT /api/contents/{path}` so the user-chosen name is preserved.
+    /// Otherwise falls back to `POST /api/contents/{dir}` for untitled creation.
     pub async fn create_content(
         &self,
         path: &str,
         content_type: &str, // "notebook", "file", or "directory"
     ) -> Result<ContentItem, AppError> {
-        let api_path = if path.is_empty() || path == "/" {
-            "/api/contents".to_string()
-        } else {
-            format!("/api/contents/{}", path.trim_start_matches('/'))
+        let trimmed = path.trim();
+        if trimmed.is_empty() || trimmed == "/" || trimmed.ends_with('/') {
+            let dir_trimmed = trimmed.trim_matches('/');
+            let api_path = if dir_trimmed.is_empty() {
+                "/api/contents".to_string()
+            } else {
+                format!("/api/contents/{}", dir_trimmed)
+            };
+            let body = serde_json::json!({ "type": content_type });
+            let response = self.post(&api_path)?.json(&body).send().await?;
+            return self.parse_response(response).await;
+        }
+
+        let target_path = trimmed.trim_start_matches('/');
+        let api_path = format!("/api/contents/{}", target_path);
+        let body = match content_type {
+            "notebook" => serde_json::json!({
+                "type": "notebook",
+                "format": "json",
+                "content": {
+                    "cells": [],
+                    "metadata": {},
+                    "nbformat": 4,
+                    "nbformat_minor": 5
+                }
+            }),
+            "directory" => serde_json::json!({
+                "type": "directory"
+            }),
+            _ => serde_json::json!({
+                "type": "file",
+                "format": "text",
+                "content": ""
+            }),
         };
-        let body = serde_json::json!({ "type": content_type });
-        let response = self.post(&api_path)?.json(&body).send().await?;
+        let response = self.put(&api_path)?.json(&body).send().await?;
+        self.parse_response(response).await
+    }
+
+    /// Rename or move a file, notebook, or directory.
+    pub async fn rename_content(
+        &self,
+        path: &str,
+        new_path: &str,
+    ) -> Result<ContentItem, AppError> {
+        let api_path = format!("/api/contents/{}", path.trim_start_matches('/'));
+        let body = serde_json::json!({
+            "path": new_path.trim_start_matches('/'),
+        });
+        let response = self.patch(&api_path)?.json(&body).send().await?;
         self.parse_response(response).await
     }
 

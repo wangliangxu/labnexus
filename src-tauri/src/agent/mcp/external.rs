@@ -701,6 +701,20 @@ async fn ensure_connected(
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+const MCP_KEYCHAIN_SERVICE: &str = "com.labnexus.mcp";
+#[cfg(target_os = "macos")]
+const MCP_KEYCHAIN_ACCOUNT: &str = "server-secrets";
+
+#[cfg(target_os = "macos")]
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct McpSecretsBundle {
+    #[serde(default)]
+    env: HashMap<String, HashMap<String, String>>,
+    #[serde(default)]
+    headers: HashMap<String, HashMap<String, String>>,
+}
+
 pub fn load_external_mcp_config() -> Result<ExternalMcpConfigFile, String> {
     let path = external_mcp_config_path();
     if !path.exists() {
@@ -708,21 +722,104 @@ pub fn load_external_mcp_config() -> Result<ExternalMcpConfigFile, String> {
     }
     let content = std::fs::read_to_string(&path)
         .map_err(|error| format!("Failed to read MCP config {:?}: {}", path, error))?;
-    let config: ExternalMcpConfigFile = serde_json::from_str(&content)
+    let mut config: ExternalMcpConfigFile = serde_json::from_str(&content)
         .map_err(|error| format!("Invalid MCP config {:?}: {}", path, error))?;
+
+    #[cfg(target_os = "macos")]
+    {
+        let mut bundle = crate::agent::config::load_keychain_secret(
+            MCP_KEYCHAIN_SERVICE,
+            MCP_KEYCHAIN_ACCOUNT,
+        )
+        .ok()
+        .flatten()
+        .and_then(|raw| serde_json::from_str::<McpSecretsBundle>(&raw).ok())
+        .unwrap_or_default();
+
+        let mut migrated_plaintext = false;
+        for server in &mut config.servers {
+            for (k, v) in &mut server.env {
+                if !v.is_empty() {
+                    bundle
+                        .env
+                        .entry(server.id.clone())
+                        .or_default()
+                        .insert(k.clone(), v.clone());
+                    migrated_plaintext = true;
+                } else if let Some(saved) = bundle.env.get(&server.id).and_then(|m| m.get(k)) {
+                    *v = saved.clone();
+                }
+            }
+            for (k, v) in &mut server.headers {
+                if !v.is_empty() {
+                    bundle
+                        .headers
+                        .entry(server.id.clone())
+                        .or_default()
+                        .insert(k.clone(), v.clone());
+                    migrated_plaintext = true;
+                } else if let Some(saved) = bundle.headers.get(&server.id).and_then(|m| m.get(k)) {
+                    *v = saved.clone();
+                }
+            }
+        }
+        if migrated_plaintext {
+            let _ = save_external_mcp_config(&config);
+        }
+    }
+
     validate_config_file(&config)?;
     Ok(config)
 }
 
 pub fn save_external_mcp_config(config: &ExternalMcpConfigFile) -> Result<(), String> {
     validate_config_file(config)?;
+    let mut disk_config = config.clone();
+
+    #[cfg(target_os = "macos")]
+    {
+        let mut bundle = McpSecretsBundle::default();
+        for server in &mut disk_config.servers {
+            for (k, v) in &mut server.env {
+                if !v.is_empty() {
+                    bundle
+                        .env
+                        .entry(server.id.clone())
+                        .or_default()
+                        .insert(k.clone(), v.clone());
+                    v.clear();
+                }
+            }
+            for (k, v) in &mut server.headers {
+                if !v.is_empty() {
+                    bundle
+                        .headers
+                        .entry(server.id.clone())
+                        .or_default()
+                        .insert(k.clone(), v.clone());
+                    v.clear();
+                }
+            }
+        }
+        if let Ok(serialized) = serde_json::to_string(&bundle) {
+            if let Err(err) = crate::agent::config::save_keychain_secret(
+                MCP_KEYCHAIN_SERVICE,
+                MCP_KEYCHAIN_ACCOUNT,
+                &serialized,
+            ) {
+                log::warn!("Failed to store MCP secrets in Keychain: {}", err);
+                disk_config = config.clone();
+            }
+        }
+    }
+
     let path = external_mcp_config_path();
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|error| format!("Failed to create MCP config directory: {}", error))?;
     }
     let temporary = path.with_extension("json.tmp");
-    let content = serde_json::to_string_pretty(config)
+    let content = serde_json::to_string_pretty(&disk_config)
         .map_err(|error| format!("Failed to encode MCP config: {}", error))?;
     std::fs::write(&temporary, content)
         .map_err(|error| format!("Failed to write MCP config: {}", error))?;

@@ -87,6 +87,14 @@ export async function jupyterCreateContent(
   return invoke('jupyter_create_content', { serverId, path, contentType });
 }
 
+export async function jupyterRenameContent(
+  path: string,
+  newPath: string,
+  serverId?: string
+): Promise<ContentItem> {
+  return invoke('jupyter_rename_content', { serverId, path, newPath });
+}
+
 export async function jupyterDeleteContent(
   path: string,
   serverId?: string

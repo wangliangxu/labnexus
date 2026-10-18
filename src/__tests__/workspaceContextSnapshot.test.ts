@@ -43,3 +43,28 @@ assert(
 
 setAppState();
 assert(appStateUpdates === 1, 'test harness detects state updates when invoked');
+
+const fullContext: AgentChatContext = {
+  server_id: 'srv-1',
+  notebook_path: 'analysis.ipynb',
+  session_id: 'sess-1',
+  kernel_id: 'kern-1',
+  active_cell_id: 'cell-1',
+  active_cell_index: 0,
+  active_cell_code: 'x = 1',
+  kernel_status: 'idle',
+};
+storeWorkspaceContextSnapshot(ref, fullContext);
+storeWorkspaceContextSnapshot(ref, {
+  notebook_path: 'analysis.ipynb',
+  active_cell_index: 0,
+  active_cell_code: 'x = 2',
+  kernel_status: 'idle',
+});
+const merged = readWorkspaceContextSnapshot(ref);
+assert(merged.server_id === 'srv-1', 'partial update preserves server_id');
+assert(merged.kernel_id === 'kern-1', 'partial update preserves kernel_id');
+assert(merged.session_id === 'sess-1', 'partial update preserves session_id');
+assert(merged.active_cell_id === 'cell-1', 'partial update preserves active_cell_id');
+assert(merged.active_cell_code === 'x = 2', 'partial update updates active_cell_code');
+

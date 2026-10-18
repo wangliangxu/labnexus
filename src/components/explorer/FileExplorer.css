@@ -16,10 +16,40 @@
   font-weight: 500;
   color: var(--text-primary);
   border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
 }
 
 .file-explorer__server-name {
   flex: 1;
+}
+
+.file-explorer__create-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.file-explorer__create-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.file-explorer__create-dir {
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+}
+
+.file-explorer__create-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .file-explorer__empty {
@@ -75,7 +105,7 @@
   align-items: center;
   gap: var(--space-2);
   padding: 3px 0;
-  padding-right: var(--space-3);
+  padding-right: var(--space-2);
   cursor: pointer;
   transition: background var(--transition-fast);
   font-size: var(--text-sm);
@@ -84,6 +114,10 @@
 
 .file-item:hover {
   background: var(--bg-hover);
+}
+
+.file-item--selected-dir {
+  background: var(--bg-selected);
 }
 
 .file-item__icon {
@@ -105,6 +139,73 @@
 .file-item__spinner {
   font-size: var(--text-xs);
   color: var(--text-tertiary);
+}
+
+.file-item__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.file-item:hover .file-item__actions {
+  opacity: 1;
+}
+
+.file-item__inline-edit {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.file-item__input {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0 6px;
+  font-size: 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 3px;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.file-item__input:focus {
+  border-color: var(--color-accent);
+}
+
+.file-item__delete-prompt {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--color-error);
+}
+
+.file-item__action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.file-item__action-btn:hover {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.file-item__action-btn--danger:hover {
+  color: var(--color-error);
 }
 
 .file-tree__children {

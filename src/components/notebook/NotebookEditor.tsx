@@ -52,7 +52,9 @@ const nbBtnPrimary =
 interface NotebookEditorProps {
   path: string;
   serverId?: string;
+  isActiveTab?: boolean;
   onClose?: () => void;
+  onDirtyChange?: (isDirty: boolean) => void;
   onContextChange?: (ctx: AgentChatContext) => void;
   tocOwnerId?: string;
   tocScrollRequest?: NotebookTocScrollRequest | null;
@@ -61,7 +63,7 @@ interface NotebookEditorProps {
 
 interface AgentNotebookActionEvent {
   action_id: string;
-  action: 'add_cell' | 'save';
+  action: 'add_cell' | 'save' | 'list_cells' | 'update_cell' | 'delete_cell';
   server_id: string;
   notebook_path: string;
   active_cell_id?: string;
@@ -70,12 +72,17 @@ interface AgentNotebookActionEvent {
     cell_type?: CellType;
     source?: string;
     position?: 'above' | 'below' | 'end';
+    cell_id?: string;
+    cell_index?: number;
+    include_outputs?: boolean;
   };
 }
 
 export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   path,
   serverId,
+  isActiveTab = true,
+  onDirtyChange,
   onContextChange,
   tocOwnerId,
   tocScrollRequest,
@@ -88,7 +95,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   const [isDirty, setIsDirty] = useState<boolean>(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeCellIndex, setActiveCellIndex] = useState<number>(0);
-  const [executingCellId, setExecutingCellId] = useState<string | null>(null);
+  const [executingCellIds, setExecutingCellIds] = useState<string[]>([]);
   const [runCurrentCellShortcut, setRunCurrentCellShortcut] = useState(
     () => loadGlobalSettings().runCurrentCellShortcut
   );
@@ -99,9 +106,32 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   const cellsRef = useRef<Cell[]>([]);
   const cellElementsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const sourceCommitTimersRef = useRef<Map<string, number>>(new Map());
+  const pendingExecutionResolversRef = useRef<Map<string, Array<(hadError: boolean) => void>>>(
+    new Map()
+  );
 
   // Extract notebook filename from path
   const notebookName = path.split('/').pop() || path;
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+
+  const resolvePendingCellExecution = useCallback((cellId: string, hadError: boolean) => {
+    const waiters = pendingExecutionResolversRef.current.get(cellId);
+    if (waiters) {
+      pendingExecutionResolversRef.current.delete(cellId);
+      waiters.forEach((resolve) => resolve(hadError));
+    }
+  }, []);
+
+  const clearAllPendingCellExecutions = useCallback(() => {
+    pendingExecutionResolversRef.current.forEach((waiters) => {
+      waiters.forEach((resolve) => resolve(true));
+    });
+    pendingExecutionResolversRef.current.clear();
+    setExecutingCellIds([]);
+  }, []);
 
   const setCellsSnapshot = useCallback((nextCells: Cell[]) => {
     cellsRef.current = nextCells;
@@ -138,8 +168,9 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     return () => {
       sourceCommitTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
       sourceCommitTimersRef.current.clear();
+      clearAllPendingCellExecutions();
     };
-  }, []);
+  }, [clearAllPendingCellExecutions]);
 
   useEffect(() => {
     const handleSettingsChanged = (event: Event) => {
@@ -188,11 +219,11 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
       );
       setIsDirty(true);
     },
-    []
+    [updateCellsSnapshot]
   );
 
   const handleCellExecutionDone = useCallback(
-    (cellId: string, executionCount?: number) => {
+    (cellId: string, executionCount?: number, hadError?: boolean) => {
       updateCellsSnapshot((prevCells) =>
         prevCells.map((cell) => {
           if (cell.id === cellId) {
@@ -205,10 +236,11 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
           return cell;
         })
       );
-      setExecutingCellId((prev) => (prev === cellId ? null : prev));
+      setExecutingCellIds((prev) => prev.filter((id) => id !== cellId));
+      resolvePendingCellExecution(cellId, Boolean(hadError));
       setIsDirty(true);
     },
-    []
+    [resolvePendingCellExecution, updateCellsSnapshot]
   );
 
   // Initialize kernel hook
@@ -249,21 +281,25 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     target.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [tocOwnerId, tocScrollRequest, tocHeadings]);
 
-  // Sync workspace context with AI Agent
+  const extractCellLastError = useCallback((cell?: Cell): string | undefined => {
+    if (!cell?.outputs) return undefined;
+    let lastErr: string | undefined;
+    for (const out of cell.outputs) {
+      if (out.output_type === 'error') {
+        const errOut = out as any;
+        lastErr = `${errOut.ename}: ${errOut.evalue}\n${(errOut.traceback || []).join('\n')}`;
+      }
+    }
+    return lastErr;
+  }, []);
+
+  // Sync workspace context with AI Agent (only when this notebook tab is active)
   useEffect(() => {
-    if (!onContextChange) return;
+    if (!onContextChange || !isActiveTab) return;
     const activeCell = cells[activeCellIndex];
     const rawSource = activeCell?.source;
     const code = Array.isArray(rawSource) ? rawSource.join('') : (rawSource || '');
-    let lastErr = undefined;
-    if (activeCell?.outputs) {
-      for (const out of activeCell.outputs) {
-        if (out.output_type === 'error') {
-          const errOut = out as any;
-          lastErr = `${errOut.ename}: ${errOut.evalue}\n${(errOut.traceback || []).join('\n')}`;
-        }
-      }
-    }
+    const lastErr = extractCellLastError(activeCell);
     onContextChange({
       server_id: serverId,
       notebook_path: path,
@@ -275,7 +311,18 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
       kernel_status: kernel.status,
       last_error: lastErr,
     });
-  }, [path, serverId, activeCellIndex, cells, kernel.session?.id, kernel.kernel?.id, kernel.status, onContextChange]);
+  }, [
+    path,
+    serverId,
+    isActiveTab,
+    activeCellIndex,
+    cells,
+    kernel.session?.id,
+    kernel.kernel?.id,
+    kernel.status,
+    onContextChange,
+    extractCellLastError,
+  ]);
 
   // Load Notebook content
   useEffect(() => {
@@ -364,6 +411,37 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
 
   // Execute notebook mutations requested by the Agent and acknowledge the real result.
   useEffect(() => {
+    const resolveTargetCellIndex = (payload: AgentNotebookActionEvent): number => {
+      const current = cellsRef.current;
+      if (payload.arguments.cell_id) {
+        const idx = current.findIndex((c) => c.id === payload.arguments.cell_id);
+        if (idx === -1) {
+          throw new Error(`Cell with id '${payload.arguments.cell_id}' not found in '${path}'.`);
+        }
+        return idx;
+      }
+      if (typeof payload.arguments.cell_index === 'number') {
+        if (payload.arguments.cell_index < 0 || payload.arguments.cell_index >= current.length) {
+          throw new Error(
+            `cell_index ${payload.arguments.cell_index} is out of bounds (notebook has ${current.length} cells).`
+          );
+        }
+        return payload.arguments.cell_index;
+      }
+      if (payload.active_cell_id) {
+        const idx = current.findIndex((c) => c.id === payload.active_cell_id);
+        if (idx !== -1) return idx;
+      }
+      if (
+        typeof payload.active_cell_index === 'number' &&
+        payload.active_cell_index >= 0 &&
+        payload.active_cell_index < current.length
+      ) {
+        return payload.active_cell_index;
+      }
+      return Math.min(Math.max(0, activeCellIndex), Math.max(0, current.length - 1));
+    };
+
     const unlisten = listen<AgentNotebookActionEvent>(
       'agent:notebook_action',
       async ({ payload }) => {
@@ -376,6 +454,60 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
               payload.action_id,
               true,
               `Notebook '${path}' saved successfully.`
+            );
+            return;
+          }
+
+          if (payload.action === 'list_cells') {
+            flushSourceCommits();
+            const includeOutputs = payload.arguments.include_outputs !== false;
+            const summary = cellsRef.current.map((cell, index) => {
+              const sourceText = Array.isArray(cell.source) ? cell.source.join('') : (cell.source || '');
+              const entry: Record<string, unknown> = {
+                index,
+                id: cell.id,
+                cell_type: cell.cell_type,
+                execution_count: cell.execution_count ?? null,
+                is_active: index === activeCellIndex,
+                source: sourceText,
+              };
+              if (includeOutputs && cell.cell_type === 'code' && cell.outputs?.length) {
+                entry.outputs = cell.outputs.map((out) => {
+                  if (out.output_type === 'stream') {
+                    const text = Array.isArray(out.text) ? out.text.join('') : out.text;
+                    return { output_type: 'stream', name: out.name, text: text.slice(0, 1000) };
+                  }
+                  if (out.output_type === 'error') {
+                    return {
+                      output_type: 'error',
+                      ename: out.ename,
+                      evalue: out.evalue,
+                    };
+                  }
+                  const plain = out.data?.['text/plain'];
+                  const plainText = Array.isArray(plain) ? plain.join('') : (plain || '');
+                  return {
+                    output_type: out.output_type,
+                    mime_types: Object.keys(out.data || {}),
+                    text_preview: String(plainText).slice(0, 1000),
+                  };
+                });
+              }
+              return entry;
+            });
+            await agentCompleteNotebookAction(
+              payload.action_id,
+              true,
+              JSON.stringify(
+                {
+                  notebook_path: path,
+                  cell_count: summary.length,
+                  active_cell_index: activeCellIndex,
+                  cells: summary,
+                },
+                null,
+                2
+              )
             );
             return;
           }
@@ -408,7 +540,78 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
             await agentCompleteNotebookAction(
               payload.action_id,
               true,
-              `Added a ${cellType} cell at index ${insertIndex} in '${path}'.`
+              `Added a ${cellType} cell (id: ${newCell.id}) at index ${insertIndex} in '${path}'.`
+            );
+            return;
+          }
+
+          if (payload.action === 'update_cell') {
+            flushSourceCommits();
+            if (cellsRef.current.length === 0) {
+              throw new Error(`Notebook '${path}' has no cells to update.`);
+            }
+            const targetIndex = resolveTargetCellIndex(payload);
+            const targetCell = cellsRef.current[targetIndex];
+            const nextType = payload.arguments.cell_type ?? targetCell.cell_type;
+            const nextSource =
+              payload.arguments.source !== undefined
+                ? payload.arguments.source
+                : targetCell.source;
+
+            updateCellsSnapshot((current) =>
+              current.map((c, idx) =>
+                idx === targetIndex
+                  ? {
+                      ...c,
+                      cell_type: nextType,
+                      source: nextSource,
+                      ...(nextType !== c.cell_type ? { outputs: [], execution_count: null } : {}),
+                    }
+                  : c
+              )
+            );
+            setActiveCellIndex(targetIndex);
+            setCursorPosition({ cellIndex: targetIndex, line: 0 });
+            setIsDirty(true);
+            await agentCompleteNotebookAction(
+              payload.action_id,
+              true,
+              `Updated cell at index ${targetIndex} (id: ${targetCell.id}) in '${path}'.`
+            );
+            return;
+          }
+
+          if (payload.action === 'delete_cell') {
+            flushSourceCommits();
+            if (cellsRef.current.length === 0) {
+              throw new Error(`Notebook '${path}' has no cells to delete.`);
+            }
+            const targetIndex = resolveTargetCellIndex(payload);
+            const targetCell = cellsRef.current[targetIndex];
+            if (cellsRef.current.length <= 1) {
+              const replacement = createNotebookCell('code');
+              setCellsSnapshot([replacement]);
+              setActiveCellIndex(0);
+              setCursorPosition({ cellIndex: 0, line: 0 });
+              setIsDirty(true);
+              await agentCompleteNotebookAction(
+                payload.action_id,
+                true,
+                `Cleared the only remaining cell (index 0) in '${path}'.`
+              );
+              return;
+            }
+
+            const nextCells = cellsRef.current.filter((_, idx) => idx !== targetIndex);
+            const nextActive = Math.min(activeCellIndex, nextCells.length - 1);
+            setCellsSnapshot(nextCells);
+            setActiveCellIndex(nextActive);
+            setCursorPosition({ cellIndex: nextActive, line: 0 });
+            setIsDirty(true);
+            await agentCompleteNotebookAction(
+              payload.action_id,
+              true,
+              `Deleted cell at index ${targetIndex} (id: ${targetCell.id}) from '${path}'.`
             );
             return;
           }
@@ -428,28 +631,34 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, [activeCellIndex, handleSave, path, serverId, updateCellsSnapshot]);
+  }, [activeCellIndex, flushSourceCommits, handleSave, path, serverId, setCellsSnapshot, updateCellsSnapshot]);
 
-  // Ctrl+S / Cmd+S shortcut
+  // Ctrl+S / Cmd+S shortcut (active tab only)
   useEffect(() => {
+    if (!isActiveTab) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
-        handleSave();
+        void handleSave();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleSave]);
+  }, [handleSave, isActiveTab]);
 
   // Cell operations
-  const handleRunCell = async (index: number, mode: RunCellMode = 'stay') => {
+  const handleRunCell = async (
+    index: number,
+    mode: RunCellMode = 'stay',
+    waitForCompletion = false
+  ): Promise<boolean> => {
     flushSourceCommits();
     const currentCells = cellsRef.current;
     const cell = currentCells[index];
-    if (!cell || cell.cell_type !== 'code') return;
-    if (!canRunCode) return;
+    if (!cell || cell.cell_type !== 'code') return false;
+    if (!canRunCode) return false;
 
+    const cellId = cell.id || `cell-${index}`;
     const sourceText =
       typeof cell.source === 'string' ? cell.source : cell.source.join('');
     const transition = prepareRunCellExecutionState(currentCells, index, mode);
@@ -457,7 +666,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     setActiveCellIndex(transition.activeCellIndex);
     setCursorPosition({ cellIndex: transition.activeCellIndex, line: 0 });
     setIsDirty(true);
-    setExecutingCellId(cell.id || null);
+    setExecutingCellIds((prev) => (prev.includes(cellId) ? prev : [...prev, cellId]));
 
     if (mode !== 'stay') {
       const nextCell = transition.cells[transition.activeCellIndex];
@@ -469,14 +678,30 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
       });
     }
 
-    const didSend = await kernel.executeCell(cell.id || '', sourceText);
+    const completionPromise = waitForCompletion
+      ? new Promise<boolean>((resolve) => {
+          const existing = pendingExecutionResolversRef.current.get(cellId) || [];
+          existing.push(resolve);
+          pendingExecutionResolversRef.current.set(cellId, existing);
+        })
+      : null;
+
+    const didSend = await kernel.executeCell(cellId, sourceText);
     if (!didSend) {
-      setExecutingCellId((prev) => (prev === cell.id ? null : prev));
+      setExecutingCellIds((prev) => prev.filter((id) => id !== cellId));
+      resolvePendingCellExecution(cellId, true);
+      return true;
     }
+
+    if (completionPromise) {
+      return await completionPromise;
+    }
+    return false;
   };
 
   // Run the selected cell even when CodeMirror itself does not have focus.
   useEffect(() => {
+    if (!isActiveTab) return;
     const handleNotebookShortcut = (event: KeyboardEvent) => {
       if (
         event.defaultPrevented ||
@@ -493,7 +718,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
 
     window.addEventListener('keydown', handleNotebookShortcut);
     return () => window.removeEventListener('keydown', handleNotebookShortcut);
-  }, [activeCellIndex, runCurrentCellShortcut, canRunCode]);
+  }, [activeCellIndex, runCurrentCellShortcut, canRunCode, isActiveTab]);
 
   const handleRunAll = async () => {
     flushSourceCommits();
@@ -502,10 +727,23 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
       if (currentCells[i].cell_type === 'code') {
         setActiveCellIndex(i);
         setCursorPosition({ cellIndex: i, line: 0 });
-        await handleRunCell(i, 'stay');
+        const hadError = await handleRunCell(i, 'stay', true);
+        if (hadError) {
+          break;
+        }
       }
     }
   };
+
+  const handleInterruptKernel = useCallback(async () => {
+    clearAllPendingCellExecutions();
+    await kernel.interrupt();
+  }, [clearAllPendingCellExecutions, kernel]);
+
+  const handleRestartKernel = useCallback(async () => {
+    clearAllPendingCellExecutions();
+    await kernel.restart();
+  }, [clearAllPendingCellExecutions, kernel]);
 
   const handleAddCell = (type: CellType, afterIndex = activeCellIndex) => {
     const newCell = createNotebookCell(type);
@@ -583,16 +821,33 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
       scheduleSourceCommit(cellId);
       setIsDirty(true);
 
-      if (index === activeCellIndex && onContextChange) {
+      if (isActiveTab && index === activeCellIndex && onContextChange) {
+        const activeCell = cellsRef.current[index];
         onContextChange({
+          server_id: serverId,
           notebook_path: path,
+          session_id: kernel.session?.id,
+          kernel_id: kernel.kernel?.id,
+          active_cell_id: cellId || activeCell?.id,
           active_cell_index: activeCellIndex,
           active_cell_code: newSource,
           kernel_status: kernel.status,
+          last_error: extractCellLastError(activeCell),
         });
       }
     },
-    [activeCellIndex, kernel.status, onContextChange, path, scheduleSourceCommit]
+    [
+      activeCellIndex,
+      extractCellLastError,
+      isActiveTab,
+      kernel.kernel?.id,
+      kernel.session?.id,
+      kernel.status,
+      onContextChange,
+      path,
+      scheduleSourceCommit,
+      serverId,
+    ]
   );
 
   if (isLoading) {
@@ -632,10 +887,14 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         onSave={handleSave}
         onAddCode={() => handleAddCell('code')}
         onAddMarkdown={() => handleAddCell('markdown')}
-        onRunSelected={() => handleRunCell(activeCellIndex, 'stay')}
-        onRunAll={handleRunAll}
-        onInterrupt={kernel.interrupt}
-        onRestart={kernel.restart}
+        onRunSelected={() => {
+          void handleRunCell(activeCellIndex, 'stay');
+        }}
+        onRunAll={() => {
+          void handleRunAll();
+        }}
+        onInterrupt={handleInterruptKernel}
+        onRestart={handleRestartKernel}
         onConnect={kernel.startSession}
         onActiveCellTypeChange={(type) =>
           handleCellTypeChange(activeCellIndex, type)
@@ -668,7 +927,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
                   cell={cell}
                   index={idx}
                   isActive={idx === activeCellIndex}
-                  isExecuting={executingCellId === cell.id}
+                  isExecuting={Boolean(cell.id && executingCellIds.includes(cell.id))}
                   canRun={canRunCode}
                   runCurrentCellShortcut={runCurrentCellShortcut}
                   onSelect={() => handleSelectCell(idx)}
@@ -676,9 +935,15 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
                     handleCellSourceChange(cell.id || '', idx, newSource)
                   }
                   onAddCell={(type) => handleAddCell(type, idx)}
-                  onRun={() => handleRunCell(idx, 'stay')}
-                  onRunAndAdvance={() => handleRunCell(idx, 'advance')}
-                  onRunAndInsert={() => handleRunCell(idx, 'insert')}
+                  onRun={() => {
+                    void handleRunCell(idx, 'stay');
+                  }}
+                  onRunAndAdvance={() => {
+                    void handleRunCell(idx, 'advance');
+                  }}
+                  onRunAndInsert={() => {
+                    void handleRunCell(idx, 'insert');
+                  }}
                   onDelete={() => handleDeleteCell(idx)}
                   onMoveUp={() => handleMoveCell(idx, 'up')}
                   onMoveDown={() => handleMoveCell(idx, 'down')}

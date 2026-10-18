@@ -1,8 +1,8 @@
 import { t } from '../../i18n';
 import React, { useMemo, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, Copy, CornerDownLeft, Wrench } from 'lucide-react';
-import { marked } from 'marked';
 import type { AgentMessage, ToolCall } from '../../types/agent';
+import { renderSanitizedMarkdown } from '../../utils/sanitizeHtml';
 
 interface MarkdownMessageProps {
   content: string;
@@ -10,24 +10,11 @@ interface MarkdownMessageProps {
 }
 
 function sanitizeMarkdown(content: string): string {
-  const raw = marked.parse(content, { breaks: true, gfm: true });
-  if (typeof raw !== 'string' || typeof DOMParser === 'undefined') return content;
-  const document = new DOMParser().parseFromString(raw, 'text/html');
-  document.querySelectorAll('script, style, iframe, object, embed, img').forEach((node) => node.remove());
-  document.querySelectorAll('*').forEach((element) => {
-    for (const attribute of Array.from(element.attributes)) {
-      const name = attribute.name.toLowerCase();
-      const value = attribute.value.trim().toLowerCase();
-      if (name.startsWith('on') || ((name === 'href' || name === 'src') && value.startsWith('javascript:'))) {
-        element.removeAttribute(attribute.name);
-      }
-    }
-    if (element.tagName === 'A') {
-      element.setAttribute('target', '_blank');
-      element.setAttribute('rel', 'noreferrer noopener');
-    }
+  return renderSanitizedMarkdown(content, {
+    allowImages: false,
+    allowSvg: false,
+    allowStyles: false,
   });
-  return document.body.innerHTML;
 }
 
 export const MarkdownMessage: React.FC<MarkdownMessageProps> = ({ content, onUseCode }) => {

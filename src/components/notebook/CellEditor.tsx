@@ -7,7 +7,6 @@ import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import { keymap, EditorView, type ViewUpdate } from '@codemirror/view';
 import { Prec } from '@codemirror/state';
-import { marked } from 'marked';
 import {
   Play,
   Trash2,
@@ -20,9 +19,7 @@ import {
 } from 'lucide-react';
 import type { Cell, CellType } from '../../types/jupyter';
 import { CellOutputView } from './CellOutputView';
-
-/* ── Configure marked ───────────────────────────────────────────── */
-marked.setOptions({ breaks: true, gfm: true });
+import { renderSanitizedMarkdown } from '../../utils/sanitizeHtml';
 
 /* Both editors use the same live palette as the workbench. */
 function createJupyterTheme(dark: boolean) {
@@ -210,13 +207,17 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
     if (!isMarkdown) return '';
     const raw = draftSource.trim();
     if (!raw) return `<p class="nb-md-placeholder">${t('Double-click to edit…')}</p>`;
-    return marked.parse(raw) as string;
+    return renderSanitizedMarkdown(raw, { allowImages: true, allowSvg: true, allowStyles: false });
   }, [isMarkdown, draftSource, locale]);
 
   const extensions = useMemo(() => {
     const exitEditOnRun = () => {
       setIsEditingMarkdown(false);
     };
+    const normalizedShortcut = runCurrentCellShortcut.trim().toLowerCase();
+    const isModEnterCustom = normalizedShortcut === 'mod-enter';
+    const isAltEnterCustom = normalizedShortcut === 'alt-enter';
+
     return [
       isCode ? python() : markdown(),
       ...(isMarkdown ? [EditorView.lineWrapping] : []),
@@ -235,31 +236,35 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
             return true;
           },
         },
-        {
-          key: 'Mod-Enter',
-          run: () => {
-            if (isMarkdown) {
-              exitEditOnRun();
-              return true;
-            }
-            if (!canRun) return true;
-            onRunRef.current();
-            return true;
-          },
-        },
-        {
-          key: 'Alt-Enter',
-          run: () => {
-            if (isMarkdown) {
-              exitEditOnRun();
-              onRunAndInsertRef.current();
-              return true;
-            }
-            if (!canRun) return true;
-            onRunAndInsertRef.current();
-            return true;
-          },
-        },
+        ...(!isModEnterCustom
+          ? [{
+              key: 'Mod-Enter',
+              run: () => {
+                if (isMarkdown) {
+                  exitEditOnRun();
+                  return true;
+                }
+                if (!canRun) return true;
+                onRunRef.current();
+                return true;
+              },
+            }]
+          : []),
+        ...(!isAltEnterCustom
+          ? [{
+              key: 'Alt-Enter',
+              run: () => {
+                if (isMarkdown) {
+                  exitEditOnRun();
+                  onRunAndInsertRef.current();
+                  return true;
+                }
+                if (!canRun) return true;
+                onRunAndInsertRef.current();
+                return true;
+              },
+            }]
+          : []),
         {
           key: 'Escape',
           run: () => {

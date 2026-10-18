@@ -12,12 +12,78 @@ use crate::state::{AppState, ManagedConnection};
 // ─── Connection Management ─────────────────────────────────────────────
 
 /// Connect to a remote Jupyter server.
+const JUPYTER_KEYCHAIN_SERVICE: &str = "com.labnexus.jupyter";
+const REDACTED_SECRET: &str = "••••••••";
+
+async fn resolve_and_persist_server_secrets(
+    state: &AppState,
+    config: &mut JupyterServerConfig,
+) {
+    let token_account = format!("token:{}", config.id);
+    if config.token.as_deref() == Some(REDACTED_SECRET) {
+        let in_memory = state
+            .connections
+            .read()
+            .await
+            .get(&config.id)
+            .and_then(|c| c.config.token.clone())
+            .filter(|t| t != REDACTED_SECRET && !t.is_empty());
+        if let Some(token) = in_memory {
+            config.token = Some(token);
+        } else if let Ok(Some(token)) =
+            crate::agent::config::load_keychain_secret(JUPYTER_KEYCHAIN_SERVICE, &token_account)
+        {
+            config.token = Some(token);
+        }
+    } else if let Some(token) = config.token.as_deref() {
+        if !token.is_empty() && config.id != crate::jupyter::local::LOCAL_SERVER_ID {
+            let _ = crate::agent::config::save_keychain_secret(
+                JUPYTER_KEYCHAIN_SERVICE,
+                &token_account,
+                token,
+            );
+        }
+    }
+
+    if let Some(proxy) = config.proxy.as_mut() {
+        let proxy_account = format!("proxy:{}", config.id);
+        if proxy.password.as_deref() == Some(REDACTED_SECRET) {
+            let in_memory = state
+                .connections
+                .read()
+                .await
+                .get(&config.id)
+                .and_then(|c| c.config.proxy.as_ref())
+                .and_then(|p| p.password.clone())
+                .filter(|p| p != REDACTED_SECRET && !p.is_empty());
+            if let Some(pass) = in_memory {
+                proxy.password = Some(pass);
+            } else if let Ok(Some(pass)) =
+                crate::agent::config::load_keychain_secret(JUPYTER_KEYCHAIN_SERVICE, &proxy_account)
+            {
+                proxy.password = Some(pass);
+            }
+        } else if let Some(pass) = proxy.password.as_deref() {
+            if !pass.is_empty() {
+                let _ = crate::agent::config::save_keychain_secret(
+                    JUPYTER_KEYCHAIN_SERVICE,
+                    &proxy_account,
+                    pass,
+                );
+            }
+        }
+    }
+}
+
+/// Connect to a remote Jupyter server.
 #[tauri::command]
 pub async fn jupyter_connect(
     state: State<'_, AppState>,
     app: AppHandle,
-    config: JupyterServerConfig,
+    mut config: JupyterServerConfig,
 ) -> Result<ServerConnection, AppError> {
+    resolve_and_persist_server_secrets(&state, &mut config).await;
+
     // Emit connecting status
     let _ = app.emit(
         "jupyter:connection",
@@ -505,6 +571,18 @@ pub async fn jupyter_create_content(
 ) -> Result<ContentItem, AppError> {
     let client = get_client(&state, server_id.as_deref()).await?;
     client.create_content(&path, &content_type).await
+}
+
+/// Rename or move a file, notebook, or directory.
+#[tauri::command]
+pub async fn jupyter_rename_content(
+    state: State<'_, AppState>,
+    server_id: Option<String>,
+    path: String,
+    new_path: String,
+) -> Result<ContentItem, AppError> {
+    let client = get_client(&state, server_id.as_deref()).await?;
+    client.rename_content(&path, &new_path).await
 }
 
 /// Delete a file or directory.

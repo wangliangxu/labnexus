@@ -174,6 +174,120 @@ pub async fn add_cell(
     .await
 }
 
+/// Emit an event to update an existing cell in the active notebook editor.
+pub async fn update_cell(
+    arguments: &serde_json::Value,
+    context: &AgentChatContext,
+    state: &AppState,
+    app: &AppHandle,
+) -> Result<String, AppError> {
+    let source = arguments["source"]
+        .as_str()
+        .ok_or_else(|| AppError::Agent("Missing required parameter 'source'".to_string()))?;
+    let cell_index = arguments["cell_index"]
+        .as_u64()
+        .map(|idx| idx as usize)
+        .or(context.active_cell_index);
+    let cell_type = arguments["cell_type"].as_str();
+
+    request_notebook_action(
+        state,
+        app,
+        context,
+        "update_cell",
+        json!({
+            "cell_index": cell_index,
+            "source": source,
+            "cell_type": cell_type,
+        }),
+    )
+    .await
+}
+
+/// Emit an event to delete an existing cell from the active notebook editor.
+pub async fn delete_cell(
+    arguments: &serde_json::Value,
+    context: &AgentChatContext,
+    state: &AppState,
+    app: &AppHandle,
+) -> Result<String, AppError> {
+    let cell_index = arguments["cell_index"]
+        .as_u64()
+        .map(|idx| idx as usize)
+        .or(context.active_cell_index)
+        .ok_or_else(|| AppError::Agent("Missing required parameter 'cell_index'".to_string()))?;
+
+    request_notebook_action(
+        state,
+        app,
+        context,
+        "delete_cell",
+        json!({
+            "cell_index": cell_index,
+        }),
+    )
+    .await
+}
+
+/// List all cells in the active notebook (prefers live editor state, falls back to remote file).
+pub async fn list_cells(
+    context: &AgentChatContext,
+    state: &AppState,
+    app: &AppHandle,
+) -> Result<String, AppError> {
+    if let Ok(live_result) =
+        request_notebook_action(state, app, context, "list_cells", json!({})).await
+    {
+        return Ok(live_result);
+    }
+
+    let notebook_path = context.notebook_path.as_deref().ok_or_else(|| {
+        AppError::Agent("Missing notebook_path in active workspace context".to_string())
+    })?;
+    let server_id = context.server_id.as_deref().ok_or_else(|| {
+        AppError::Agent("Missing server_id in active workspace context".to_string())
+    })?;
+    let client = state
+        .get_client(server_id)
+        .await
+        .ok_or(AppError::NotConnected)?;
+
+    let item = client.get_content(notebook_path).await?;
+    let cells = item
+        .content
+        .as_ref()
+        .and_then(|c| c.get("cells"))
+        .and_then(|c| c.as_array())
+        .ok_or_else(|| AppError::Agent("Notebook has no readable cells array".to_string()))?;
+
+    let mut summary = format!(
+        "Notebook '{}' ({} cells):\n",
+        notebook_path,
+        cells.len()
+    );
+    for (idx, cell) in cells.iter().enumerate() {
+        let cell_type = cell["cell_type"].as_str().unwrap_or("code");
+        let exec_count = cell["execution_count"]
+            .as_u64()
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| " ".to_string());
+        let source = match &cell["source"] {
+            serde_json::Value::String(s) => s.clone(),
+            serde_json::Value::Array(lines) => lines
+                .iter()
+                .filter_map(|l| l.as_str())
+                .collect::<Vec<_>>()
+                .join(""),
+            _ => String::new(),
+        };
+        summary.push_str(&format!(
+            "\n--- Cell {} [{}] (In [{}]) ---\n{}\n",
+            idx, cell_type, exec_count, source
+        ));
+    }
+    Ok(summary)
+}
+
 /// Emit an event to trigger saving the active notebook in the editor.
 pub async fn save_notebook(
     context: &AgentChatContext,
@@ -246,6 +360,54 @@ async fn request_notebook_action(
     }
 }
 
+/// List files and directories at a given path in the remote Jupyter workspace.
+pub async fn list_files(
+    arguments: &serde_json::Value,
+    context: &AgentChatContext,
+    state: &AppState,
+) -> Result<String, AppError> {
+    let path = arguments["path"].as_str().unwrap_or("");
+    let server_id = context.server_id.as_deref().ok_or_else(|| {
+        AppError::Agent("Missing server_id in active workspace context".to_string())
+    })?;
+    let client = state
+        .get_client(server_id)
+        .await
+        .ok_or(AppError::NotConnected)?;
+
+    let item = client.list_contents(path).await?;
+    let entries = item
+        .content
+        .as_ref()
+        .and_then(|c| c.as_array())
+        .cloned()
+        .unwrap_or_default();
+    if entries.is_empty() {
+        return Ok(format!(
+            "Directory '{}' is empty.",
+            if path.is_empty() { "/" } else { path }
+        ));
+    }
+    let mut lines = vec![format!(
+        "Contents of '{}':",
+        if path.is_empty() { "/" } else { path }
+    )];
+    for entry in entries {
+        let name = entry["name"].as_str().unwrap_or("?");
+        let entry_path = entry["path"].as_str().unwrap_or(name);
+        let ctype = entry["content_type"]
+            .as_str()
+            .or_else(|| entry["type"].as_str())
+            .unwrap_or("file");
+        let size = entry["size"]
+            .as_u64()
+            .map(|b| format!(" ({} B)", b))
+            .unwrap_or_default();
+        lines.push(format!("- [{}] {}{}", ctype, entry_path, size));
+    }
+    Ok(lines.join("\n"))
+}
+
 /// Read a file from the remote Jupyter workspace.
 pub async fn read_file(
     arguments: &serde_json::Value,
@@ -273,6 +435,40 @@ pub async fn read_file(
     } else {
         Ok("File exists but is empty or unreadable.".to_string())
     }
+}
+
+/// Write a text or code file to the remote Jupyter workspace.
+pub async fn write_file(
+    arguments: &serde_json::Value,
+    context: &AgentChatContext,
+    state: &AppState,
+) -> Result<String, AppError> {
+    let path = arguments["path"]
+        .as_str()
+        .ok_or_else(|| AppError::Agent("Missing required parameter 'path'".to_string()))?;
+    let content = arguments["content"]
+        .as_str()
+        .ok_or_else(|| AppError::Agent("Missing required parameter 'content'".to_string()))?;
+
+    let server_id = context.server_id.as_deref().ok_or_else(|| {
+        AppError::Agent("Missing server_id in active workspace context".to_string())
+    })?;
+    let client = state
+        .get_client(server_id)
+        .await
+        .ok_or(AppError::NotConnected)?;
+
+    let payload = json!({
+        "type": "file",
+        "format": "text",
+        "content": content,
+    });
+    client.save_content(path, &payload).await?;
+    Ok(format!(
+        "Successfully wrote {} chars to '{}'.",
+        content.chars().count(),
+        path
+    ))
 }
 
 /// Restart the currently active Jupyter kernel.

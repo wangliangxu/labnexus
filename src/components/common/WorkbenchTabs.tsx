@@ -4,7 +4,7 @@ import { t } from '../../i18n';
  * Supports Notebooks, Terminals, and Settings tabs with dirty indicator and close actions.
  */
 
-export type TabType = 'notebook' | 'terminal' | 'welcome' | 'settings';
+export type TabType = 'notebook' | 'file' | 'terminal' | 'welcome' | 'settings';
 
 export interface TabItem {
   id: string;

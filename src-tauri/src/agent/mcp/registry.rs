@@ -89,12 +89,79 @@ impl ToolRegistry {
                 definition: ToolDefinition {
                     tool_type: "function".to_string(),
                     function: FunctionDefinition {
+                        name: "jupyter.cell.update".to_string(),
+                        description: "Update the source code or markdown content of an existing cell in the active Jupyter notebook.".to_string(),
+                        parameters: json!({
+                            "type": "object",
+                            "properties": {
+                                "cell_index": { "type": "integer", "description": "0-based index of the cell to update (defaults to active cell if omitted)." },
+                                "source": { "type": "string", "description": "New source code or markdown content for the cell." },
+                                "cell_type": { "type": "string", "enum": ["code", "markdown"], "description": "Optional cell type override." }
+                            },
+                            "required": ["source"]
+                        }),
+                    },
+                },
+                requires_confirmation: true,
+                category: "Jupyter".to_string(),
+            },
+            RegisteredTool {
+                definition: ToolDefinition {
+                    tool_type: "function".to_string(),
+                    function: FunctionDefinition {
+                        name: "jupyter.cell.delete".to_string(),
+                        description: "Delete a cell at a specific 0-based index from the active Jupyter notebook.".to_string(),
+                        parameters: json!({
+                            "type": "object",
+                            "properties": {
+                                "cell_index": { "type": "integer", "description": "0-based index of the cell to delete." }
+                            },
+                            "required": ["cell_index"]
+                        }),
+                    },
+                },
+                requires_confirmation: true,
+                category: "Jupyter".to_string(),
+            },
+            RegisteredTool {
+                definition: ToolDefinition {
+                    tool_type: "function".to_string(),
+                    function: FunctionDefinition {
+                        name: "jupyter.notebook.list_cells".to_string(),
+                        description: "List all cells in the active Jupyter notebook, including their indices, types, execution counts, sources, and recent outputs or errors.".to_string(),
+                        parameters: json!({ "type": "object", "properties": {} }),
+                    },
+                },
+                requires_confirmation: false,
+                category: "Jupyter".to_string(),
+            },
+            RegisteredTool {
+                definition: ToolDefinition {
+                    tool_type: "function".to_string(),
+                    function: FunctionDefinition {
                         name: "jupyter.notebook.save".to_string(),
                         description: "Save the active Jupyter notebook.".to_string(),
                         parameters: json!({ "type": "object", "properties": {} }),
                     },
                 },
                 requires_confirmation: true,
+                category: "Jupyter".to_string(),
+            },
+            RegisteredTool {
+                definition: ToolDefinition {
+                    tool_type: "function".to_string(),
+                    function: FunctionDefinition {
+                        name: "jupyter.file.list".to_string(),
+                        description: "List files and directories at a given path on the remote Jupyter workspace.".to_string(),
+                        parameters: json!({
+                            "type": "object",
+                            "properties": {
+                                "path": { "type": "string", "description": "Relative directory path on the remote Jupyter server (empty string for root)." }
+                            }
+                        }),
+                    },
+                },
+                requires_confirmation: false,
                 category: "Jupyter".to_string(),
             },
             RegisteredTool {
@@ -109,6 +176,25 @@ impl ToolRegistry {
                                 "path": { "type": "string", "description": "Relative file path on the remote Jupyter server." }
                             },
                             "required": ["path"]
+                        }),
+                    },
+                },
+                requires_confirmation: true,
+                category: "Jupyter".to_string(),
+            },
+            RegisteredTool {
+                definition: ToolDefinition {
+                    tool_type: "function".to_string(),
+                    function: FunctionDefinition {
+                        name: "jupyter.file.write".to_string(),
+                        description: "Write or update a text/code file in the remote Jupyter workspace.".to_string(),
+                        parameters: json!({
+                            "type": "object",
+                            "properties": {
+                                "path": { "type": "string", "description": "Relative file path on the remote Jupyter server." },
+                                "content": { "type": "string", "description": "Full text content to write to the file." }
+                            },
+                            "required": ["path", "content"]
                         }),
                     },
                 },
@@ -359,6 +445,13 @@ impl ToolRegistry {
 
         match tool_name {
             "jupyter.cell.execute" => analyze_python_execution(arguments),
+            "jupyter.notebook.list_cells" | "jupyter.file.list" => ToolApprovalRequirement {
+                required: false,
+                risk_level: "safe",
+                reason: "Reads notebook or directory structure metadata.".to_string(),
+                permission_key: tool_name.to_string(),
+                allow_session: true,
+            },
             "jupyter.file.read" => ToolApprovalRequirement {
                 required: true,
                 risk_level: "sensitive",
@@ -367,10 +460,14 @@ impl ToolRegistry {
                 permission_key: tool_name.to_string(),
                 allow_session: true,
             },
-            "jupyter.cell.add" | "jupyter.notebook.save" => ToolApprovalRequirement {
+            "jupyter.cell.add"
+            | "jupyter.cell.update"
+            | "jupyter.cell.delete"
+            | "jupyter.notebook.save"
+            | "jupyter.file.write" => ToolApprovalRequirement {
                 required: true,
                 risk_level: "mutation",
-                reason: "Changes the active notebook state.".to_string(),
+                reason: "Changes the active notebook or workspace files.".to_string(),
                 permission_key: tool_name.to_string(),
                 allow_session: true,
             },
@@ -429,8 +526,19 @@ impl ToolRegistry {
         match tool_name {
             "jupyter.cell.execute" => jupyter_tools::execute_cell(arguments, context, state).await,
             "jupyter.cell.add" => jupyter_tools::add_cell(arguments, context, state, app).await,
+            "jupyter.cell.update" => {
+                jupyter_tools::update_cell(arguments, context, state, app).await
+            }
+            "jupyter.cell.delete" => {
+                jupyter_tools::delete_cell(arguments, context, state, app).await
+            }
+            "jupyter.notebook.list_cells" => {
+                jupyter_tools::list_cells(context, state, app).await
+            }
             "jupyter.notebook.save" => jupyter_tools::save_notebook(context, state, app).await,
+            "jupyter.file.list" => jupyter_tools::list_files(arguments, context, state).await,
             "jupyter.file.read" => jupyter_tools::read_file(arguments, context, state).await,
+            "jupyter.file.write" => jupyter_tools::write_file(arguments, context, state).await,
             "jupyter.kernel.restart" => jupyter_tools::restart_kernel(context, state).await,
             _ => Err(AppError::Agent(format!(
                 "Unknown tool requested: {}",
@@ -516,5 +624,22 @@ mod tests {
         );
         assert_eq!(risky.risk_level, "high");
         assert!(!risky.allow_session);
+    }
+
+    #[test]
+    fn registers_all_builtin_skill_referenced_tools() {
+        let registry = ToolRegistry::new();
+        let defs = registry.get_definitions();
+        let names: Vec<&str> = defs.iter().map(|d| d.function.name.as_str()).collect();
+        assert!(names.contains(&"jupyter.notebook.list_cells"));
+        assert!(names.contains(&"jupyter.cell.update"));
+        assert!(names.contains(&"jupyter.cell.delete"));
+        assert!(names.contains(&"jupyter.file.list"));
+        assert!(names.contains(&"jupyter.file.write"));
+
+        let list_cells_approval =
+            registry.approval_requirement("jupyter.notebook.list_cells", &serde_json::json!({}));
+        assert!(!list_cells_approval.required);
+        assert_eq!(list_cells_approval.risk_level, "safe");
     }
 }

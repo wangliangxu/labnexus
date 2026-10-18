@@ -59,8 +59,28 @@ export function loadSavedServers(): JupyterServerConfig[] {
   }
 }
 
+export const REDACTED_SERVER_SECRET = '••••••••';
+
+export function redactServerSecretsForStorage(
+  config: JupyterServerConfig
+): JupyterServerConfig {
+  return {
+    ...config,
+    token: config.token ? REDACTED_SERVER_SECRET : config.token,
+    proxy: config.proxy
+      ? {
+          ...config.proxy,
+          password: config.proxy.password
+            ? REDACTED_SERVER_SECRET
+            : config.proxy.password,
+        }
+      : config.proxy,
+  };
+}
+
 export function saveServersToStorage(servers: JupyterServerConfig[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(servers));
+  const sanitized = servers.map(redactServerSecretsForStorage);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
 }
 
 export function saveServerConfig(config: JupyterServerConfig): JupyterServerConfig[] {

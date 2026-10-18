@@ -252,14 +252,14 @@ fn write_config_file(config: &AiConfig) -> Result<(), AppError> {
 }
 
 #[cfg(target_os = "macos")]
-fn load_keychain_api_key() -> Result<Option<String>, String> {
+pub fn load_keychain_secret(service: &str, account: &str) -> Result<Option<String>, String> {
     let output = Command::new("security")
         .args([
             "find-generic-password",
             "-a",
-            KEYCHAIN_ACCOUNT,
+            account,
             "-s",
-            KEYCHAIN_SERVICE,
+            service,
             "-w",
         ])
         .output()
@@ -276,16 +276,21 @@ fn load_keychain_api_key() -> Result<Option<String>, String> {
     }
 }
 
+#[cfg(not(target_os = "macos"))]
+pub fn load_keychain_secret(_service: &str, _account: &str) -> Result<Option<String>, String> {
+    Ok(None)
+}
+
 #[cfg(target_os = "macos")]
-fn save_keychain_api_key(secret: &str) -> Result<(), String> {
+pub fn save_keychain_secret(service: &str, account: &str, secret: &str) -> Result<(), String> {
     if secret.is_empty() {
         let output = Command::new("security")
             .args([
                 "delete-generic-password",
                 "-a",
-                KEYCHAIN_ACCOUNT,
+                account,
                 "-s",
-                KEYCHAIN_SERVICE,
+                service,
             ])
             .output()
             .map_err(|error| format!("Could not start macOS security tool: {}", error))?;
@@ -301,9 +306,9 @@ fn save_keychain_api_key(secret: &str) -> Result<(), String> {
             "add-generic-password",
             "-U",
             "-a",
-            KEYCHAIN_ACCOUNT,
+            account,
             "-s",
-            KEYCHAIN_SERVICE,
+            service,
             "-w",
             secret,
         ])
@@ -314,6 +319,21 @@ fn save_keychain_api_key(secret: &str) -> Result<(), String> {
     } else {
         Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
     }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn save_keychain_secret(_service: &str, _account: &str, _secret: &str) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn load_keychain_api_key() -> Result<Option<String>, String> {
+    load_keychain_secret(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT)
+}
+
+#[cfg(target_os = "macos")]
+fn save_keychain_api_key(secret: &str) -> Result<(), String> {
+    save_keychain_secret(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT, secret)
 }
 
 fn validate_ai_config(config: &AiConfig) -> Result<(), AppError> {

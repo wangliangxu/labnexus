@@ -25,7 +25,7 @@ interface UseKernelProps {
   notebookPath: string;
   kernelName?: string;
   onCellOutput?: (cellId: string, output: CellOutput) => void;
-  onCellExecutionDone?: (cellId: string, executionCount?: number) => void;
+  onCellExecutionDone?: (cellId: string, executionCount?: number, hadError?: boolean) => void;
 }
 
 interface UseKernelReturn {
@@ -45,8 +45,8 @@ interface UseKernelReturn {
 interface KernelMsgPayload {
   kernel_id: string;
   msg?: {
-    header: { msg_id: string; msg_type: string };
-    parent_header?: { msg_id: string };
+    header: { msg_id: string; msg_type: string; username?: string; session?: string };
+    parent_header?: { msg_id?: string; username?: string; session?: string };
     content: Record<string, any>;
   };
   raw?: string;
@@ -67,6 +67,7 @@ export function useKernel({
 
   // Map request msg_id -> cellId
   const msgIdToCellIdRef = useRef<Map<string, string>>(new Map());
+  const erroredCellsRef = useRef<Set<string>>(new Set());
   const latestCellIdRef = useRef<string | null>(null);
 
   // Store callbacks in refs to avoid re-triggering useEffects
@@ -80,12 +81,13 @@ export function useKernel({
   const clearPendingExecutions = useCallback(() => {
     const pendingCellIds = new Set(msgIdToCellIdRef.current.values());
     msgIdToCellIdRef.current.clear();
+    erroredCellsRef.current.clear();
     if (latestCellIdRef.current) {
       pendingCellIds.add(latestCellIdRef.current);
       latestCellIdRef.current = null;
     }
     pendingCellIds.forEach((cellId) => {
-      onDoneRef.current?.(cellId);
+      onDoneRef.current?.(cellId, undefined, true);
     });
   }, []);
 
@@ -126,15 +128,23 @@ export function useKernel({
 
       const msgType = msg.header?.msg_type;
       const parentId = msg.parent_header?.msg_id;
+      const parentUsername = msg.parent_header?.username;
+      const parentSession = msg.parent_header?.session;
       const content = msg.content;
-
-      console.log('[useKernel] kernel:msg:', msgType, 'parent:', parentId);
 
       if (!msgType || !content) return;
 
       // Update kernel execution state
       if (msgType === 'status' && content.execution_state) {
         setStatus(content.execution_state as KernelStatus);
+      }
+
+      // Ignore outputs triggered by the AI Agent's background tool calls
+      if (
+        parentUsername === 'labnexus_agent' ||
+        parentSession === 'agent_session'
+      ) {
+        return;
       }
 
       const outputMsgTypes = new Set([
@@ -148,23 +158,14 @@ export function useKernel({
       const mappedCellId = parentId
         ? msgIdToCellIdRef.current.get(parentId)
         : undefined;
-      const fallbackCellId = outputMsgTypes.has(msgType)
-        ? latestCellIdRef.current
-        : null;
+      const fallbackCellId =
+        !parentId && outputMsgTypes.has(msgType)
+          ? latestCellIdRef.current
+          : null;
       const cellId = mappedCellId || fallbackCellId;
-
-      if (!mappedCellId && fallbackCellId && msgType !== 'status') {
-        console.warn(
-          '[useKernel] kernel:msg parent not mapped, using latest cell:',
-          msgType,
-          'parent:',
-          parentId
-        );
-      }
 
       // If this message belongs to a cell execution request
       if (cellId) {
-
         if (msgType === 'stream') {
           onOutputRef.current?.(cellId, {
             output_type: 'stream',
@@ -184,8 +185,13 @@ export function useKernel({
             data: content.data || {},
             metadata: content.metadata || {},
           });
-          onDoneRef.current?.(cellId, content.execution_count);
+          onDoneRef.current?.(
+            cellId,
+            content.execution_count,
+            erroredCellsRef.current.has(cellId)
+          );
         } else if (msgType === 'error') {
+          erroredCellsRef.current.add(cellId);
           onOutputRef.current?.(cellId, {
             output_type: 'error',
             ename: content.ename || 'Error',
@@ -194,17 +200,25 @@ export function useKernel({
           });
           if (parentId) msgIdToCellIdRef.current.delete(parentId);
           if (latestCellIdRef.current === cellId) latestCellIdRef.current = null;
-          onDoneRef.current?.(cellId);
+          onDoneRef.current?.(cellId, undefined, true);
         } else if (msgType === 'execute_reply') {
-          onDoneRef.current?.(cellId);
+          const isReplyError = content.status === 'error' || content.status === 'aborted';
+          if (isReplyError) erroredCellsRef.current.add(cellId);
+          onDoneRef.current?.(
+            cellId,
+            typeof content.execution_count === 'number' ? content.execution_count : undefined,
+            erroredCellsRef.current.has(cellId)
+          );
         } else if (
           msgType === 'status' &&
           content.execution_state === 'idle'
         ) {
           // Cell finished execution
+          const hadError = erroredCellsRef.current.has(cellId);
+          erroredCellsRef.current.delete(cellId);
           if (parentId) msgIdToCellIdRef.current.delete(parentId);
           if (latestCellIdRef.current === cellId) latestCellIdRef.current = null;
-          onDoneRef.current?.(cellId);
+          onDoneRef.current?.(cellId, undefined, hadError);
         }
       }
     });

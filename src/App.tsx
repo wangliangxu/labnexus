@@ -16,6 +16,7 @@ import { StatusBar } from './components/common/StatusBar';
 import { WelcomeScreen } from './components/common/WelcomeScreen';
 import { WorkbenchTabs, type TabItem } from './components/common/WorkbenchTabs';
 import { NotebookEditor } from './components/notebook/NotebookEditor';
+import { FileEditor } from './components/editor/FileEditor';
 import { NotebookTocPanel } from './components/notebook/NotebookTocPanel';
 import { TerminalPanel } from './components/terminal/TerminalPanel';
 import { TerminalSelector } from './components/terminal/TerminalSelector';
@@ -156,7 +157,10 @@ function App() {
       headings: [],
       activeHeadingId: null,
     });
-  }, [activeTab?.type]);
+    workspaceContextRef.current = {
+      server_id: activeTab?.data?.serverId || activeServerId || undefined,
+    };
+  }, [activeServerId, activeTab]);
 
   useEffect(() => {
     localStorage.setItem('labnexus:agent-width', String(agentWidth));
@@ -202,10 +206,20 @@ function App() {
     setViewMode('explore');
   };
 
+  const handleTabDirtyChange = useCallback((tabId: string, isDirty: boolean) => {
+    setTabs((prev) => {
+      const target = prev.find((t) => t.id === tabId);
+      if (!target || Boolean(target.isDirty) === isDirty) return prev;
+      return prev.map((t) => (t.id === tabId ? { ...t, isDirty } : t));
+    });
+  }, []);
+
   // Open notebook or file in a tab
   const handleFileOpen = (path: string, type: string) => {
     const title = path.split('/').pop() || path;
-    const tabId = path;
+    const boundServerId = activeServerId || undefined;
+    const tabId = boundServerId ? `${boundServerId}:${path}` : path;
+    const isNotebook = type === 'notebook' || path.toLowerCase().endsWith('.ipynb');
 
     setTabs((prev) => {
       if (prev.some((t) => t.id === tabId)) return prev;
@@ -213,19 +227,78 @@ function App() {
         ...prev,
         {
           id: tabId,
-          type: type === 'notebook' || path.endsWith('.ipynb') ? 'notebook' : 'welcome',
+          type: isNotebook ? 'notebook' : 'file',
           title,
-          icon: type === 'notebook' || path.endsWith('.ipynb') ? '📓' : '📄',
-          data: { path },
+          isDirty: false,
+          icon: isNotebook ? '📓' : '📄',
+          data: { path, serverId: boundServerId },
         },
       ];
     });
     setActiveTabId(tabId);
   };
 
+  const handleFileRenamed = useCallback(
+    (oldPath: string, newPath: string) => {
+      const boundServerId = activeServerId || undefined;
+      const oldTabId = boundServerId ? `${boundServerId}:${oldPath}` : oldPath;
+      const newTabId = boundServerId ? `${boundServerId}:${newPath}` : newPath;
+      const newTitle = newPath.split('/').pop() || newPath;
+
+      setTabs((prev) =>
+        prev.map((tab) =>
+          tab.id === oldTabId
+            ? {
+                ...tab,
+                id: newTabId,
+                title: newTitle,
+                data: { ...tab.data, path: newPath },
+              }
+            : tab
+        )
+      );
+      setActiveTabId((prev) => (prev === oldTabId ? newTabId : prev));
+    },
+    [activeServerId]
+  );
+
+  const handleFileDeleted = useCallback(
+    (deletedPath: string) => {
+      const boundServerId = activeServerId || undefined;
+      const targetTabId = boundServerId ? `${boundServerId}:${deletedPath}` : deletedPath;
+      setTabs((prev) => {
+        const idx = prev.findIndex(
+          (t) =>
+            t.id === targetTabId ||
+            (t.data?.serverId === boundServerId &&
+              typeof t.data?.path === 'string' &&
+              (t.data.path === deletedPath || t.data.path.startsWith(`${deletedPath}/`)))
+        );
+        if (idx === -1) return prev;
+        const nextTabs = prev.filter(
+          (t) =>
+            !(
+              t.id === targetTabId ||
+              (t.data?.serverId === boundServerId &&
+                typeof t.data?.path === 'string' &&
+                (t.data.path === deletedPath || t.data.path.startsWith(`${deletedPath}/`)))
+            )
+        );
+        setActiveTabId((curr) => {
+          if (!curr || nextTabs.some((t) => t.id === curr)) return curr;
+          if (nextTabs.length === 0) return null;
+          return nextTabs[Math.min(idx, nextTabs.length - 1)].id;
+        });
+        return nextTabs;
+      });
+    },
+    [activeServerId]
+  );
+
   // Open terminal in a tab
   const handleOpenTerminal = (name: string) => {
-    const tabId = `term-${name}`;
+    const boundServerId = activeServerId || undefined;
+    const tabId = boundServerId ? `${boundServerId}:term-${name}` : `term-${name}`;
     setTabs((prev) => {
       if (prev.some((t) => t.id === tabId)) return prev;
       return [
@@ -235,7 +308,7 @@ function App() {
           type: 'terminal',
           title: `terminal: ${name}`,
           icon: '💻',
-          data: { terminalName: name },
+          data: { terminalName: name, serverId: boundServerId },
         },
       ];
     });
@@ -254,6 +327,16 @@ function App() {
 
   // Close tab and switch focus
   const handleCloseTab = (id: string) => {
+    const targetTab = tabs.find((tab) => tab.id === id);
+    if (targetTab?.isDirty) {
+      const confirmed = window.confirm(
+        t('"{name}" has unsaved changes. Close without saving?', {
+          name: targetTab.title,
+        })
+      );
+      if (!confirmed) return;
+    }
+
     setTabs((prev) => {
       const idx = prev.findIndex((t) => t.id === id);
       if (idx === -1) return prev;
@@ -429,6 +512,8 @@ function App() {
                 }
               }}
               onFileOpen={handleFileOpen}
+              onFileRenamed={handleFileRenamed}
+              onFileDeleted={handleFileDeleted}
               onReconnect={
                 activeServer ? () => reconnect(activeServer.config.id) : undefined
               }
@@ -521,6 +606,7 @@ function App() {
               ) : (
                 tabs.map((tab) => {
                   const isCurrent = tab.id === activeTabId;
+                  const tabServerId = tab.data?.serverId || activeServerId || undefined;
                   return (
                     <div
                       key={tab.id}
@@ -530,8 +616,10 @@ function App() {
                       {tab.type === 'notebook' ? (
                         <NotebookEditor
                           path={tab.data.path}
-                          serverId={activeServerId || undefined}
+                          serverId={tabServerId}
+                          isActiveTab={isCurrent}
                           onClose={() => handleCloseTab(tab.id)}
+                          onDirtyChange={(dirty) => handleTabDirtyChange(tab.id, dirty)}
                           onContextChange={handleWorkspaceContextChange}
                           tocOwnerId={isCurrent ? tab.id : undefined}
                           tocScrollRequest={isCurrent ? tocScrollRequest : null}
@@ -539,28 +627,17 @@ function App() {
                         />
                       ) : tab.type === 'terminal' ? (
                         <TerminalPanel
-                          serverId={activeServerId || undefined}
+                          serverId={tabServerId}
                           terminalName={tab.data.terminalName}
                           onClose={() => handleCloseTab(tab.id)}
                         />
                       ) : (
-                        <div
-                          className="flex-1 flex flex-col items-center justify-center gap-3 w-full h-full"
-                          style={{ background: 'var(--bg-editor)', color: 'var(--text-secondary)' }}
-                        >
-                          <p className="text-sm font-medium">{t('Text editor for {name} coming soon', { name: tab.title })}</p>
-                          <button
-                            onClick={() => handleCloseTab(tab.id)}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-                            style={{
-                              background: 'var(--bg-card)',
-                              color: 'var(--text-primary)',
-                              border: '1px solid var(--border-default)',
-                            }}
-                          >
-                            {t('Close File')}
-                          </button>
-                        </div>
+                        <FileEditor
+                          path={tab.data.path}
+                          serverId={tabServerId}
+                          isActiveTab={isCurrent}
+                          onDirtyChange={(dirty) => handleTabDirtyChange(tab.id, dirty)}
+                        />
                       )}
                     </div>
                   );
