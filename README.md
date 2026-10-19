@@ -2,7 +2,14 @@
 
 **LabNexus** 是一款基于 **Tauri v2 (Rust)** 与 **React 19 (TypeScript)** 构建的原生桌面端远程 JupyterLab 客户端与科学计算 AI Agent 工作台。它专为连接远程算力集群、内网 GPU 服务器以及本地科学计算环境而设计，将多标签页 Notebook/代码编辑、SSH/SOCKS5 隧道穿透、远程终端与支持 MCP 协议的 ReAct 智能体深度融合在轻量级原生桌面应用中。
 
-> **Current Version**: `v0.4.0`
+> **Current Version**: `v0.5.0`
+
+### v0.5.0 更新
+
+- AI 设置默认使用 `deepseek-flash` 和 Responses API，统一模型与思考模式配置，完善流式输出和多轮工具调用。
+- 新增 ChatGPT 登录与多账号管理，可通过符合条件的订阅使用授权模型，并查看用量入口。
+- 新增 AI 独立代理，API Key 与 ChatGPT 分别配置系统代理、手动代理或直连，支持 HTTP / HTTPS / SOCKS5 / SOCKS5H 和连接测试。
+- 详细变更与使用说明见 [v0.5.0 版本说明](docs/releases/v0.5.0.md) 及下方 AI 配置章节。
 
 ---
 
@@ -31,11 +38,11 @@
 
 ### 3. ReAct 科学计算 AI Agent 与 MCP 生态
 - **混合大模型策略 (Hybrid LLM Strategy)**：
-  - **远程 API（OpenAI / DeepSeek 兼容）**：原生适配新一代混合推理模型（如 `deepseek-flash` / `deepseek-4.1-flash`、`deepseek-reasoner`、`o3` / `gpt-4.1` 等）：
-    - 支持配置 **思考模式（`thinking_mode`: `auto` / `enabled` / `disabled`）** 与 **思考深度（`reasoning_effort`: `low` / `medium` / `high` / `max`）**；
-    - 思考模式激活时自动省略无效的 `temperature` 参数并校准 `top_p` 范围；
-    - 严格遵循 DeepSeek 多轮 Tool Call 协议，在携带 `tools` 的多轮对话中自动保留并回传 `reasoning_content`；
-    - 实时流式推送思维链（`Thinking` 折叠面板）与最终回答。
+  - **远程 API（OpenAI / DeepSeek 兼容）**：默认使用 **Responses API**，原生支持 `deepseek-flash`（DeepSeek V4.1 Flash）与 `gpt-6.1-sol`：
+    - 统一模型字段，按模型能力设置思考模式和深度；保留 Chat Completions 供旧服务兼容。
+    - 适配文本、推理摘要 / DeepSeek 推理文本、并行函数调用和 Token 用量的流式事件。
+    - 本地保存并回传完整 Responses 输出条目，包括加密推理与消息 phase，维持工具调用多轮上下文；按模型和接口地址隔离回传。
+    - 使用 `store: false` 和完整本地历史实现无状态接续；失败、截断或缺失完成事件时不会执行部分工具调用。
   - **本地模型（Ollama / llama.cpp）**：支持本地模型推理、工具调用能力自适应降级，以及远程/本地服务商之间的 **指数退避重试 + 熔断器（Circuit Breaker）自动容错切换**。
 - **内置科学计算工具与外部 MCP 扩展**：
   - 内置 Notebook 单元格读写、远程内核代码执行、远程文件读写等工具；
@@ -118,16 +125,27 @@ labnexus/
 打开左下角 **设置 (Settings) → AI 配置 (AI Configuration)**：
 
 1. **服务商与模型 (Provider & Models)**：
-   - **Base URL**：`https://api.deepseek.com`（或任意 OpenAI 兼容接口地址）
-   - **Chat Model**：`deepseek-flash`（或 `deepseek-4.1-flash`、`deepseek-chat`、`gpt-4.1`）
-   - **Reasoning Model**：`deepseek-reasoner`（当使用传统非 Flash 模型且开启思考模式时可作为专用推理模型）
-   - **思考模式 (Thinking Mode)**：
-     - `自动 (Auto)`：根据模型特性自动决定是否启用内置思维链；
-     - `开启 (Enabled)`：显式向接口发送 `"thinking": { "type": "enabled" }`，开启深度思考并自动省略无效的 `temperature` 参数；
-     - `关闭 (Disabled)`：显式发送 `"thinking": { "type": "disabled" }`，适合需要极速响应的简单任务。
-   - **思考深度 (Reasoning Effort)**：支持 `low`（工具调用循环更快）、`medium`（默认均衡）、`high`（深度分析）、`max`（最大思维链预算）。
-2. **上下文与记忆 (Context & Memory)**：
-   - 默认远程上下文窗口为 `128,000` Tokens（最高可配置至 `2,000,000` Tokens），默认最大输出预算为 `8,192` Tokens，为包含思维链（`reasoning_content`）与工具调用参数的响应预留充足空间。
+   - **认证方式**：默认 API Key + `deepseek-flash`。也可选择 **ChatGPT 订阅**，点击 **Continue with ChatGPT** 在系统浏览器中登录并授权，选择该账号可用模型后保存。
+   - **ChatGPT 订阅**：针对符合条件的本地应用和 Plus / Pro 账号，通过官方 OAuth 使用订阅额度或可用积分。支持多个账号、Token 自动续期、退出及用量管理；不会读取 ChatGPT 历史对话，也不会在订阅额度不足时转用付费 API Key。模型和额度以实际账号、工作区政策为准。
+   - 登录凭据仅存于本机 `~/.labnexus/config/chatgpt/`，Unix 下目录权限 `0700`、文件权限 `0600`，不通过前端 IPC 返回。退出会尝试撤销续期凭据；远程撤销无法确认时会显示提示。
+   - 订阅路由固定使用官方 Responses 地址，按其限制省略输出上限与采样参数；本地输出预算仅用于预留上下文。
+   - **API 协议**：默认 `Responses API`，旧配置缺少协议字段时也采用 Responses。仅兼容旧服务时选择 `Chat Completions`，不会在请求失败后自动更换协议。
+   - **模型预设**：点击 **DeepSeek V4.1 Flash** 或 **GPT-6.1 Sol**，填入对应服务商 API Key 后保存。切换服务商会清空旧 Key 输入，防止发给错误服务商。预设超时为 300 秒，输出预算为 65,536 Tokens。
+   - **Base URL / 模型**：DeepSeek 为 `https://api.deepseek.com` / `deepseek-flash`；OpenAI 为 `https://api.openai.com/v1` / `gpt-6.1-sol`。也可填写兼容网关地址；完整 `/responses` 或旧 `/chat/completions` 地址会按选定协议规范化。
+   - **思考设置**：Responses 通过 `reasoning.effort` 控制思考。同一模型完成对话和推理，只有 Chat Completions 的高级兼容选项保留独立推理模型。
+     - Flash：支持 `low / high / max`，默认 `high`；关闭思考时发送 `none`。旧配置 `medium / xhigh` 按 `high` 发送。思考模式省略 `temperature`，`top_p` 限于 `0.95–1.00`；非思考模式使用 `temperature`（`0–2`），省略固定为 `1` 的 `top_p`。
+     - GPT-6.1 Sol：支持 `low / medium / high / xhigh / max`，预设为 `medium`；不能关闭推理，需要更快响应时选择 `low`。工具调用必须使用 Responses API。
+2. **AI 网络代理 (AI proxy)**：
+   - API Key 远程模型与 ChatGPT 订阅分别配置，均支持 **跟随系统（默认） / 手动代理 / 直连**。例如可将 DeepSeek 设为直连、ChatGPT 设为手动代理。
+   - 手动代理支持 `http://`、`https://`、`socks5://`、`socks5h://`，如 `http://127.0.0.1:7890` 或 `socks5h://127.0.0.1:7891`；实际端口以 VPN 客户端为准。SOCKS5H 通过代理解析域名，地址中不支持用户名密码。
+   - ChatGPT 代理统一覆盖 OAuth 令牌交换、JWKS 身份校验、续期、撤销、模型目录和 Responses 推理；浏览器登录仍使用浏览器自身的系统代理或 VPN。登录回调的 `127.0.0.1` / `localhost` 应在浏览器代理中直连。
+   - 保存后无需重启，新 AI 任务使用新配置；本地回环服务自动直连，Jupyter 连接仍独立配置。“直连”只关闭应用代理，无法绕过 VPN 客户端的 TUN 路由。
+   - **测试连接** 使用当前表单，支持保存前测试，不发送 API Key、OAuth Token 或模型请求。ChatGPT 分别测试授权域名与 API 域名；`401` 仅确认网络可达，不代表账号或模型权限已通过验证。
+3. **上下文与记忆 (Context & Memory)**：
+   - Flash 预设上下文窗口为 `1,048,576` Tokens，最大输出 `393,216` Tokens；GPT-6.1 Sol 预设上下文为 `1,050,000` Tokens，最大输出 `128,000` Tokens。
+   - 输出预算包含推理 Tokens。上下文裁剪优先保留完整工具轮次，Responses 原始条目保持完整；若当前轮次无法放入预算，将提示增大窗口或开启新会话。
+
+参考：[Sign in with ChatGPT](https://developers.openai.com/siwc/token-sharing-open-source)、[DeepSeek Responses API](https://api-docs.deepseek.com/guides/responses_api/)、[OpenAI Responses 迁移指南](https://developers.openai.com/api/docs/guides/migrate-to-responses)、[GPT-6.1 Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol)。
 
 ---
 
@@ -164,7 +182,7 @@ npm run tauri build
 
 - 推送到 `main`：检查版本一致性与前端构建，随后并行构建四个平台的安装包；在该次 Actions 运行页面的 **Artifacts** 中下载。
 - 手动打包：在 Actions 中选择上述工作流，点击 **Run workflow**，选择分支运行。
-- 推送版本标签（如 `v0.4.0`）：构建全部成功后，将安装包上传至 [Releases](https://github.com/wangliangxu/labnexus/releases) 草稿，全部上传成功后自动正式发布。版本说明优先读取 `docs/releases/<标签>.md`。
+- 推送版本标签（如 `v0.5.0`）：构建全部成功后，将安装包上传至 [Releases](https://github.com/wangliangxu/labnexus/releases) 草稿，全部上传成功后自动正式发布。版本说明优先读取 `docs/releases/<标签>.md`。
 
 | 平台 | 架构 | 安装包 |
 | --- | --- | --- |
@@ -176,9 +194,9 @@ npm run tauri build
 
 ```bash
 # 确认版本更新已提交并推送后，为当前提交创建标签
-# 当前版本为 0.4.0；后续发布请替换为新的版本号
-git tag v0.4.0
-git push origin v0.4.0
+# 当前版本为 0.5.0；后续发布请替换为新的版本号
+git tag v0.5.0
+git push origin v0.5.0
 ```
 
 工作流使用 GitHub 自动提供的 `GITHUB_TOKEN`，无需额外配置个人访问令牌。当前产物未配置开发者证书签名，macOS 产物也未公证，安装时系统可能提示来源未验证；面向正式分发时应另行配置 Apple / Windows 代码签名。打包不包含 Python 或 Jupyter 环境，使用本地 Jupyter 功能仍需自行安装。

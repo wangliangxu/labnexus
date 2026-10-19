@@ -86,7 +86,7 @@ export function StatusBar({
           <span>{t('AI Agent')}</span>
         </button>
 
-        <span className="statusbar__brand">LabNexus v0.4</span>
+        <span className="statusbar__brand">LabNexus v0.5</span>
       </div>
     </>
   );

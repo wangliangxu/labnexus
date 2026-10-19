@@ -24,14 +24,26 @@ pub struct AiConfig {
     pub ollama: OllamaConfig,
     #[serde(default)]
     pub resilience: ResilienceConfig,
+    #[serde(default)]
+    pub network: super::network::AiNetworkConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoteApiConfig {
     pub enabled: bool,
     pub api_key: String,
+    #[serde(default = "default_auth_mode")]
+    pub auth_mode: String,
+    #[serde(default = "default_chatgpt_model")]
+    pub chatgpt_model: String,
+    #[serde(default)]
+    pub chatgpt_profile_id: String,
+    #[serde(default = "default_api_format")]
+    pub api_format: String, // "responses" | "chat_completions"
     pub base_url: String, // e.g. "https://api.deepseek.com" or "https://api.openai.com/v1"
+    #[serde(default = "default_chat_model")]
     pub chat_model: String, // e.g. "deepseek-flash" or "deepseek-chat" or "gpt-4.1"
+    #[serde(default)]
     pub reasoning_model: String, // e.g. "deepseek-reasoner"
     pub temperature: f32,
     pub top_p: f32,
@@ -76,6 +88,7 @@ impl Default for AiConfig {
             remote: RemoteApiConfig::default(),
             ollama: OllamaConfig::default(),
             resilience: ResilienceConfig::default(),
+            network: super::network::AiNetworkConfig::default(),
         }
     }
 }
@@ -85,12 +98,16 @@ impl Default for RemoteApiConfig {
         Self {
             enabled: true,
             api_key: "".to_string(),
+            auth_mode: default_auth_mode(),
+            chatgpt_model: default_chatgpt_model(),
+            chatgpt_profile_id: String::new(),
+            api_format: default_api_format(),
             base_url: "https://api.deepseek.com".to_string(),
-            chat_model: "deepseek-flash".to_string(),
-            reasoning_model: "deepseek-reasoner".to_string(),
-            temperature: 0.2,
+            chat_model: default_chat_model(),
+            reasoning_model: "".to_string(),
+            temperature: 1.0,
             top_p: 0.95,
-            timeout_seconds: 120,
+            timeout_seconds: 300,
             context_window_tokens: default_remote_context_tokens(),
             max_output_tokens: default_remote_output_tokens(),
             thinking_mode: default_thinking_mode(),
@@ -126,12 +143,26 @@ impl Default for ResilienceConfig {
     }
 }
 
+fn default_auth_mode() -> String {
+    "api_key".into()
+}
+fn default_chat_model() -> String {
+    "deepseek-flash".into()
+}
+fn default_chatgpt_model() -> String {
+    "gpt-6.1-sol".into()
+}
+
+fn default_api_format() -> String {
+    "responses".to_string()
+}
+
 fn default_remote_context_tokens() -> u32 {
-    128_000
+    1_048_576
 }
 
 fn default_remote_output_tokens() -> u32 {
-    8_192
+    65_536
 }
 
 fn default_thinking_mode() -> String {
@@ -139,7 +170,7 @@ fn default_thinking_mode() -> String {
 }
 
 fn default_reasoning_effort() -> String {
-    "medium".to_string()
+    "high".to_string()
 }
 
 fn default_ollama_context_tokens() -> u32 {
@@ -355,6 +386,7 @@ fn save_keychain_api_key(secret: &str) -> Result<(), String> {
 }
 
 fn validate_ai_config(config: &AiConfig) -> Result<(), AppError> {
+    config.network.validate()?;
     if config.provider != "remote" && config.provider != "ollama" {
         return Err(AppError::Agent(format!(
             "Unsupported AI provider '{}'",
@@ -432,6 +464,55 @@ fn validate_ai_config(config: &AiConfig) -> Result<(), AppError> {
         }
     }
     if !matches!(
+        config.remote.api_format.as_str(),
+        "responses" | "chat_completions"
+    ) {
+        return Err(AppError::Agent("Unsupported remote API format".to_string()));
+    }
+    if !matches!(config.remote.auth_mode.as_str(), "api_key" | "chatgpt") {
+        return Err(AppError::Agent(
+            "Unsupported remote authentication mode".into(),
+        ));
+    }
+    let model = if config.remote.auth_mode == "chatgpt" {
+        if config.remote.chatgpt_model.trim().is_empty() {
+            return Err(AppError::Agent(
+                "Select a model available to your ChatGPT account".into(),
+            ));
+        }
+        config.remote.chatgpt_model.trim().to_ascii_lowercase()
+    } else {
+        config.remote.chat_model.trim().to_ascii_lowercase()
+    };
+    if model.starts_with("gpt-6.1-sol") {
+        if config.remote.thinking_mode == "disabled" {
+            return Err(AppError::Agent(
+                "GPT-6.1 Sol requires reasoning; use low effort for faster responses".to_string(),
+            ));
+        }
+        if config.remote.context_window_tokens > 1_050_000
+            || config.remote.max_output_tokens > 128_000
+        {
+            return Err(AppError::Agent(
+                "GPT-6.1 Sol supports up to 1050000 context tokens and 128000 output tokens"
+                    .to_string(),
+            ));
+        }
+    }
+    // Flash limits include reasoning tokens in the output budget.
+    let remote_model = config.remote.chat_model.to_ascii_lowercase();
+    if config.remote.auth_mode == "api_key"
+        && remote_model.contains("deepseek")
+        && remote_model.contains("flash")
+        && (config.remote.context_window_tokens > 1_048_576
+            || config.remote.max_output_tokens > 393_216)
+    {
+        return Err(AppError::Agent(
+            "DeepSeek Flash supports up to 1048576 context tokens and 393216 output tokens"
+                .to_string(),
+        ));
+    }
+    if !matches!(
         config.remote.thinking_mode.as_str(),
         "auto" | "enabled" | "disabled"
     ) {
@@ -442,7 +523,7 @@ fn validate_ai_config(config: &AiConfig) -> Result<(), AppError> {
     }
     if !matches!(
         config.remote.reasoning_effort.as_str(),
-        "low" | "medium" | "high" | "max"
+        "low" | "medium" | "high" | "xhigh" | "max"
     ) {
         return Err(AppError::Agent(format!(
             "Unsupported reasoning effort '{}'",
@@ -473,6 +554,40 @@ mod tests {
     }
 
     #[test]
+    fn flash_defaults_and_token_limits_are_validated() {
+        let mut config = AiConfig::default();
+        assert!(validate_ai_config(&config).is_ok());
+        assert_eq!(config.remote.chat_model, "deepseek-flash");
+        assert!(config.remote.reasoning_model.is_empty());
+        config.remote.max_output_tokens = 393_216;
+        assert!(validate_ai_config(&config).is_ok());
+        config.remote.max_output_tokens += 1;
+        assert!(validate_ai_config(&config).is_err());
+        config.remote.max_output_tokens = 65_536;
+        config.remote.context_window_tokens += 1;
+        assert!(validate_ai_config(&config).is_err());
+    }
+
+    #[test]
+    fn validates_sol_capabilities_and_api_format() {
+        let mut config = AiConfig::default();
+        config.remote.chat_model = "gpt-6.1-sol".into();
+        config.remote.base_url = "https://api.openai.com/v1".into();
+        config.remote.reasoning_effort = "xhigh".into();
+        config.remote.context_window_tokens = 1_050_000;
+        config.remote.max_output_tokens = 128_000;
+        assert!(validate_ai_config(&config).is_ok());
+        config.remote.thinking_mode = "disabled".into();
+        assert!(validate_ai_config(&config).is_err());
+        config.remote.thinking_mode = "auto".into();
+        config.remote.max_output_tokens += 1;
+        assert!(validate_ai_config(&config).is_err());
+        config.remote.max_output_tokens = 65_536;
+        config.remote.api_format = "invalid".into();
+        assert!(validate_ai_config(&config).is_err());
+    }
+
+    #[test]
     fn older_config_receives_context_and_resilience_defaults() {
         let config: AiConfig = serde_json::from_value(serde_json::json!({
             "provider": "remote",
@@ -488,11 +603,16 @@ mod tests {
             }
         }))
         .unwrap();
-        assert_eq!(config.remote.context_window_tokens, 128_000);
-        assert_eq!(config.remote.max_output_tokens, 8_192);
+        assert_eq!(config.remote.context_window_tokens, 1_048_576);
+        assert_eq!(config.remote.max_output_tokens, 65_536);
+        assert_eq!(config.remote.api_format, "responses");
+        assert_eq!(config.remote.auth_mode, "api_key");
+        assert_eq!(config.remote.chatgpt_model, "gpt-6.1-sol");
         assert_eq!(config.remote.thinking_mode, "auto");
-        assert_eq!(config.remote.reasoning_effort, "medium");
+        assert_eq!(config.remote.reasoning_effort, "high");
         assert_eq!(config.ollama.context_window_tokens, 16_384);
         assert_eq!(config.resilience.max_retries, 2);
+        assert_eq!(config.network.remote.mode, "system");
+        assert_eq!(config.network.chatgpt.mode, "system");
     }
 }

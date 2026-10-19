@@ -2,6 +2,8 @@ import { t, useLocale, type Locale } from '../../i18n';
 import React, { useState, useEffect } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
 import { Settings as SettingsIcon, X, Globe, Sparkles, Palette, Zap, Keyboard, Shield, Check, Plus, Cpu } from 'lucide-react';
+import { ChatGptSettings } from './ChatGptSettings';
+import { AiNetworkSettings, DEFAULT_AI_NETWORK } from './AiNetworkSettings';
 import type { AiConfig, ExternalMcpConfigFile } from '../../types/agent';
 import {
   agentGetConfig,
@@ -43,7 +45,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isSavingAi, setIsSavingAi] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiStrategyTab, setAiStrategyTab] = useState<'remote' | 'ollama'>('remote');
-  const [aiSection, setAiSection] = useState<'provider' | 'context' | 'reliability' | 'mcp'>('provider');
+  const [aiSection, setAiSection] = useState<'provider' | 'context' | 'reliability' | 'network' | 'mcp'>('provider');
   const [aiReloadNonce, setAiReloadNonce] = useState(0);
   const [isLoadingAi, setIsLoadingAi] = useState(false);
   const [mcpConfig, setMcpConfig] = useState<ExternalMcpConfigFile>({ servers: [] });
@@ -76,6 +78,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         .finally(() => setIsLoadingAi(false));
     }
   }, [isOpen, defaultTab, aiReloadNonce]);
+
+  const useChatGpt = aiConfig?.remote.auth_mode === 'chatgpt';
+  const remoteModel = (useChatGpt ? aiConfig?.remote.chatgpt_model : aiConfig?.remote.chat_model)?.trim().toLowerCase() || 'deepseek-flash';
+  const isDeepSeekFlash = /deepseek.*flash/.test(remoteModel);
+  const isSol = remoteModel.startsWith('gpt-6.1-sol');
+  const isOpenAIReasoner = /^(gpt-[56]|o[134])/.test(remoteModel);
+  const thinkingMode = aiConfig?.remote.thinking_mode || 'auto';
+  const isRemoteThinking = isSol || thinkingMode === 'enabled' ||
+    (thinkingMode === 'auto' && (isDeepSeekFlash || isOpenAIReasoner || /reasoner|r1/.test(remoteModel)));
+  const apiFormat = aiConfig?.remote.api_format || 'responses';
+  const applyRemotePreset = (preset: 'deepseek' | 'sol') => {
+    if (!aiConfig) return;
+    const baseUrl = preset === 'deepseek' ? 'https://api.deepseek.com' : 'https://api.openai.com/v1';
+    let sameOrigin = false;
+    try { sameOrigin = new URL(aiConfig.remote.base_url).origin === new URL(baseUrl).origin; } catch { /* Invalid old URL. */ }
+    setAiConfig({
+      ...aiConfig, provider: 'remote',
+      remote: {
+        ...aiConfig.remote, enabled: true, auth_mode: 'api_key', api_format: 'responses', base_url: baseUrl,
+        api_key: sameOrigin ? aiConfig.remote.api_key : '',
+        chat_model: preset === 'deepseek' ? 'deepseek-flash' : 'gpt-6.1-sol',
+        reasoning_model: '', thinking_mode: 'auto',
+        reasoning_effort: preset === 'deepseek' ? 'high' : 'medium',
+        temperature: 1, top_p: 0.95,
+        context_window_tokens: preset === 'deepseek' ? 1_048_576 : 1_050_000,
+        max_output_tokens: 65_536, timeout_seconds: 300,
+      },
+    });
+  };
 
   if (!isOpen) return null;
 
@@ -335,11 +366,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               {aiConfig ? (
                 <>
-                  <div className="grid grid-cols-4 gap-2 rounded-xl border border-dark-border bg-dark-bg/50 p-1.5">
+                  <div className="grid grid-cols-5 gap-2 rounded-xl border border-dark-border bg-dark-bg/50 p-1.5">
                     {([
                       ['provider', t('Provider & Models')],
                       ['context', t('Context & Memory')],
                       ['reliability', t('Reliability')],
+                      ['network', t('AI proxy')],
                       ['mcp', t('MCP Servers')],
                     ] as const).map(([id, label]) => (
                       <button key={id} type="button" onClick={() => setAiSection(id)} className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${aiSection === id ? 'bg-brand-primary text-white shadow' : 'text-nb-text-secondary hover:bg-dark-border hover:text-nb-text'}`}>
@@ -379,6 +411,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="space-y-4">
                     {aiStrategyTab === 'remote' ? (
                       <div className="space-y-4">
+                        <label className="block space-y-1">
+                          <span className="text-xs font-semibold text-nb-text-secondary">{t('Authentication')}</span>
+                          <select value={useChatGpt ? 'chatgpt' : 'api_key'}
+                            onChange={(event) => setAiConfig({ ...aiConfig, remote: { ...aiConfig.remote,
+                              auth_mode: event.target.value as 'api_key' | 'chatgpt', thinking_mode: 'auto',
+                            } })}
+                            className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm">
+                            <option value="api_key">{t('API key (DeepSeek Flash by default)')}</option>
+                            <option value="chatgpt">{t('ChatGPT subscription')}</option>
+                          </select>
+                        </label>
+                        {useChatGpt ? <ChatGptSettings value={aiConfig.remote} onChange={(remote) => setAiConfig({ ...aiConfig, remote })} /> : <>
+                        <div className="rounded-lg border border-brand-primary/25 bg-brand-primary/10 p-3 space-y-2">
+                          <span className="text-xs font-semibold text-nb-text">{t('Model presets')}</span>
+                          <div className="flex flex-wrap gap-2">
+                            <button type="button" onClick={() => applyRemotePreset('deepseek')}
+                              className="rounded-lg border border-brand-primary/30 px-3 py-1.5 text-xs text-brand-primary hover:bg-brand-primary/10">{t('DeepSeek V4.1 Flash (default)')}</button>
+                            <button type="button" onClick={() => applyRemotePreset('sol')}
+                              className="rounded-lg border border-brand-primary/30 px-3 py-1.5 text-xs text-brand-primary hover:bg-brand-primary/10">GPT-6.1 Sol</button>
+                          </div>
+                          <p className="text-xs leading-relaxed text-nb-text-secondary">
+                            {t('Apply a preset to use Responses API with native reasoning and a 64K output budget. Enter the provider API key before saving.')}
+                          </p>
+                        </div>
+                        <label className="block space-y-1">
+                          <span className="text-xs font-semibold text-nb-text-secondary">{t('API format')}</span>
+                          <select value={apiFormat}
+                            onChange={(event) => setAiConfig({ ...aiConfig, remote: { ...aiConfig.remote, api_format: event.target.value as 'responses' | 'chat_completions' } })}
+                            className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-nb-text">
+                            <option value="responses">{t('Responses API (default)')}</option>
+                            <option value="chat_completions" disabled={isSol}>{t('Chat Completions (legacy compatibility)')}</option>
+                          </select>
+                        </label>
                         <div>
                           <label className="block text-xs font-semibold text-nb-text-secondary mb-1">
                             {t('Base URL')}
@@ -415,51 +480,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           />
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-xs font-semibold text-nb-text-secondary mb-1">
-                              {t('Chat Model')}
-                            </label>
-                            <input
-                              type="text"
-                              value={aiConfig.remote.chat_model}
-                              onChange={(e) =>
-                                setAiConfig({
-                                  ...aiConfig,
-                                  remote: { ...aiConfig.remote, chat_model: e.target.value },
-                                })
-                              }
-                              placeholder="deepseek-flash, deepseek-chat, or gpt-4.1"
-                              className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-nb-text focus:outline-none focus:border-brand-primary"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-semibold text-nb-text-secondary mb-1">
-                              {t('Reasoning Model')}
-                            </label>
-                            <input
-                              type="text"
-                              value={aiConfig.remote.reasoning_model}
-                              onChange={(e) =>
-                                setAiConfig({
-                                  ...aiConfig,
-                                  remote: { ...aiConfig.remote, reasoning_model: e.target.value },
-                                })
-                              }
-                              placeholder="deepseek-reasoner or o3"
-                              className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-nb-text focus:outline-none focus:border-brand-primary"
-                            />
-                          </div>
-                        </div>
-
+                        <label className="block space-y-1">
+                          <span className="text-xs font-semibold text-nb-text-secondary">{t('Model')}</span>
+                          <input type="text" value={aiConfig.remote.chat_model}
+                            onChange={(event) => {
+                              const model = event.target.value;
+                              const sol = model.trim().toLowerCase().startsWith('gpt-6.1-sol');
+                              setAiConfig({ ...aiConfig, remote: { ...aiConfig.remote, chat_model: model,
+                                ...(sol ? { api_format: 'responses', thinking_mode: 'auto' } : {}),
+                              } });
+                            }}
+                            placeholder="deepseek-flash"
+                            className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-nb-text" />
+                        </label>
+                        <p className="text-xs text-nb-text-secondary">{t('One model handles conversation and reasoning. Available thinking settings depend on the model.')}</p>
+                        {apiFormat === 'chat_completions' && !isDeepSeekFlash && !isSol && (
+                          <details className="text-xs text-nb-text-secondary">
+                            <summary className="cursor-pointer">{t('Legacy reasoning model (optional)')}</summary>
+                            <input type="text" value={aiConfig.remote.reasoning_model}
+                              onChange={(event) => setAiConfig({ ...aiConfig, remote: { ...aiConfig.remote, reasoning_model: event.target.value } })}
+                              className="mt-2 w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-nb-text" />
+                          </details>
+                        )}
+                        </>}
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <label className="block text-xs font-semibold text-nb-text-secondary mb-1">
                               {t('Thinking Mode')}
                             </label>
                             <select
-                              value={aiConfig.remote.thinking_mode || 'auto'}
+                              value={isSol && thinkingMode === 'disabled' ? 'auto' : thinkingMode}
                               onChange={(e) =>
                                 setAiConfig({
                                   ...aiConfig,
@@ -472,9 +522,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-nb-text focus:outline-none focus:border-brand-primary"
                             >
                               <option value="auto">{t('Auto (model default)')}</option>
-                              <option value="enabled">{t('Enabled (DeepSeek / CoT)')}</option>
-                              <option value="disabled">{t('Disabled (Fast response)')}</option>
+                              <option value="enabled">{t('Enabled (Thinking)')}</option>
+                              <option value="disabled" disabled={isSol}>{t('Disabled (Fast response)')}</option>
                             </select>
+                            {isSol && <p className="mt-1 text-[11px] text-nb-text-secondary">{t('GPT-6.1 Sol always reasons. Select low effort for faster responses.')}</p>}
                           </div>
 
                           <div>
@@ -482,22 +533,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               {t('Reasoning Effort')}
                             </label>
                             <select
-                              value={aiConfig.remote.reasoning_effort || 'medium'}
-                              disabled={(aiConfig.remote.thinking_mode || 'auto') === 'disabled'}
+                              value={isDeepSeekFlash && ['medium', 'xhigh'].includes(aiConfig.remote.reasoning_effort || '') ? 'high' : (aiConfig.remote.reasoning_effort || 'high')}
+                              disabled={!isRemoteThinking}
                               onChange={(e) =>
                                 setAiConfig({
                                   ...aiConfig,
                                   remote: {
                                     ...aiConfig.remote,
-                                    reasoning_effort: e.target.value as 'low' | 'medium' | 'high' | 'max',
+                                    reasoning_effort: e.target.value as 'low' | 'medium' | 'high' | 'xhigh' | 'max',
                                   },
                                 })
                               }
                               className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-nb-text focus:outline-none focus:border-brand-primary disabled:opacity-50"
                             >
                               <option value="low">{t('Low (Faster tool loops)')}</option>
-                              <option value="medium">{t('Medium (Balanced)')}</option>
+                              {!isDeepSeekFlash && <option value="medium">{t('Medium (Balanced)')}</option>}
                               <option value="high">{t('High (Deep analysis)')}</option>
+                              {!isDeepSeekFlash && <option value="xhigh">{t('Extra high (Extended reasoning)')}</option>}
                               <option value="max">{t('Max (Maximum CoT budget)')}</option>
                             </select>
                           </div>
@@ -511,14 +563,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <input
                               type="range"
                               min="0"
-                              max="1"
+                              max="2"
                               step="0.05"
                               value={aiConfig.remote.temperature}
-                              disabled={
-                                aiConfig.remote.thinking_mode === 'enabled' ||
-                                ((aiConfig.remote.thinking_mode || 'auto') === 'auto' &&
-                                  /flash|reasoner|r1|^o[134]/i.test(aiConfig.remote.chat_model))
-                              }
+                              disabled={useChatGpt || isRemoteThinking}
                               onChange={(e) =>
                                 setAiConfig({
                                   ...aiConfig,
@@ -527,9 +575,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               }
                               className="w-full accent-brand-primary disabled:opacity-40"
                             />
-                            {(aiConfig.remote.thinking_mode === 'enabled' ||
-                              ((aiConfig.remote.thinking_mode || 'auto') === 'auto' &&
-                                /flash|reasoner|r1|^o[134]/i.test(aiConfig.remote.chat_model))) && (
+                            {isRemoteThinking && (
                               <span className="text-[11px] text-nb-text-secondary block mt-0.5">
                                 {t('Omitted automatically when Thinking Mode is active.')}
                               </span>
@@ -538,22 +584,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                           <div>
                             <label className="block text-xs font-semibold text-nb-text-secondary mb-1">
-                              {t('Top P (')}{aiConfig.remote.top_p})
+                              {t('Top P (')}{isDeepSeekFlash ? (isRemoteThinking ? Math.max(0.95, aiConfig.remote.top_p) : 1) : aiConfig.remote.top_p})
                             </label>
                             <input
                               type="range"
-                              min="0"
+                              min={isDeepSeekFlash ? '0.95' : '0.01'}
                               max="1"
-                              step="0.05"
-                              value={aiConfig.remote.top_p}
+                              step="0.01"
+                              disabled={useChatGpt || (isDeepSeekFlash && !isRemoteThinking) || (isOpenAIReasoner && isRemoteThinking)}
+                              value={isDeepSeekFlash ? (isRemoteThinking ? Math.max(0.95, aiConfig.remote.top_p) : 1) : aiConfig.remote.top_p}
                               onChange={(e) =>
                                 setAiConfig({
                                   ...aiConfig,
                                   remote: { ...aiConfig.remote, top_p: parseFloat(e.target.value) },
                                 })
                               }
-                              className="w-full accent-brand-primary"
+                              className="w-full accent-brand-primary disabled:opacity-40"
                             />
+                            {isOpenAIReasoner && isRemoteThinking && <span className="text-[11px] text-nb-text-secondary block mt-0.5">
+                              {t('Omitted automatically when Thinking Mode is active.')}
+                            </span>}
+                            {isDeepSeekFlash && <span className="text-[11px] text-nb-text-secondary block mt-0.5">
+                              {t('Thinking: 0.95–1.00. Non-thinking: fixed at 1.00.')}
+                            </span>}
                           </div>
                         </div>
                       </div>
@@ -641,6 +694,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                   </>}
 
+                  {aiSection === 'network' && <AiNetworkSettings
+                    value={aiConfig.network || DEFAULT_AI_NETWORK}
+                    baseUrl={aiConfig.remote.base_url}
+                    onChange={(network) => setAiConfig({ ...aiConfig, network })}
+                  />}
+
                   {aiSection === 'context' && (
                   <div className="space-y-5 rounded-xl border border-dark-border bg-dark-bg/35 p-5">
                     <div>
@@ -653,6 +712,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <input
                         type="number"
                         min="2048"
+                        max={aiStrategyTab === 'remote' ? (isDeepSeekFlash ? 1_048_576 : isSol ? 1_050_000 : 2_000_000) : 2_000_000}
                         value={aiStrategyTab === 'remote' ? aiConfig.remote.context_window_tokens : aiConfig.ollama.context_window_tokens}
                         onChange={(event) => {
                           const value = Number(event.target.value);
@@ -668,6 +728,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <input
                         type="number"
                         min="256"
+                        max={aiStrategyTab === 'remote' ? (isDeepSeekFlash ? 393_216 : isSol ? 128_000 : undefined) : undefined}
                         value={aiStrategyTab === 'remote' ? aiConfig.remote.max_output_tokens : aiConfig.ollama.max_output_tokens}
                         onChange={(event) => {
                           const value = Number(event.target.value);

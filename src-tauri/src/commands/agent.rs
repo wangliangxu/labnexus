@@ -99,11 +99,13 @@ pub async fn agent_get_config() -> Result<AiConfig, AppError> {
 
 /// Save AI configuration to disk.
 #[tauri::command]
-pub async fn agent_save_config(mut config: AiConfig) -> Result<(), AppError> {
+pub async fn agent_save_config(state: State<'_, AppState>, mut config: AiConfig) -> Result<(), AppError> {
     if config.remote.api_key == REDACTED_API_KEY {
         config.remote.api_key = load_ai_config().remote.api_key;
     }
-    save_ai_config(&config)
+    save_ai_config(&config)?;
+    state.agent.llm.reset_network().await;
+    Ok(())
 }
 
 /// Retrieve external MCP server configuration.
@@ -364,4 +366,59 @@ pub async fn agent_list_traces(
         .list_traces(limit.unwrap_or(20).clamp(1, 200))
         .await
         .map_err(|e| AppError::Agent(e))
+}
+
+#[tauri::command]
+pub async fn agent_chatgpt_status() -> Result<crate::agent::chatgpt::Status, AppError> {
+    crate::agent::chatgpt::status()
+        .await
+        .map_err(AppError::Agent)
+}
+#[tauri::command]
+pub async fn agent_chatgpt_login(
+    app: AppHandle,
+    profile_id: Option<String>,
+) -> Result<(), AppError> {
+    use tauri_plugin_opener::OpenerExt;
+    let url = crate::agent::chatgpt::start(profile_id)
+        .await
+        .map_err(AppError::Agent)?;
+    if app.opener().open_url(url, None::<&str>).is_err() {
+        crate::agent::chatgpt::cancel().await;
+        return Err(AppError::Agent(
+            "Unable to open the system browser for ChatGPT sign-in".into(),
+        ));
+    }
+    Ok(())
+}
+#[tauri::command]
+pub async fn agent_chatgpt_cancel_login() {
+    crate::agent::chatgpt::cancel().await;
+}
+#[tauri::command]
+pub async fn agent_chatgpt_models(
+    profile_id: String,
+) -> Result<Vec<crate::agent::chatgpt::Model>, AppError> {
+    crate::agent::chatgpt::models(&profile_id)
+        .await
+        .map_err(AppError::Agent)
+}
+#[tauri::command]
+pub async fn agent_chatgpt_logout(profile_id: String) -> Result<Option<String>, AppError> {
+    crate::agent::chatgpt::logout(&profile_id)
+        .await
+        .map_err(AppError::Agent)
+}
+#[tauri::command]
+pub fn agent_chatgpt_manage_usage(app: AppHandle) -> Result<(), AppError> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_url(crate::agent::chatgpt::usage_url(), None::<&str>)
+        .map_err(|_| AppError::Agent("Unable to open ChatGPT usage settings".into()))
+}
+
+
+#[tauri::command]
+pub async fn agent_test_ai_proxy(route: String, proxy: crate::agent::network::AiProxyConfig, base_url: String) -> Result<Vec<crate::agent::network::AiProxyTestResult>, AppError> {
+    crate::agent::network::test_proxy(&route, &proxy, &base_url).await
 }

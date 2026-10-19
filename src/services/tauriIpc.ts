@@ -226,7 +226,8 @@ export async function agentGetConfig(): Promise<AiConfig> {
 }
 
 export async function agentSaveConfig(config: AiConfig): Promise<void> {
-  return invoke('agent_save_config', { config });
+  await invoke('agent_save_config', { config });
+  window.dispatchEvent(new Event('labnexus:ai-config-changed'));
 }
 
 export async function agentGetMcpConfig(): Promise<ExternalMcpConfigFile> {
@@ -339,4 +340,15 @@ export async function jupyterResizeTerminal(name: string, rows: number, cols: nu
 
 export async function jupyterDisconnectTerminal(name: string, serverId?: string): Promise<void> {
   return invoke('jupyter_disconnect_terminal', { name, serverId });
+}
+
+export async function agentChatGptStatus(): Promise<import('../types/agent').ChatGptStatus> { return invoke('agent_chatgpt_status'); }
+export async function agentChatGptLogin(profileId?: string): Promise<void> { return invoke('agent_chatgpt_login', { profileId: profileId || null }); }
+export async function agentChatGptCancelLogin(): Promise<void> { return invoke('agent_chatgpt_cancel_login'); }
+export async function agentChatGptModels(profileId: string): Promise<import('../types/agent').ChatGptModel[]> { return invoke('agent_chatgpt_models', { profileId }); }
+export async function agentChatGptLogout(profileId: string): Promise<string | null> { return invoke('agent_chatgpt_logout', { profileId }); }
+export async function agentChatGptManageUsage(): Promise<void> { return invoke('agent_chatgpt_manage_usage'); }
+
+export async function agentTestAiProxy(route: 'remote' | 'chatgpt', proxy: import('../types/agent').AiProxyConfig, baseUrl: string): Promise<import('../types/agent').AiProxyTestResult[]> {
+  return invoke('agent_test_ai_proxy', { route, proxy, baseUrl });
 }

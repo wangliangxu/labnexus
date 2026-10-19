@@ -16,6 +16,7 @@ export interface AgentMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
   reasoning_content?: string;
+  response_replay?: { auth_scope?: string; model: string; endpoint: string; output: Record<string, unknown>[] };
   tool_calls?: ToolCall[];
   tool_call_id?: string;
   name?: string;
@@ -65,6 +66,10 @@ export interface AgentToolCallEvent {
 export interface RemoteApiConfig {
   enabled: boolean;
   api_key: string;
+  auth_mode?: 'api_key' | 'chatgpt';
+  chatgpt_model?: string;
+  chatgpt_profile_id?: string;
+  api_format?: 'responses' | 'chat_completions';
   base_url: string;
   chat_model: string;
   reasoning_model: string;
@@ -74,7 +79,7 @@ export interface RemoteApiConfig {
   context_window_tokens: number;
   max_output_tokens: number;
   thinking_mode?: 'auto' | 'enabled' | 'disabled';
-  reasoning_effort?: 'low' | 'medium' | 'high' | 'max';
+  reasoning_effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 }
 
 export interface OllamaConfig {
@@ -96,7 +101,12 @@ export interface ResilienceConfig {
   circuit_breaker_cooldown_seconds: number;
 }
 
+export interface AiProxyConfig { mode: 'system' | 'manual' | 'direct'; url: string; }
+export interface AiNetworkConfig { remote: AiProxyConfig; chatgpt: AiProxyConfig; }
+export interface AiProxyTestResult { target: string; reachable: boolean; status: number | null; latency_ms: number; detail: string; }
+
 export interface AiConfig {
+  network?: AiNetworkConfig;
   provider: 'remote' | 'ollama';
   remote: RemoteApiConfig;
   ollama: OllamaConfig;
@@ -183,3 +193,7 @@ export interface AgentTrace {
   completion_tokens: number;
   reasoning_chars: number;
 }
+
+export interface ChatGptAccount { id: string; label: string; connected: boolean; }
+export interface ChatGptStatus { accounts: ChatGptAccount[]; active_id?: string; pending: boolean; error?: string; }
+export interface ChatGptModel { slug: string; display_name: string; }

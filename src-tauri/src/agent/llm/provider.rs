@@ -3,6 +3,7 @@
 //! Handles OpenAI-compatible APIs (DeepSeek, OpenAI) and Local Ollama / llama.cpp HTTP APIs
 //! with real-time SSE streaming for text and tool calls.
 
+use super::responses::{build_responses_payload, read_responses_stream, remote_endpoint};
 use crate::agent::config::AiConfig;
 use crate::agent::types::*;
 use crate::error::AppError;
@@ -32,6 +33,8 @@ pub struct LlmChatResult {
 #[derive(Clone)]
 pub struct LlmClient {
     http: Client,
+    direct_http: Client,
+    remote_http: Arc<Mutex<Option<(crate::agent::network::AiProxyConfig, bool, Client)>>>,
     circuits: Arc<Mutex<HashMap<String, CircuitState>>>,
 }
 
@@ -54,6 +57,12 @@ impl LlmClient {
                 .timeout(Duration::from_secs(300))
                 .build()
                 .unwrap_or_default(),
+            direct_http: Client::builder()
+                .no_proxy()
+                .timeout(Duration::from_secs(300))
+                .build()
+                .expect("Unable to initialize direct AI HTTP client"),
+            remote_http: Arc::new(Mutex::new(None)),
             circuits: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -171,8 +180,28 @@ impl LlmClient {
         FT: FnMut(&str) + Send,
         FC: FnMut(&str) + Send,
     {
+        let mut effective = config.clone();
+        let subscription_token = if config.remote.auth_mode == "chatgpt" {
+            if !config.remote.enabled {
+                return Err(AppError::Agent("Remote AI provider is disabled".into()));
+            }
+            let access = crate::agent::chatgpt::access(&config.remote.chatgpt_profile_id)
+                .await
+                .map_err(AppError::Agent)?;
+            effective.remote.base_url = crate::agent::chatgpt::API_BASE.into();
+            effective.remote.api_format = "responses".into();
+            effective.remote.chat_model = config.remote.chatgpt_model.clone();
+            effective.remote.chatgpt_profile_id = access.profile_id;
+            effective.remote.api_key.clear();
+            Some(access.token)
+        } else {
+            None
+        };
+        let config = &effective;
         let base_url = &config.remote.base_url;
-        let api_key = config.remote.api_key.as_str();
+        let api_key = subscription_token
+            .as_deref()
+            .unwrap_or(&config.remote.api_key);
         let timeout_seconds = config.remote.timeout_seconds;
         let enabled = config.remote.enabled;
 
@@ -186,18 +215,32 @@ impl LlmClient {
             return Err(AppError::Agent("No chat model is configured".to_string()));
         }
 
-        let mut url = base_url.trim_end_matches('/').to_string();
-        if url.ends_with("/chat/completions") {
-            // already full endpoint path
-        } else if url.ends_with("/v1") {
-            url.push_str("/chat/completions");
-        } else {
-            url.push_str("/v1/chat/completions");
+        let use_responses = config.remote.api_format == "responses";
+        let url = remote_endpoint(base_url, use_responses);
+        if !use_responses
+            && !tools.is_empty()
+            && config
+                .remote
+                .chat_model
+                .trim()
+                .to_ascii_lowercase()
+                .starts_with("gpt-6.1-sol")
+        {
+            return Err(AppError::Agent(
+                "GPT-6.1 Sol tool calling requires Responses API".to_string(),
+            ));
         }
+        let (model, payload) = if use_responses {
+            build_responses_payload(config, messages, tools)?
+        } else {
+            build_remote_payload(config, messages, tools)
+        };
 
-        let (model, payload) = build_remote_payload(config, messages, tools);
-
-        let circuit_key = format!("remote:{}", url);
+        use std::hash::{Hash, Hasher};
+        let proxy = config.network.for_auth(&config.remote.auth_mode);
+        let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
+        proxy.hash(&mut fingerprint);
+        let circuit_key = format!("remote:{}:{:x}", url, fingerprint.finish());
         let mut resp = self
             .send_json_with_resilience(
                 config,
@@ -212,7 +255,25 @@ impl LlmClient {
         if !resp.status().is_success() {
             let status = resp.status();
             let err_text = resp.text().await.unwrap_or_default();
+            if config.remote.auth_mode == "chatgpt" {
+                if let Ok(value) = serde_json::from_str::<serde_json::Value>(&err_text) {
+                    if let Some(message) = crate::agent::chatgpt::inference_error(&value["error"]) {
+                        return Err(AppError::Agent(message));
+                    }
+                }
+            }
             return Err(provider_status_error("Remote LLM", status, &err_text));
+        }
+
+        if use_responses {
+            let mut result = read_responses_stream(resp, model, url, on_thought, on_chunk).await?;
+            if config.remote.auth_mode == "chatgpt" {
+                if let Some(replay) = &mut result.message.response_replay {
+                    replay.auth_scope =
+                        Some(format!("chatgpt:{}", config.remote.chatgpt_profile_id));
+                }
+            }
+            return Ok(result);
         }
 
         let mut accumulated_content = String::new();
@@ -576,6 +637,31 @@ impl LlmClient {
         }
     }
 
+    pub async fn reset_network(&self) {
+        *self.remote_http.lock().await = None;
+        self.circuits
+            .lock()
+            .await
+            .retain(|key, _| !key.starts_with("remote:"));
+    }
+
+    async fn remote_client(&self, config: &AiConfig, target: &str) -> Result<Client, AppError> {
+        let proxy = config.network.for_auth(&config.remote.auth_mode);
+        let loopback = crate::agent::network::is_loopback(target);
+        let mut cache = self.remote_http.lock().await;
+        if let Some((saved, saved_loopback, client)) = &*cache {
+            if saved == proxy && *saved_loopback == loopback {
+                return Ok(client.clone());
+            }
+        }
+        let client = crate::agent::network::client_builder(proxy, target)?
+            .timeout(Duration::from_secs(300))
+            .build()
+            .map_err(|_| AppError::Agent("Unable to initialize AI proxy client".into()))?;
+        *cache = Some((proxy.clone(), loopback, client.clone()));
+        Ok(client)
+    }
+
     async fn send_json_with_resilience(
         &self,
         config: &AiConfig,
@@ -586,10 +672,16 @@ impl LlmClient {
         timeout_seconds: u64,
     ) -> Result<reqwest::Response, AppError> {
         self.ensure_circuit_closed(provider_key).await?;
+        let client = if provider_key.starts_with("remote:") {
+            self.remote_client(config, url).await?
+        } else if crate::agent::network::is_loopback(url) {
+            self.direct_http.clone()
+        } else {
+            self.http.clone()
+        };
         let max_retries = config.resilience.max_retries.min(8);
         for attempt in 0..=max_retries {
-            let mut request = self
-                .http
+            let mut request = client
                 .post(url)
                 .timeout(Duration::from_secs(timeout_seconds.max(1)))
                 .json(payload);
@@ -598,7 +690,10 @@ impl LlmClient {
             }
             match request.send().await {
                 Ok(response) => {
-                    if !is_retryable_status(response.status()) {
+                    if !is_retryable_status(response.status())
+                        || (config.remote.auth_mode == "chatgpt"
+                            && response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS)
+                    {
                         self.record_provider_success(provider_key).await;
                         return Ok(response);
                     }
@@ -685,15 +780,26 @@ fn build_remote_payload(
     let chat_lower = remote.chat_model.trim().to_ascii_lowercase();
     // If thinking is explicitly enabled and a dedicated reasoning_model is configured
     // (for non-Flash models), switch to reasoning_model; Flash models support native thinking toggle.
-    let model = if thinking_mode == "enabled"
+    let mut model = if thinking_mode == "enabled"
         && !remote.reasoning_model.trim().is_empty()
         && !chat_lower.contains("flash")
         && !chat_lower.contains("reasoner")
+        && !chat_lower.starts_with("gpt-6")
     {
         remote.reasoning_model.trim().to_string()
     } else {
         remote.chat_model.trim().to_string()
     };
+
+    // Correct the previously suggested model identifier on the official endpoint.
+    // Keep custom gateway identifiers intact.
+    let is_official_deepseek = url::Url::parse(&remote.base_url)
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_owned))
+        .is_some_and(|host| host == "api.deepseek.com");
+    if is_official_deepseek && model.eq_ignore_ascii_case("deepseek-4.1-flash") {
+        model = "deepseek-flash".to_string();
+    }
 
     let model_lower = model.to_ascii_lowercase();
     let base_lower = remote.base_url.to_ascii_lowercase();
@@ -702,7 +808,8 @@ fn build_remote_payload(
     let is_openai_reasoner = model_lower.starts_with("o1")
         || model_lower.starts_with("o3")
         || model_lower.starts_with("o4")
-        || model_lower.contains("gpt-5");
+        || model_lower.contains("gpt-5")
+        || model_lower.starts_with("gpt-6");
     let is_intrinsic_reasoner =
         model_lower.contains("reasoner") || model_lower.contains("r1") || is_openai_reasoner;
 
@@ -740,7 +847,9 @@ fn build_remote_payload(
         }
     } else {
         payload["temperature"] = json!(round_f32(remote.temperature));
-        payload["top_p"] = json!(round_f32(remote.top_p));
+        if !(is_deepseek && is_flash) {
+            payload["top_p"] = json!(round_f32(remote.top_p));
+        }
     }
 
     if is_deepseek {
@@ -750,10 +859,15 @@ fn build_remote_payload(
             payload["thinking"] = json!({ "type": "disabled" });
         }
         if is_thinking_active && (is_flash || thinking_mode == "enabled") {
-            payload["reasoning_effort"] = json!(remote.reasoning_effort);
+            let effort = if is_flash && remote.reasoning_effort == "medium" {
+                "high"
+            } else {
+                remote.reasoning_effort.as_str()
+            };
+            payload["reasoning_effort"] = json!(effort);
         }
     } else if is_thinking_active && is_openai_reasoner {
-        let effort = if remote.reasoning_effort == "max" {
+        let effort = if remote.reasoning_effort == "max" && !model_lower.starts_with("gpt-6") {
             "high"
         } else {
             remote.reasoning_effort.as_str()
@@ -780,7 +894,7 @@ fn retry_delay(base_ms: u64, attempt: u32) -> Duration {
     Duration::from_millis(exponential.saturating_add(jitter).min(60_000))
 }
 
-fn transient_error(message: impl Into<String>) -> AppError {
+pub(super) fn transient_error(message: impl Into<String>) -> AppError {
     AppError::Agent(format!("Transient provider error: {}", message.into()))
 }
 
@@ -932,7 +1046,7 @@ mod tests {
         config.remote.reasoning_effort = "high".to_string();
 
         let (model, payload) = build_remote_payload(&config, &[AgentMessage::user("hi")], &[]);
-        assert_eq!(model, "deepseek-4.1-flash");
+        assert_eq!(model, "deepseek-flash");
         assert!(payload.get("temperature").is_none());
         assert_eq!(payload["top_p"].as_f64().unwrap(), 0.95);
         assert_eq!(payload["thinking"]["type"], "enabled");
@@ -943,6 +1057,26 @@ mod tests {
         assert!(disabled_payload.get("temperature").is_some());
         assert_eq!(disabled_payload["thinking"]["type"], "disabled");
         assert!(disabled_payload.get("reasoning_effort").is_none());
+        assert!(disabled_payload.get("top_p").is_none());
+    }
+
+    #[test]
+    fn flash_auto_uses_native_thinking_and_maps_legacy_effort() {
+        let mut config = AiConfig::default();
+        config.remote.reasoning_effort = "medium".to_string();
+        config.remote.reasoning_model = "deepseek-reasoner".to_string();
+        let (model, payload) = build_remote_payload(&config, &[AgentMessage::user("hi")], &[]);
+        assert_eq!(model, "deepseek-flash");
+        assert_eq!(payload["reasoning_effort"], "high");
+        assert!(payload.get("thinking").is_none());
+        assert!(payload.get("temperature").is_none());
+        config.remote.thinking_mode = "enabled".to_string();
+        let (model, _) = build_remote_payload(&config, &[], &[]);
+        assert_eq!(model, "deepseek-flash");
+        config.remote.base_url = "https://gateway.example/v1".to_string();
+        config.remote.chat_model = "deepseek-4.1-flash".to_string();
+        let (model, _) = build_remote_payload(&config, &[], &[]);
+        assert_eq!(model, "deepseek-4.1-flash");
     }
 
     #[test]
@@ -969,6 +1103,7 @@ mod tests {
             ],
         ));
         let mut config = AiConfig::default();
+        config.remote.api_format = "chat_completions".to_string();
         config.remote.base_url = format!("http://{}/v1", address);
         config.remote.api_key.clear();
         config.ollama.enabled = false;
@@ -996,6 +1131,7 @@ mod tests {
             vec![("503 Service Unavailable", "down".to_string())],
         ));
         let mut config = AiConfig::default();
+        config.remote.api_format = "chat_completions".to_string();
         config.remote.base_url = format!("http://{}/v1", address);
         config.remote.api_key.clear();
         config.ollama.enabled = false;

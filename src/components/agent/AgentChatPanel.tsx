@@ -9,7 +9,7 @@ import {
 import { useAgent } from '../../hooks/useAgent';
 import type { AgentChatContext, AgentSessionListItem, AiConfig, Skill } from '../../types/agent';
 import {
-  agentCreateSession, agentGetConfig, agentGetMcpConfig, agentListSessions, agentRenameSession,
+  agentChatGptManageUsage, agentCreateSession, agentGetConfig, agentGetMcpConfig, agentListSessions, agentRenameSession,
 } from '../../services/tauriIpc';
 import { ToolConfirmModal } from './ToolConfirmModal';
 import { SkillSelector } from './SkillSelector';
@@ -82,6 +82,12 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
   }, [isOpen]);
 
   useEffect(() => {
+    const refresh = () => { if (isTauri()) void agentGetConfig().then(setAiConfig).catch(() => {}); };
+    window.addEventListener('labnexus:ai-config-changed', refresh);
+    return () => window.removeEventListener('labnexus:ai-config-changed', refresh);
+  }, []);
+
+  useEffect(() => {
     if (isOpen && status !== 'running' && isTauri()) void refreshSessions();
   }, [isOpen, status, messages.length]);
 
@@ -140,7 +146,7 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
   const visibleContextChips = contextChips.filter((chip) => !excludedContext.includes(chip.id));
   const providerName = aiConfig?.provider === 'ollama'
     ? `Ollama · ${aiConfig.ollama.chat_model}`
-    : aiConfig ? t('Remote · {model}', { model: aiConfig.remote.chat_model }) : t('Provider unavailable');
+    : aiConfig ? t('Remote · {model}', { model: aiConfig.remote.auth_mode === 'chatgpt' ? (aiConfig.remote.chatgpt_model || 'gpt-6.1-sol') : aiConfig.remote.chat_model }) : t('Provider unavailable');
   const runLabel = status === 'running'
     ? activeToolCall?.status === 'requires_confirmation' ? t('Waiting for approval') : activeToolCall?.status === 'running' ? t('Running tool') : t('Thinking')
     : t('Needs attention');
@@ -332,6 +338,10 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
         </main>
 
         <footer className="agent-composer">
+          {aiConfig?.provider === 'remote' && aiConfig.remote.auth_mode === 'chatgpt' && <div className="flex justify-between text-xs text-nb-text-secondary mb-2">
+            <span>{t('Using ChatGPT plan')}</span>
+            <button type="button" onClick={() => void agentChatGptManageUsage().catch((cause) => setPanelError(readableError(cause)))}>{t('Manage ChatGPT usage')}</button>
+          </div>}
           <details className="agent-context-options">
             <summary><FileText size={13} /><span>{t('Notebook context')}</span><small>{injectContext ? t('{count} attached', { count: visibleContextChips.length }) : t('Off')}</small><ChevronDown size={12} /></summary>
             <div className="agent-context-options__content">

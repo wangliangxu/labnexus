@@ -1,6 +1,8 @@
 //! LabNexus — Agent Module.
 
 pub mod config;
+pub mod network;
+pub mod chatgpt;
 pub mod engine;
 pub mod knowledge;
 pub mod llm;

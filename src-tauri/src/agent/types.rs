@@ -10,6 +10,9 @@ pub struct AgentMessage {
     pub content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_content: Option<String>,
+    /// Exact Responses items for stateless continuation, scoped to their origin.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_replay: Option<ResponseReplay>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCall>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -26,6 +29,7 @@ impl AgentMessage {
             role: "system".to_string(),
             content: content.into(),
             reasoning_content: None,
+            response_replay: None,
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -39,6 +43,7 @@ impl AgentMessage {
             role: "user".to_string(),
             content: content.into(),
             reasoning_content: None,
+            response_replay: None,
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -52,6 +57,7 @@ impl AgentMessage {
             role: "assistant".to_string(),
             content: content.into(),
             reasoning_content: None,
+            response_replay: None,
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -65,6 +71,7 @@ impl AgentMessage {
             role: "assistant".to_string(),
             content: content.into(),
             reasoning_content: None,
+            response_replay: None,
             tool_calls: Some(tool_calls),
             tool_call_id: None,
             name: None,
@@ -82,12 +89,22 @@ impl AgentMessage {
             role: "tool".to_string(),
             content: output.into(),
             reasoning_content: None,
+            response_replay: None,
             tool_calls: None,
             tool_call_id: Some(tool_call_id.into()),
             name: Some(name.into()),
             timestamp: chrono::Utc::now().to_rfc3339(),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResponseReplay {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth_scope: Option<String>,
+    pub model: String,
+    pub endpoint: String,
+    pub output: Vec<serde_json::Value>,
 }
 
 /// A tool call requested by the LLM.
