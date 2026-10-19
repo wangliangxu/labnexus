@@ -66,30 +66,67 @@ impl LlmClient {
         config: &AiConfig,
         messages: &[AgentMessage],
         tools: &[ToolDefinition],
-        mut on_chunk: F,
+        on_chunk: F,
     ) -> Result<LlmChatResult, AppError>
     where
         F: FnMut(&str) + Send,
     {
-        let mut emitted = false;
+        self.stream_chat_with_thoughts(config, messages, tools, |_| {}, on_chunk)
+            .await
+    }
+
+    /// Send a chat completion request and stream both internal reasoning (`on_thought`)
+    /// and visible answer deltas (`on_chunk`) in real-time.
+    pub async fn stream_chat_with_thoughts<FT, FC>(
+        &self,
+        config: &AiConfig,
+        messages: &[AgentMessage],
+        tools: &[ToolDefinition],
+        mut on_thought: FT,
+        mut on_chunk: FC,
+    ) -> Result<LlmChatResult, AppError>
+    where
+        FT: FnMut(&str) + Send,
+        FC: FnMut(&str) + Send,
+    {
+        let emitted = std::sync::atomic::AtomicBool::new(false);
         let primary = {
-            let mut relay = |chunk: &str| {
-                emitted = true;
+            let mut relay_thought = |thought: &str| {
+                emitted.store(true, std::sync::atomic::Ordering::Relaxed);
+                on_thought(thought);
+            };
+            let mut relay_chunk = |chunk: &str| {
+                emitted.store(true, std::sync::atomic::Ordering::Relaxed);
                 on_chunk(chunk);
             };
             if config.provider == "ollama" {
-                self.stream_ollama_native(config, messages, tools, &mut relay)
-                    .await
+                self.stream_ollama_native(
+                    config,
+                    messages,
+                    tools,
+                    &mut relay_thought,
+                    &mut relay_chunk,
+                )
+                .await
             } else {
-                self.stream_remote(config, messages, tools, &mut relay)
-                    .await
+                self.stream_remote(
+                    config,
+                    messages,
+                    tools,
+                    &mut relay_thought,
+                    &mut relay_chunk,
+                )
+                .await
             }
         };
         let error = match primary {
             Ok(result) => return Ok(result),
             Err(error) => error,
         };
-        if emitted || !config.resilience.fallback_enabled || !is_transient_error(&error) {
+        if emitted.load(std::sync::atomic::Ordering::Relaxed)
+            || !config.resilience.fallback_enabled
+            || !is_transient_error(&error)
+        {
             return Err(error);
         }
 
@@ -108,9 +145,10 @@ impl LlmClient {
             error
         );
         let fallback = if config.provider == "ollama" {
-            self.stream_remote(config, messages, tools, on_chunk).await
+            self.stream_remote(config, messages, tools, on_thought, on_chunk)
+                .await
         } else {
-            self.stream_ollama_native(config, messages, tools, on_chunk)
+            self.stream_ollama_native(config, messages, tools, on_thought, on_chunk)
                 .await
         };
         fallback.map_err(|fallback_error| {
@@ -121,21 +159,20 @@ impl LlmClient {
         })
     }
 
-    async fn stream_remote<F>(
+    async fn stream_remote<FT, FC>(
         &self,
         config: &AiConfig,
         messages: &[AgentMessage],
         tools: &[ToolDefinition],
-        mut on_chunk: F,
+        mut on_thought: FT,
+        mut on_chunk: FC,
     ) -> Result<LlmChatResult, AppError>
     where
-        F: FnMut(&str) + Send,
+        FT: FnMut(&str) + Send,
+        FC: FnMut(&str) + Send,
     {
         let base_url = &config.remote.base_url;
-        let model = &config.remote.chat_model;
         let api_key = config.remote.api_key.as_str();
-        let temp = config.remote.temperature;
-        let top_p = config.remote.top_p;
         let timeout_seconds = config.remote.timeout_seconds;
         let enabled = config.remote.enabled;
 
@@ -145,7 +182,7 @@ impl LlmClient {
                 config.provider
             )));
         }
-        if model.trim().is_empty() {
+        if config.remote.chat_model.trim().is_empty() {
             return Err(AppError::Agent("No chat model is configured".to_string()));
         }
 
@@ -158,24 +195,7 @@ impl LlmClient {
             url.push_str("/v1/chat/completions");
         }
 
-        let wire_messages = if base_url.contains("deepseek") || model.contains("deepseek") {
-            deepseek_messages(messages)
-        } else {
-            provider_messages(messages)
-        };
-        let mut payload = json!({
-            "model": model,
-            "messages": wire_messages,
-            "temperature": temp,
-            "top_p": top_p,
-            "stream": true,
-            "max_tokens": config.remote.max_output_tokens,
-            "stream_options": { "include_usage": true },
-        });
-
-        if !tools.is_empty() {
-            payload["tools"] = json!(tools);
-        }
+        let (model, payload) = build_remote_payload(config, messages, tools);
 
         let circuit_key = format!("remote:{}", url);
         let mut resp = self
@@ -220,10 +240,13 @@ impl LlmClient {
                             }
                             let delta = &choice["delta"];
                             if let Some(reasoning) = delta["reasoning_content"].as_str() {
-                                accumulated_reasoning.push_str(reasoning);
-                                usage.reasoning_chars = usage
-                                    .reasoning_chars
-                                    .saturating_add(reasoning.chars().count() as u64);
+                                if !reasoning.is_empty() {
+                                    on_thought(reasoning);
+                                    accumulated_reasoning.push_str(reasoning);
+                                    usage.reasoning_chars = usage
+                                        .reasoning_chars
+                                        .saturating_add(reasoning.chars().count() as u64);
+                                }
                             }
                             if let Some(content) = delta["content"].as_str() {
                                 if !content.is_empty() {
@@ -338,32 +361,38 @@ impl LlmClient {
                 message,
                 usage,
                 provider: "remote".to_string(),
-                model: model.clone(),
+                model,
             })
         } else {
-            if accumulated_content.is_empty() {
+            if accumulated_content.is_empty() && accumulated_reasoning.is_empty() {
                 return Err(AppError::Agent(
                     "LLM stream ended without content or tool calls".to_string(),
                 ));
             }
+            let mut message = AgentMessage::assistant(accumulated_content);
+            if !accumulated_reasoning.is_empty() {
+                message.reasoning_content = Some(accumulated_reasoning);
+            }
             Ok(LlmChatResult {
-                message: AgentMessage::assistant(accumulated_content),
+                message,
                 usage,
                 provider: "remote".to_string(),
-                model: model.clone(),
+                model,
             })
         }
     }
 
-    async fn stream_ollama_native<F>(
+    async fn stream_ollama_native<FT, FC>(
         &self,
         config: &AiConfig,
         messages: &[AgentMessage],
         tools: &[ToolDefinition],
-        mut on_chunk: F,
+        mut on_thought: FT,
+        mut on_chunk: FC,
     ) -> Result<LlmChatResult, AppError>
     where
-        F: FnMut(&str) + Send,
+        FT: FnMut(&str) + Send,
+        FC: FnMut(&str) + Send,
     {
         if !config.ollama.enabled {
             return Err(AppError::Agent(
@@ -451,10 +480,13 @@ impl LlmClient {
             }
             let message = &value["message"];
             if let Some(thinking) = message["thinking"].as_str() {
-                accumulated_thinking.push_str(thinking);
-                usage.reasoning_chars = usage
-                    .reasoning_chars
-                    .saturating_add(thinking.chars().count() as u64);
+                if !thinking.is_empty() {
+                    on_thought(thinking);
+                    accumulated_thinking.push_str(thinking);
+                    usage.reasoning_chars = usage
+                        .reasoning_chars
+                        .saturating_add(thinking.chars().count() as u64);
+                }
             }
             usage.prompt_tokens = value["prompt_eval_count"]
                 .as_u64()
@@ -526,13 +558,17 @@ impl LlmClient {
                 provider: "ollama".to_string(),
                 model: config.ollama.chat_model.clone(),
             })
-        } else if content.is_empty() {
+        } else if content.is_empty() && accumulated_thinking.is_empty() {
             Err(AppError::Agent(
                 "Ollama stream ended without content or tool calls".to_string(),
             ))
         } else {
+            let mut message = AgentMessage::assistant(content);
+            if !accumulated_thinking.is_empty() {
+                message.reasoning_content = Some(accumulated_thinking);
+            }
             Ok(LlmChatResult {
-                message: AgentMessage::assistant(content),
+                message,
                 usage,
                 provider: "ollama".to_string(),
                 model: config.ollama.chat_model.clone(),
@@ -637,6 +673,101 @@ impl LlmClient {
     }
 }
 
+/// Build the OpenAI/DeepSeek-compatible request body, adapting thinking mode,
+/// reasoning effort, and sampling parameters for models like DeepSeek 4.1 Flash.
+fn build_remote_payload(
+    config: &AiConfig,
+    messages: &[AgentMessage],
+    tools: &[ToolDefinition],
+) -> (String, serde_json::Value) {
+    let remote = &config.remote;
+    let thinking_mode = remote.thinking_mode.as_str();
+    let chat_lower = remote.chat_model.trim().to_ascii_lowercase();
+    // If thinking is explicitly enabled and a dedicated reasoning_model is configured
+    // (for non-Flash models), switch to reasoning_model; Flash models support native thinking toggle.
+    let model = if thinking_mode == "enabled"
+        && !remote.reasoning_model.trim().is_empty()
+        && !chat_lower.contains("flash")
+        && !chat_lower.contains("reasoner")
+    {
+        remote.reasoning_model.trim().to_string()
+    } else {
+        remote.chat_model.trim().to_string()
+    };
+
+    let model_lower = model.to_ascii_lowercase();
+    let base_lower = remote.base_url.to_ascii_lowercase();
+    let is_deepseek = base_lower.contains("deepseek") || model_lower.contains("deepseek");
+    let is_flash = model_lower.contains("flash");
+    let is_openai_reasoner = model_lower.starts_with("o1")
+        || model_lower.starts_with("o3")
+        || model_lower.starts_with("o4")
+        || model_lower.contains("gpt-5");
+    let is_intrinsic_reasoner =
+        model_lower.contains("reasoner") || model_lower.contains("r1") || is_openai_reasoner;
+
+    let is_thinking_active = match thinking_mode {
+        "enabled" => true,
+        "disabled" => false,
+        _ => is_intrinsic_reasoner || (is_deepseek && is_flash),
+    };
+
+    let wire_messages = if is_deepseek {
+        deepseek_messages(messages)
+    } else {
+        provider_messages(messages)
+    };
+
+    let mut payload = json!({
+        "model": model,
+        "messages": wire_messages,
+        "stream": true,
+        "max_tokens": remote.max_output_tokens,
+        "stream_options": { "include_usage": true },
+    });
+
+    let round_f32 = |v: f32| ((v as f64) * 1000.0).round() / 1000.0;
+
+    if is_thinking_active {
+        // In thinking mode, temperature is unsupported/ignored by DeepSeek & OpenAI reasoning engines.
+        if is_deepseek {
+            let effective_top_p = if is_flash {
+                remote.top_p.clamp(0.95, 1.0)
+            } else {
+                remote.top_p
+            };
+            payload["top_p"] = json!(round_f32(effective_top_p));
+        }
+    } else {
+        payload["temperature"] = json!(round_f32(remote.temperature));
+        payload["top_p"] = json!(round_f32(remote.top_p));
+    }
+
+    if is_deepseek {
+        if thinking_mode == "enabled" {
+            payload["thinking"] = json!({ "type": "enabled" });
+        } else if thinking_mode == "disabled" {
+            payload["thinking"] = json!({ "type": "disabled" });
+        }
+        if is_thinking_active && (is_flash || thinking_mode == "enabled") {
+            payload["reasoning_effort"] = json!(remote.reasoning_effort);
+        }
+    } else if is_thinking_active && is_openai_reasoner {
+        let effort = if remote.reasoning_effort == "max" {
+            "high"
+        } else {
+            remote.reasoning_effort.as_str()
+        };
+        payload["reasoning_effort"] = json!(effort);
+    }
+
+    if !tools.is_empty() {
+        payload["tools"] = json!(tools);
+    }
+
+    (model, payload)
+}
+
 fn is_retryable_status(status: reqwest::StatusCode) -> bool {
     status == reqwest::StatusCode::REQUEST_TIMEOUT
         || status == reqwest::StatusCode::TOO_MANY_REQUESTS
@@ -733,8 +864,8 @@ fn deepseek_messages(messages: &[AgentMessage]) -> Vec<serde_json::Value> {
 #[cfg(test)]
 mod tests {
     use super::{
-        deepseek_messages, is_retryable_status, ollama_messages, provider_messages, retry_delay,
-        LlmClient,
+        build_remote_payload, deepseek_messages, is_retryable_status, ollama_messages,
+        provider_messages, retry_delay, LlmClient,
     };
     use crate::agent::config::AiConfig;
     use crate::agent::types::AgentMessage;
@@ -789,6 +920,29 @@ mod tests {
         message.reasoning_content = Some("required context".to_string());
         let values = deepseek_messages(&[message]);
         assert_eq!(values[0]["reasoning_content"], "required context");
+    }
+
+    #[test]
+    fn deepseek_flash_payload_adapts_thinking_and_sampling() {
+        let mut config = AiConfig::default();
+        config.remote.base_url = "https://api.deepseek.com".to_string();
+        config.remote.chat_model = "deepseek-4.1-flash".to_string();
+        config.remote.top_p = 0.8;
+        config.remote.thinking_mode = "enabled".to_string();
+        config.remote.reasoning_effort = "high".to_string();
+
+        let (model, payload) = build_remote_payload(&config, &[AgentMessage::user("hi")], &[]);
+        assert_eq!(model, "deepseek-4.1-flash");
+        assert!(payload.get("temperature").is_none());
+        assert_eq!(payload["top_p"].as_f64().unwrap(), 0.95);
+        assert_eq!(payload["thinking"]["type"], "enabled");
+        assert_eq!(payload["reasoning_effort"], "high");
+
+        config.remote.thinking_mode = "disabled".to_string();
+        let (_, disabled_payload) = build_remote_payload(&config, &[AgentMessage::user("hi")], &[]);
+        assert!(disabled_payload.get("temperature").is_some());
+        assert_eq!(disabled_payload["thinking"]["type"], "disabled");
+        assert!(disabled_payload.get("reasoning_effort").is_none());
     }
 
     #[test]

@@ -7,6 +7,7 @@ import { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+import { Terminal as TerminalIcon, X, AlertTriangle } from 'lucide-react';
 import { useTerminal } from '../../hooks/useTerminal';
 
 // xterm renders to canvas, so refresh its colors when the root theme changes.
@@ -107,11 +108,12 @@ export function TerminalPanel({ serverId, terminalName, onClose }: TerminalPanel
   }, [terminalName, serverId]);
 
   return (
-    <div className="flex flex-col h-full w-full bg-dark-surface text-gray-200">
+    <div className="flex flex-col h-full w-full bg-dark-surface text-nb-text">
       {/* Terminal toolbar */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-dark-border bg-dark-surface">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-mono px-2 py-0.5 bg-dark-bg text-brand-primary rounded">
+          <span className="text-xs font-mono px-2 py-0.5 bg-dark-bg text-brand-primary rounded inline-flex items-center gap-1.5 border border-dark-border">
+            <TerminalIcon size={12} strokeWidth={1.8} />
             {t('terminal:')} {terminalName}
           </span>
           <span
@@ -124,16 +126,17 @@ export function TerminalPanel({ serverId, terminalName, onClose }: TerminalPanel
             }`}
             title={t('Status: {status}', { status: localizeStatus(status) })}
           />
-          <span className="text-xs text-gray-400 capitalize">{localizeStatus(status)}</span>
+          <span className="text-xs text-nb-text-secondary capitalize">{localizeStatus(status)}</span>
         </div>
         <div className="flex items-center gap-2">
           {onClose && (
             <button
               onClick={onClose}
-              className="p-1 hover:bg-dark-bg text-gray-400 hover:text-gray-200 rounded transition-colors text-xs"
+              className="px-2 py-1 hover:bg-dark-bg text-nb-text-secondary hover:text-nb-text rounded transition-colors text-xs inline-flex items-center gap-1"
               title={t('Close Terminal')}
             >
-              {t('✕ Close')}
+              <X size={13} strokeWidth={1.8} />
+              {t('Close')}
             </button>
           )}
         </div>
@@ -142,7 +145,10 @@ export function TerminalPanel({ serverId, terminalName, onClose }: TerminalPanel
       {/* Error message */}
       {error && (
         <div className="px-4 py-2 bg-red-500/10 border-b border-red-500/20 text-red-400 text-xs flex items-center justify-between">
-          <span>⚠️ {error}</span>
+          <span className="inline-flex items-center gap-1.5">
+            <AlertTriangle size={13} strokeWidth={1.8} />
+            {error}
+          </span>
           <button onClick={connect} className="underline hover:text-red-300">
             {t('Retry')}
           </button>

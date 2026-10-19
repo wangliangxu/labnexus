@@ -24,6 +24,7 @@ export type AgentStatus = 'idle' | 'running' | 'error';
 export interface UseAgentReturn {
   messages: AgentMessage[];
   status: AgentStatus;
+  currentStreamingThought: string;
   currentStreamingAnswer: string;
   activeToolCall: AgentToolCallEvent | null;
   error: string | null;
@@ -37,6 +38,7 @@ export interface UseAgentReturn {
 export function useAgent(sessionId: string = 'default'): UseAgentReturn {
   const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [status, setStatus] = useState<AgentStatus>('idle');
+  const [currentStreamingThought, setCurrentStreamingThought] = useState<string>('');
   const [currentStreamingAnswer, setCurrentStreamingAnswer] = useState<string>('');
   const [activeToolCall, setActiveToolCall] = useState<AgentToolCallEvent | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +61,7 @@ export function useAgent(sessionId: string = 'default'): UseAgentReturn {
 
   useEffect(() => {
     setMessages([]);
+    setCurrentStreamingThought('');
     setCurrentStreamingAnswer('');
     setActiveToolCall(null);
     setError(null);
@@ -75,9 +78,12 @@ export function useAgent(sessionId: string = 'default'): UseAgentReturn {
       if (session_id !== sessionIdRef.current) return;
       if (activeRunIdRef.current && event.payload.run_id !== activeRunIdRef.current) return;
 
-      if (chunk_type === 'answer') {
+      if (chunk_type === 'thought') {
+        setCurrentStreamingThought((prev) => prev + content);
+      } else if (chunk_type === 'answer') {
         setCurrentStreamingAnswer((prev) => prev + content);
       } else if (chunk_type === 'done') {
+        setCurrentStreamingThought('');
         setCurrentStreamingAnswer('');
         setActiveToolCall(null);
         setStatus('idle');
@@ -85,6 +91,7 @@ export function useAgent(sessionId: string = 'default'): UseAgentReturn {
         refreshHistory();
       } else if (chunk_type === 'error') {
         setError(content);
+        setCurrentStreamingThought('');
         setCurrentStreamingAnswer('');
         setActiveToolCall(null);
         setStatus('error');
@@ -99,9 +106,15 @@ export function useAgent(sessionId: string = 'default'): UseAgentReturn {
       if (activeRunIdRef.current && payload.run_id !== activeRunIdRef.current) return;
 
       if (payload.status === 'requires_confirmation') {
+        setCurrentStreamingThought('');
+        setCurrentStreamingAnswer('');
         setActiveToolCall(payload);
+        refreshHistory();
       } else if (payload.status === 'running') {
+        setCurrentStreamingThought('');
+        setCurrentStreamingAnswer('');
         setActiveToolCall(payload);
+        refreshHistory();
       } else if (payload.status === 'completed' || payload.status === 'error') {
         // Keep brief visual feedback or clear
         setActiveToolCall(payload);
@@ -125,6 +138,7 @@ export function useAgent(sessionId: string = 'default'): UseAgentReturn {
       if (!prompt.trim() || status === 'running') return;
 
       setError(null);
+      setCurrentStreamingThought('');
       setCurrentStreamingAnswer('');
       setActiveToolCall(null);
       setStatus('running');
@@ -195,6 +209,7 @@ export function useAgent(sessionId: string = 'default'): UseAgentReturn {
       await agentClearSession(sessionIdRef.current);
       setMessages([]);
       setError(null);
+      setCurrentStreamingThought('');
       setCurrentStreamingAnswer('');
       setActiveToolCall(null);
       setStatus('idle');
@@ -208,6 +223,7 @@ export function useAgent(sessionId: string = 'default'): UseAgentReturn {
   return {
     messages,
     status,
+    currentStreamingThought,
     currentStreamingAnswer,
     activeToolCall,
     error,

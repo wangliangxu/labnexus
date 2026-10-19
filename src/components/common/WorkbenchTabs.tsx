@@ -1,8 +1,20 @@
 import { t } from '../../i18n';
 /**
  * WorkbenchTabs — Multi-tab navigation bar for IDE workspace.
- * Supports Notebooks, Terminals, and Settings tabs with dirty indicator and close actions.
+ * Supports Notebooks, Files, Terminals, and Settings tabs with dirty indicator and close actions.
  */
+
+import {
+  BookOpen,
+  Terminal,
+  Settings,
+  FileCode,
+  FileJson,
+  FileText,
+  Image,
+  X,
+  Plus,
+} from 'lucide-react';
 
 export type TabType = 'notebook' | 'file' | 'terminal' | 'welcome' | 'settings';
 
@@ -23,6 +35,59 @@ interface WorkbenchTabsProps {
   onNewTerminal?: () => void;
 }
 
+function renderTabIcon(tab: TabItem) {
+  if (tab.type === 'notebook') {
+    return (
+      <BookOpen
+        size={13}
+        strokeWidth={1.8}
+        className="shrink-0"
+        style={{ color: 'var(--color-primary)' }}
+      />
+    );
+  }
+  if (tab.type === 'terminal') {
+    return (
+      <Terminal
+        size={13}
+        strokeWidth={1.8}
+        className="shrink-0"
+        style={{ color: 'var(--color-success)' }}
+      />
+    );
+  }
+  if (tab.type === 'settings') {
+    return <Settings size={13} strokeWidth={1.8} className="shrink-0" />;
+  }
+
+  const ext = tab.title.split('.').pop()?.toLowerCase();
+  if (ext === 'py' || ext === 'pyi' || ext === 'sh' || ext === 'js' || ext === 'ts') {
+    return (
+      <FileCode
+        size={13}
+        strokeWidth={1.8}
+        className="shrink-0"
+        style={{ color: 'var(--color-primary)' }}
+      />
+    );
+  }
+  if (ext === 'json' || ext === 'geojson') {
+    return (
+      <FileJson
+        size={13}
+        strokeWidth={1.8}
+        className="shrink-0"
+        style={{ color: 'var(--color-warning)' }}
+      />
+    );
+  }
+  if (ext === 'png' || ext === 'jpg' || ext === 'jpeg' || ext === 'gif' || ext === 'svg' || ext === 'webp') {
+    return <Image size={13} strokeWidth={1.8} className="shrink-0" />;
+  }
+
+  return <FileText size={13} strokeWidth={1.8} className="shrink-0" />;
+}
+
 export function WorkbenchTabs({
   tabs,
   activeTabId,
@@ -34,48 +99,43 @@ export function WorkbenchTabs({
 
   return (
     <div
-      className="flex items-center justify-between w-full h-9 px-1 select-none overflow-x-auto no-scrollbar"
+      className="flex items-center justify-between w-full h-[34px] px-1.5 select-none overflow-x-auto no-scrollbar shrink-0"
       style={{
         background: 'var(--bg-sidebar)',
         borderBottom: '1px solid var(--border-default)',
       }}
     >
       {/* Tabs List */}
-      <div className="flex items-center gap-1 h-full overflow-x-auto">
+      <div className="flex items-end gap-0.5 h-full overflow-x-auto">
         {tabs.map((tab) => {
-          const title = tab.type === 'terminal' && tab.data?.terminalName
-            ? `${t('terminal:')} ${tab.data.terminalName}` : tab.title;
+          const title =
+            tab.type === 'terminal' && tab.data?.terminalName
+              ? `${t('terminal:')} ${tab.data.terminalName}`
+              : tab.title;
           const isActive = tab.id === activeTabId;
+          const fullPath = tab.data?.path ? ` (${tab.data.path})` : '';
           return (
             <div
               key={tab.id}
               onClick={() => onSelectTab(tab.id)}
-              className="group relative flex items-center gap-2 px-3 h-7 rounded-t-md text-xs font-medium cursor-pointer transition-all border-b-2 shrink-0 max-w-[180px]"
+              className="group relative flex items-center gap-1.5 px-2.5 h-[30px] rounded-t-[5px] text-xs font-medium cursor-pointer transition-all border-t-2 shrink-0 max-w-[200px]"
               style={{
-                background: isActive ? 'var(--bg-card)' : 'transparent',
-                color: isActive ? 'var(--text-primary)' : 'var(--text-tertiary)',
-                borderBottomColor: isActive ? 'var(--color-primary)' : 'transparent',
-                boxShadow: isActive ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+                background: isActive ? 'var(--bg-editor)' : 'transparent',
+                color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                borderTopColor: isActive ? 'var(--color-primary)' : 'transparent',
+                borderLeft: isActive ? '1px solid var(--border-subtle)' : '1px solid transparent',
+                borderRight: isActive ? '1px solid var(--border-subtle)' : '1px solid transparent',
               }}
-              title={`${title}${tab.isDirty ? t(' (Unsaved changes)') : ''}`}
+              title={`${title}${fullPath}${tab.isDirty ? t(' (Unsaved changes)') : ''}`}
             >
               {/* Tab Icon */}
-              <span className="text-sm shrink-0">
-                {tab.icon ||
-                  (tab.type === 'notebook'
-                    ? '📓'
-                    : tab.type === 'terminal'
-                    ? '💻'
-                    : tab.type === 'settings'
-                    ? '⚙️'
-                    : '📄')}
-              </span>
+              {renderTabIcon(tab)}
 
               {/* Title */}
-              <span className="truncate min-w-[40px]">{title}</span>
+              <span className="truncate min-w-[36px] leading-none">{title}</span>
 
               {/* Dirty Indicator / Close Button */}
-              <div className="flex items-center shrink-0 ml-1">
+              <div className="flex items-center justify-center w-4 h-4 shrink-0 ml-0.5">
                 {tab.isDirty ? (
                   <span
                     className="w-2 h-2 rounded-full group-hover:hidden"
@@ -84,17 +144,20 @@ export function WorkbenchTabs({
                   />
                 ) : null}
                 <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     onCloseTab(tab.id);
                   }}
-                  className={`p-0.5 rounded transition-colors ${
-                    tab.isDirty ? 'hidden group-hover:block' : 'opacity-60 group-hover:opacity-100'
+                  className={`inline-flex items-center justify-center w-4 h-4 rounded-xs transition-colors hover:bg-nb-btn-hover ${
+                    tab.isDirty
+                      ? 'hidden group-hover:inline-flex'
+                      : 'opacity-55 group-hover:opacity-100'
                   }`}
-                  style={{ color: 'var(--text-tertiary)' }}
+                  style={{ color: 'var(--text-secondary)' }}
                   title={t('Close Tab')}
                 >
-                  ✕
+                  <X size={12} strokeWidth={2} />
                 </button>
               </div>
             </div>
@@ -103,15 +166,18 @@ export function WorkbenchTabs({
       </div>
 
       {/* Toolbar actions on right */}
-      <div className="flex items-center gap-1 px-2 shrink-0">
+      <div className="flex items-center gap-1 px-1.5 shrink-0">
         {onNewTerminal && (
           <button
+            type="button"
             onClick={onNewTerminal}
-            className="p-1 rounded transition-colors text-xs flex items-center gap-1"
-            style={{ color: 'var(--text-tertiary)' }}
+            className="px-2 py-1 rounded-sm transition-colors text-xs inline-flex items-center gap-1 hover:bg-nb-btn-hover cursor-pointer"
+            style={{ color: 'var(--text-secondary)' }}
             title={t('Open Remote Terminal')}
           >
-            <span>+</span> <span className="text-[11px] font-mono">{t('💻 Terminal')}</span>
+            <Plus size={12} strokeWidth={2} />
+            <Terminal size={12} strokeWidth={1.8} />
+            <span className="text-[11px] font-medium">{t('Terminal')}</span>
           </button>
         )}
       </div>

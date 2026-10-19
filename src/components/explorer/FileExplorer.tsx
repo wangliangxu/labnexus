@@ -19,6 +19,17 @@ import {
   Trash2,
   Check,
   X,
+  Folder,
+  FolderOpen,
+  BookOpen,
+  FileCode,
+  FileJson,
+  FileText,
+  FileSpreadsheet,
+  Image,
+  File,
+  Loader2,
+  AlertTriangle,
 } from 'lucide-react';
 import type { ContentItem, ServerConnection } from '../../types/jupyter';
 import {
@@ -340,34 +351,45 @@ export function FileExplorer({
     }
   };
 
-  const getFileIcon = (node: TreeNode): string => {
+  const getFileIcon = (node: TreeNode) => {
     if (node.content_type === 'directory') {
-      return node.isExpanded ? '📂' : '📁';
+      return node.isExpanded ? (
+        <FolderOpen size={14} strokeWidth={1.75} style={{ color: 'var(--color-primary)' }} />
+      ) : (
+        <Folder size={14} strokeWidth={1.75} style={{ color: 'var(--color-primary)' }} />
+      );
     }
-    if (node.content_type === 'notebook') return '📓';
+    if (node.content_type === 'notebook') {
+      return <BookOpen size={14} strokeWidth={1.75} style={{ color: 'var(--color-accent)' }} />;
+    }
     const ext = node.name.split('.').pop()?.toLowerCase();
     switch (ext) {
       case 'py':
-        return '🐍';
+      case 'pyi':
+      case 'sh':
+      case 'r':
+      case 'js':
+      case 'ts':
+        return <FileCode size={14} strokeWidth={1.75} style={{ color: 'var(--color-primary)' }} />;
       case 'json':
-        return '📋';
+      case 'geojson':
+        return <FileJson size={14} strokeWidth={1.75} style={{ color: 'var(--color-warning)' }} />;
       case 'md':
       case 'markdown':
-        return '📝';
+      case 'txt':
+        return <FileText size={14} strokeWidth={1.75} style={{ color: 'var(--text-secondary)' }} />;
       case 'csv':
       case 'tsv':
-        return '📊';
-      case 'txt':
-        return '📄';
+        return <FileSpreadsheet size={14} strokeWidth={1.75} style={{ color: 'var(--color-success)' }} />;
       case 'png':
       case 'jpg':
       case 'jpeg':
       case 'gif':
       case 'svg':
       case 'webp':
-        return '🖼️';
+        return <Image size={14} strokeWidth={1.75} style={{ color: 'var(--text-secondary)' }} />;
       default:
-        return '📄';
+        return <File size={14} strokeWidth={1.75} style={{ color: 'var(--text-tertiary)' }} />;
     }
   };
 
@@ -464,7 +486,7 @@ export function FileExplorer({
                   {node.name}
                 </span>
                 {node.isLoading && (
-                  <span className="file-item__spinner animate-spin">⟳</span>
+                  <Loader2 size={12} className="file-item__spinner animate-spin shrink-0" />
                 )}
                 <div
                   className="file-item__actions"
@@ -647,7 +669,10 @@ export function FileExplorer({
 
       {error && (
         <div className="file-explorer__error">
-          <span>⚠️ {errorMessage}</span>
+          <span className="inline-flex items-center gap-1.5">
+            <AlertTriangle size={13} className="shrink-0" />
+            <span>{errorMessage}</span>
+          </span>
           {errorRecovery.canReconnect && onReconnect && (
             <div className="file-explorer__error-actions">
               <button
@@ -675,8 +700,9 @@ export function FileExplorer({
 
       <div className="file-tree">
         {isLoading || tree === null ? (
-          <div className="file-explorer__loading">
-            <span className="animate-spin">⟳</span> {t('Loading...')}
+          <div className="file-explorer__loading inline-flex items-center justify-center gap-2 w-full">
+            <Loader2 size={14} className="animate-spin" />
+            <span>{t('Loading...')}</span>
           </div>
         ) : tree.length === 0 ? (
           <div className="file-explorer__empty">

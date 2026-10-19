@@ -73,6 +73,8 @@ export interface RemoteApiConfig {
   timeout_seconds: number;
   context_window_tokens: number;
   max_output_tokens: number;
+  thinking_mode?: 'auto' | 'enabled' | 'disabled';
+  reasoning_effort?: 'low' | 'medium' | 'high' | 'max';
 }
 
 export interface OllamaConfig {

@@ -31,15 +31,19 @@ pub struct RemoteApiConfig {
     pub enabled: bool,
     pub api_key: String,
     pub base_url: String, // e.g. "https://api.deepseek.com" or "https://api.openai.com/v1"
-    pub chat_model: String, // e.g. "deepseek-chat" or "gpt-4o"
+    pub chat_model: String, // e.g. "deepseek-flash" or "deepseek-chat" or "gpt-4.1"
     pub reasoning_model: String, // e.g. "deepseek-reasoner"
     pub temperature: f32,
     pub top_p: f32,
     pub timeout_seconds: u64,
     #[serde(default = "default_remote_context_tokens")]
     pub context_window_tokens: u32,
-    #[serde(default = "default_output_tokens")]
+    #[serde(default = "default_remote_output_tokens")]
     pub max_output_tokens: u32,
+    #[serde(default = "default_thinking_mode")]
+    pub thinking_mode: String, // "auto" | "enabled" | "disabled"
+    #[serde(default = "default_reasoning_effort")]
+    pub reasoning_effort: String, // "low" | "medium" | "high" | "max"
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,13 +86,15 @@ impl Default for RemoteApiConfig {
             enabled: true,
             api_key: "".to_string(),
             base_url: "https://api.deepseek.com".to_string(),
-            chat_model: "deepseek-chat".to_string(),
+            chat_model: "deepseek-flash".to_string(),
             reasoning_model: "deepseek-reasoner".to_string(),
             temperature: 0.2,
-            top_p: 0.9,
-            timeout_seconds: 60,
+            top_p: 0.95,
+            timeout_seconds: 120,
             context_window_tokens: default_remote_context_tokens(),
-            max_output_tokens: default_output_tokens(),
+            max_output_tokens: default_remote_output_tokens(),
+            thinking_mode: default_thinking_mode(),
+            reasoning_effort: default_reasoning_effort(),
         }
     }
 }
@@ -121,7 +127,19 @@ impl Default for ResilienceConfig {
 }
 
 fn default_remote_context_tokens() -> u32 {
-    64_000
+    128_000
+}
+
+fn default_remote_output_tokens() -> u32 {
+    8_192
+}
+
+fn default_thinking_mode() -> String {
+    "auto".to_string()
+}
+
+fn default_reasoning_effort() -> String {
+    "medium".to_string()
 }
 
 fn default_ollama_context_tokens() -> u32 {
@@ -413,6 +431,24 @@ fn validate_ai_config(config: &AiConfig) -> Result<(), AppError> {
             )));
         }
     }
+    if !matches!(
+        config.remote.thinking_mode.as_str(),
+        "auto" | "enabled" | "disabled"
+    ) {
+        return Err(AppError::Agent(format!(
+            "Unsupported thinking mode '{}'",
+            config.remote.thinking_mode
+        )));
+    }
+    if !matches!(
+        config.remote.reasoning_effort.as_str(),
+        "low" | "medium" | "high" | "max"
+    ) {
+        return Err(AppError::Agent(format!(
+            "Unsupported reasoning effort '{}'",
+            config.remote.reasoning_effort
+        )));
+    }
     if config.resilience.max_retries > 8
         || !(50..=60_000).contains(&config.resilience.retry_base_delay_ms)
         || !(1..=20).contains(&config.resilience.circuit_breaker_threshold)
@@ -452,7 +488,10 @@ mod tests {
             }
         }))
         .unwrap();
-        assert_eq!(config.remote.context_window_tokens, 64_000);
+        assert_eq!(config.remote.context_window_tokens, 128_000);
+        assert_eq!(config.remote.max_output_tokens, 8_192);
+        assert_eq!(config.remote.thinking_mode, "auto");
+        assert_eq!(config.remote.reasoning_effort, "medium");
         assert_eq!(config.ollama.context_window_tokens, 16_384);
         assert_eq!(config.resilience.max_retries, 2);
     }

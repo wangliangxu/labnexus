@@ -8,6 +8,14 @@ import { useLocale } from './i18n';
 import { LocalJupyterPanel } from './components/explorer/LocalJupyterPanel';
 import { LOCAL_JUPYTER_SERVER_ID } from './types/jupyter';
 import { useState, useMemo, useRef, useCallback, useEffect, type SetStateAction } from 'react';
+import {
+  Plus,
+  RefreshCw,
+  X,
+  ChevronDown,
+  ChevronRight,
+  AlertTriangle,
+} from 'lucide-react';
 import { WorkbenchLayout, type PanelId } from './layouts/WorkbenchLayout';
 import { ConnectionPanel } from './components/explorer/ConnectionPanel';
 import { FileExplorer } from './components/explorer/FileExplorer';
@@ -73,6 +81,11 @@ function App() {
   });
   const [isAgentFullscreen, setIsAgentFullscreen] = useState(false);
   const workspaceContextRef = useRef<AgentChatContext>({});
+  const [isServersCollapsed, setIsServersCollapsed] = useState<boolean>(false);
+  const [statusBarTelemetry, setStatusBarTelemetry] = useState<{
+    kernelStatus?: string;
+    activeCellIndex?: number;
+  }>({});
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [settingsTab, setSettingsTab] = useState<'global' | 'ai'>('global');
   const [notebookToc, setNotebookToc] = useState<
@@ -110,6 +123,18 @@ function App() {
 
   const handleWorkspaceContextChange = useCallback((ctx: AgentChatContext) => {
     storeWorkspaceContextSnapshot(workspaceContextRef, ctx);
+    setStatusBarTelemetry((prev) => {
+      if (
+        prev.kernelStatus === ctx.kernel_status &&
+        prev.activeCellIndex === ctx.active_cell_index
+      ) {
+        return prev;
+      }
+      return {
+        kernelStatus: ctx.kernel_status,
+        activeCellIndex: ctx.active_cell_index,
+      };
+    });
   }, []);
 
   const handleNotebookTocChange = useCallback(
@@ -157,6 +182,7 @@ function App() {
       headings: [],
       activeHeadingId: null,
     });
+    setStatusBarTelemetry({});
     workspaceContextRef.current = {
       server_id: activeTab?.data?.serverId || activeServerId || undefined,
     };
@@ -401,92 +427,128 @@ function App() {
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
         <LocalJupyterPanel
           isConnecting={isConnecting}
-          connected={servers.some((server) => server.config.id === LOCAL_JUPYTER_SERVER_ID && server.status === 'connected')}
+          connected={servers.some(
+            (server) =>
+              server.config.id === LOCAL_JUPYTER_SERVER_ID &&
+              server.status === 'connected'
+          )}
+          hasOtherConnectedServer={connectedServerIds.size > 0}
           onStart={async () => {
             if (await startLocal()) setViewMode('explore');
           }}
         />
         {/* Server connection list */}
         {servers.length > 0 && (
-          <div style={{ borderBottom: '1px solid var(--border-subtle)', flexShrink: 0, maxHeight: '40%', overflowY: 'auto' }}>
-            <div className="panel-header" style={{ padding: '8px 12px' }}>
-              <h3 className="panel-header__title">{t('Servers')}</h3>
-              <button
-                className="btn btn-icon btn-ghost"
-                onClick={() => setViewMode('connect')}
-                title={t('Add Server')}
-                style={{ fontSize: '16px' }}
-              >
-                +
-              </button>
-            </div>
-            <div style={{ padding: '0 4px 8px' }}>
-              {servers.map((server) => (
-                <div
-                  key={server.config.id}
-                  className={`server-item ${server.config.id === activeServerId ? 'active' : ''}`}
-                  onClick={() => {
-                    if (server.status === 'connected') {
-                      setViewMode((current) =>
-                        resolveServerSelectionViewMode(current, server.status)
-                      );
-                      setActive(server.config.id);
-                    } else if (!isConnecting) {
-                      setViewMode((current) =>
-                        resolveServerSelectionViewMode(current, server.status)
-                      );
-                      reconnect(server.config.id);
-                    }
+          <div style={{ borderBottom: '1px solid var(--border-subtle)', flexShrink: 0, maxHeight: '38%', overflowY: 'auto' }}>
+            <div
+              className="panel-header"
+              style={{ padding: '7px 12px', cursor: 'pointer', userSelect: 'none' }}
+              onClick={() => setIsServersCollapsed((prev) => !prev)}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {isServersCollapsed ? (
+                  <ChevronRight size={13} style={{ color: 'var(--text-tertiary)' }} />
+                ) : (
+                  <ChevronDown size={13} style={{ color: 'var(--text-tertiary)' }} />
+                )}
+                <h3 className="panel-header__title">{t('Servers')}</h3>
+                <span
+                  style={{
+                    fontSize: '10px',
+                    padding: '1px 5px',
+                    borderRadius: '9999px',
+                    background: 'var(--bg-hover)',
+                    color: 'var(--text-secondary)',
                   }}
                 >
-                  <span className={`status-dot ${server.status}`} />
-                  <div className="server-item__info">
-                    <div className="server-item__name truncate">
-                      {server.config.name}
+                  {servers.length}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="btn btn-icon btn-ghost"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setViewMode('connect');
+                }}
+                title={t('Add Server')}
+              >
+                <Plus size={14} />
+              </button>
+            </div>
+            {!isServersCollapsed && (
+              <div style={{ padding: '0 4px 8px' }}>
+                {servers.map((server) => (
+                  <div
+                    key={server.config.id}
+                    className={`server-item ${server.config.id === activeServerId ? 'active' : ''}`}
+                    onClick={() => {
+                      if (server.status === 'connected') {
+                        setViewMode((current) =>
+                          resolveServerSelectionViewMode(current, server.status)
+                        );
+                        setActive(server.config.id);
+                      } else if (!isConnecting) {
+                        setViewMode((current) =>
+                          resolveServerSelectionViewMode(current, server.status)
+                        );
+                        reconnect(server.config.id);
+                      }
+                    }}
+                  >
+                    <span className={`status-dot ${server.status}`} />
+                    <div className="server-item__info">
+                      <div className="server-item__name truncate">
+                        {server.config.name}
+                      </div>
+                      <div className="server-item__url truncate">
+                        {server.config.base_url}
+                      </div>
                     </div>
-                    <div className="server-item__url truncate">
-                      {server.config.base_url}
-                    </div>
-                  </div>
-                  <div className="server-item__actions">
-                    {(server.status === 'disconnected' || server.status === 'error') && (
+                    <div className="server-item__actions">
+                      {(server.status === 'disconnected' || server.status === 'error') && (
+                        <button
+                          type="button"
+                          className="btn btn-icon btn-ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setViewMode((current) =>
+                              resolveServerSelectionViewMode(current, server.status)
+                            );
+                            reconnect(server.config.id);
+                          }}
+                          title={t('Reconnect')}
+                          disabled={isConnecting}
+                        >
+                          <RefreshCw size={12} />
+                        </button>
+                      )}
                       <button
-                        className="btn btn-icon btn-ghost"
+                        type="button"
+                        className="btn btn-icon btn-ghost btn-danger"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setViewMode((current) =>
-                            resolveServerSelectionViewMode(current, server.status)
-                          );
-                          reconnect(server.config.id);
+                          if (server.status === 'connected') {
+                            disconnect(server.config.id);
+                          } else {
+                            forget(server.config.id);
+                          }
                         }}
-                        title={t('Reconnect')}
-                        disabled={isConnecting}
-                        style={{ fontSize: '12px' }}
-                      >
-                        ↻
-                      </button>
-                    )}
-                    <button
-                      className="btn btn-icon btn-ghost btn-danger"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (server.status === 'connected') {
-                          disconnect(server.config.id);
-                        } else {
-                          forget(server.config.id);
+                        title={
+                          server.status === 'connected'
+                            ? server.config.id === LOCAL_JUPYTER_SERVER_ID
+                              ? t('Stop local server')
+                              : t('Disconnect')
+                            : t('Forget')
                         }
-                      }}
-                      title={server.status === 'connected'
-                        ? server.config.id === LOCAL_JUPYTER_SERVER_ID ? t('Stop local server') : t('Disconnect')
-                        : t('Forget')}
-                      style={{ fontSize: '12px' }}
-                    >
-                      ✕
-                    </button>
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -496,6 +558,7 @@ function App() {
             <ConnectionPanel
               onConnect={handleConnect}
               onConnectHub={handleConnectHub}
+              onBack={activeServer ? () => setViewMode('explore') : undefined}
               isConnecting={isConnecting}
             />
           ) : (
@@ -548,7 +611,10 @@ function App() {
               gap: '8px',
             }}
           >
-            <span>⚠️ {appErrorMessage}</span>
+            <span className="inline-flex items-center gap-1.5">
+              <AlertTriangle size={13} className="shrink-0" />
+              <span>{appErrorMessage}</span>
+            </span>
             {appErrorRecovery.restartUrl && activeServer && (
               <button
                 className="btn btn-sm btn-ghost"
@@ -602,7 +668,17 @@ function App() {
             />
             <div className="app-editor-content">
               {tabs.length === 0 ? (
-                <WelcomeScreen />
+                <WelcomeScreen
+                  onConnectServer={() => {
+                    setActivePanel('explorer');
+                    setViewMode('connect');
+                  }}
+                  onOpenExplorer={() => {
+                    setActivePanel('explorer');
+                    if (activeServer) setViewMode('explore');
+                  }}
+                  onOpenAgent={() => setIsAgentOpen(true)}
+                />
               ) : (
                 tabs.map((tab) => {
                   const isCurrent = tab.id === activeTabId;
@@ -652,6 +728,8 @@ function App() {
             serverCount={servers.length}
             onToggleAgent={() => setIsAgentOpen(!isAgentOpen)}
             isAgentOpen={isAgentOpen}
+            kernelStatus={statusBarTelemetry.kernelStatus}
+            activeCellIndex={statusBarTelemetry.activeCellIndex}
           />
         }
       />

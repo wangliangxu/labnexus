@@ -1,9 +1,9 @@
-import { t } from '../../i18n';
+import { t, localizeStatus } from '../../i18n';
 /**
- * StatusBar — Bottom bar showing connection status and app info.
+ * StatusBar — Bottom bar showing connection status, active notebook telemetry, and app info.
  */
 
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Cpu, Server } from 'lucide-react';
 import type { ServerConnection } from '../../types/jupyter';
 import './StatusBar.css';
 
@@ -12,6 +12,8 @@ interface StatusBarProps {
   serverCount: number;
   onToggleAgent: () => void;
   isAgentOpen: boolean;
+  kernelStatus?: string;
+  activeCellIndex?: number;
 }
 
 export function StatusBar({
@@ -19,6 +21,8 @@ export function StatusBar({
   serverCount,
   onToggleAgent,
   isAgentOpen,
+  kernelStatus,
+  activeCellIndex,
 }: StatusBarProps) {
   return (
     <>
@@ -26,9 +30,7 @@ export function StatusBar({
       <div className="statusbar__left">
         {activeServer ? (
           <div className="statusbar__server">
-            <span
-              className={`status-dot ${activeServer.status}`}
-            />
+            <span className={`status-dot ${activeServer.status}`} />
             <span className="statusbar__server-name">
               {activeServer.config.name}
             </span>
@@ -39,31 +41,52 @@ export function StatusBar({
             )}
           </div>
         ) : (
-          <span className="statusbar__disconnected">{t('No server connected')}</span>
+          <span className="statusbar__disconnected">
+            {t('No server connected')}
+          </span>
+        )}
+
+        {kernelStatus && (
+          <div className="statusbar__telemetry">
+            <Cpu size={12} strokeWidth={1.75} />
+            <span>
+              {t('Kernel')}: {localizeStatus(kernelStatus)}
+            </span>
+            {typeof activeCellIndex === 'number' && (
+              <span className="statusbar__cell-index">
+                · {t('Cell {index}', { index: activeCellIndex + 1 })}
+              </span>
+            )}
+          </div>
         )}
       </div>
 
       {/* Right side */}
-      <div className="statusbar__right flex items-center gap-3">
+      <div className="statusbar__right">
+        {serverCount > 0 && (
+          <span className="statusbar__info">
+            <Server size={11} strokeWidth={1.75} />
+            <span>
+              {t(serverCount === 1 ? '{count} server' : '{count} servers', {
+                count: serverCount,
+              })}
+            </span>
+          </span>
+        )}
+
         <button
+          type="button"
           onClick={onToggleAgent}
-          className={`px-2 py-0.5 rounded text-xs flex items-center gap-1 font-semibold transition-all shadow-sm ${
-            isAgentOpen
-              ? 'bg-brand-primary text-white shadow-brand-primary/30'
-              : 'bg-dark-surface hover:bg-dark-border text-gray-300 border border-dark-border'
+          className={`statusbar__agent-btn ${
+            isAgentOpen ? 'statusbar__agent-btn--active' : ''
           }`}
           title={t('Toggle ReAct AI Agent Panel')}
         >
-          <Sparkles size={13} strokeWidth={1.5} aria-hidden="true" />
+          <Sparkles size={12} strokeWidth={1.75} aria-hidden="true" />
           <span>{t('AI Agent')}</span>
         </button>
 
-        {serverCount > 0 && (
-          <span className="statusbar__info">
-            {t(serverCount === 1 ? '{count} server' : '{count} servers', { count: serverCount })}
-          </span>
-        )}
-        <span className="statusbar__brand">LabNexus</span>
+        <span className="statusbar__brand">LabNexus v0.4</span>
       </div>
     </>
   );

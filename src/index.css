@@ -7,6 +7,11 @@
   --color-dark-surface: var(--bg-panel);
   --color-dark-border: var(--border-default);
   --color-brand-primary: var(--color-primary);
+  --color-gray-100: var(--text-primary);
+  --color-gray-200: var(--text-primary);
+  --color-gray-300: var(--text-secondary);
+  --color-gray-400: var(--text-secondary);
+  --color-gray-500: var(--text-tertiary);
   --color-nb-shell: var(--bg-editor);
   --color-nb-toolbar: var(--bg-panel);
   --color-nb-toolbar-border: var(--border-default);

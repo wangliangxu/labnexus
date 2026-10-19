@@ -121,10 +121,12 @@
 }
 
 .file-item__icon {
-  font-size: var(--text-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
   width: 18px;
-  text-align: center;
+  height: 18px;
 }
 
 .file-item__name {

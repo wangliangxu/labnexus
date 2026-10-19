@@ -1,6 +1,7 @@
 import { t, useLocale, type Locale } from '../../i18n';
 import React, { useState, useEffect } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
+import { Settings as SettingsIcon, X, Globe, Sparkles, Palette, Zap, Keyboard, Shield, Check, Plus, Cpu } from 'lucide-react';
 import type { AiConfig, ExternalMcpConfigFile } from '../../types/agent';
 import {
   agentGetConfig,
@@ -116,20 +117,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" style={{ zIndex: 'var(--z-modal)' }}>
-      <div className="bg-dark-surface border border-dark-border rounded-xl shadow-2xl max-w-4xl w-full flex flex-col animate-scale-up" style={{ maxHeight: '88vh' }}>
+      <div className="bg-dark-surface border border-dark-border rounded-xl shadow-2xl max-w-4xl w-full flex flex-col animate-scale-up text-nb-text" style={{ maxHeight: '88vh' }}>
         {/* Header */}
         <div className="flex justify-between items-center border-b border-dark-border px-6 py-4 shrink-0">
           <div>
-            <h2 className="text-xl font-bold text-gray-100 flex items-center gap-2">
-              {t('⚙️ Settings')}
+            <h2 className="text-lg font-semibold text-nb-text flex items-center gap-2">
+              <SettingsIcon size={18} strokeWidth={1.8} className="text-brand-primary" />
+              {t('Settings')}
             </h2>
           </div>
           <button
             onClick={onClose}
             aria-label={t('Close dialog')}
-            className="text-gray-400 hover:text-gray-100 text-lg px-2"
+            className="text-nb-text-secondary hover:text-nb-text p-1.5 rounded-md hover:bg-dark-bg transition-colors"
           >
-            ✕
+            <X size={16} strokeWidth={1.8} />
           </button>
         </div>
 
@@ -137,23 +139,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="flex border-b border-dark-border px-6 shrink-0 bg-dark-bg/50">
           <button
             onClick={() => setActiveTab('global')}
-            className={`py-3 px-4 text-sm font-medium transition-colors border-b-2 ${
+            className={`py-3 px-4 text-sm font-medium transition-colors border-b-2 inline-flex items-center gap-2 ${
               activeTab === 'global'
                 ? 'border-brand-primary text-brand-primary'
-                : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-600'
+                : 'border-transparent text-nb-text-secondary hover:text-nb-text hover:border-dark-border'
             }`}
           >
-            {t('🌍 Global Settings')}
+            <Globe size={14} strokeWidth={1.8} />
+            {t('Global Settings')}
           </button>
           <button
             onClick={() => setActiveTab('ai')}
-            className={`py-3 px-4 text-sm font-medium transition-colors border-b-2 ${
+            className={`py-3 px-4 text-sm font-medium transition-colors border-b-2 inline-flex items-center gap-2 ${
               activeTab === 'ai'
                 ? 'border-brand-primary text-brand-primary'
-                : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-600'
+                : 'border-transparent text-nb-text-secondary hover:text-nb-text hover:border-dark-border'
             }`}
           >
-            {t('🤖 AI Configuration')}
+            <Sparkles size={14} strokeWidth={1.8} />
+            {t('AI Configuration')}
           </button>
         </div>
 
@@ -162,14 +166,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {activeTab === 'global' && (
             <div className="space-y-6">
               <div className="space-y-3">
-                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider border-b border-dark-border pb-1">{t('Language')}</h4>
+                <h4 className="text-xs font-semibold text-nb-text-secondary uppercase tracking-wider border-b border-dark-border pb-1.5 flex items-center gap-1.5">
+                  <Globe size={13} strokeWidth={1.8} />
+                  {t('Language')}
+                </h4>
                 <label className="flex flex-col gap-1 max-w-sm">
-                  <span className="text-gray-300 font-medium">{t('Interface language')}</span>
+                  <span className="text-nb-text font-medium">{t('Interface language')}</span>
                   <select
                     aria-label={t('Interface language')}
                     value={settings.language}
                     onChange={(event) => saveGlobalSettings({ ...settings, language: event.target.value as Locale })}
-                    className="px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-gray-200 focus:outline-none focus:border-brand-primary"
+                    className="px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-nb-text focus:outline-none focus:border-brand-primary"
                   >
                     <option value="zh-CN" lang="zh-CN">中文（简体）</option>
                     <option value="en" lang="en">English</option>
@@ -178,11 +185,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
               {/* Section: Themes */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between border-b border-dark-border pb-1">
-                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                    {t('🎨 Color Theme')}
+                <div className="flex items-center justify-between border-b border-dark-border pb-1.5">
+                  <h4 className="text-xs font-semibold text-nb-text-secondary uppercase tracking-wider flex items-center gap-1.5">
+                    <Palette size={13} strokeWidth={1.8} />
+                    {t('Color Theme')}
                   </h4>
-                  {globalSavedMessage && <span className="text-[11px] text-emerald-400 font-medium">{t('✓ Saved')}</span>}
+                  {globalSavedMessage && (
+                    <span className="text-[11px] text-emerald-500 font-medium inline-flex items-center gap-1">
+                      <Check size={12} strokeWidth={2.2} />
+                      {t('Saved')}
+                    </span>
+                  )}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {themes.map((t) => (
@@ -194,7 +207,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       className={`flex items-center justify-between p-3 rounded-lg border text-left cursor-pointer transition-all ${
                         settings.theme === t.id
                           ? 'bg-brand-primary/10 border-brand-primary shadow-sm'
-                          : 'bg-dark-bg border-transparent hover:bg-dark-surface hover:border-dark-border'
+                          : 'bg-dark-bg border-dark-border/60 hover:bg-dark-surface hover:border-dark-border'
                       }`}
                     >
                       <div className="flex items-center gap-3">
@@ -203,11 +216,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           style={{ backgroundColor: t.color }}
                         />
                         <div className="flex flex-col">
-                          <span className="text-sm font-medium text-gray-200">{t.name}</span>
-                          <span className="text-xs text-gray-500">{t.desc}</span>
+                          <span className="text-sm font-medium text-nb-text">{t.name}</span>
+                          <span className="text-xs text-nb-text-secondary">{t.desc}</span>
                         </div>
                       </div>
-                      {settings.theme === t.id && <span className="text-sm text-brand-primary font-bold">✓</span>}
+                      {settings.theme === t.id && <Check size={15} strokeWidth={2.2} className="text-brand-primary shrink-0" />}
                     </button>
                   ))}
                 </div>
@@ -215,30 +228,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               {/* Section: Jupyter Defaults */}
               <div className="space-y-3">
-                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider border-b border-dark-border pb-1">
-                  {t('⚡ Jupyter Defaults')}
+                <h4 className="text-xs font-semibold text-nb-text-secondary uppercase tracking-wider border-b border-dark-border pb-1.5 flex items-center gap-1.5">
+                  <Zap size={13} strokeWidth={1.8} />
+                  {t('Jupyter Defaults')}
                 </h4>
                 <div className="space-y-2">
                   <label className="flex flex-col gap-1">
-                    <span className="text-gray-300 font-medium">{t('Default Kernel Name')}</span>
+                    <span className="text-nb-text font-medium">{t('Default Kernel Name')}</span>
                     <input
                       type="text"
                       value={settings.defaultKernel}
                       onChange={(e) => saveGlobalSettings({ ...settings, defaultKernel: e.target.value })}
-                      className="px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-gray-200 font-mono focus:outline-none focus:border-brand-primary max-w-sm"
+                      className="px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-nb-text font-mono focus:outline-none focus:border-brand-primary max-w-sm"
                       placeholder={t('e.g. python3')}
                     />
                   </label>
                 </div>
               </div>
 
-              {/* Section: Default Proxy */}
+              {/* Section: Keyboard Shortcuts */}
               <div className="space-y-3">
-                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider border-b border-dark-border pb-1">
-                  {t('⌨ Keyboard Shortcuts')}
+                <h4 className="text-xs font-semibold text-nb-text-secondary uppercase tracking-wider border-b border-dark-border pb-1.5 flex items-center gap-1.5">
+                  <Keyboard size={13} strokeWidth={1.8} />
+                  {t('Keyboard Shortcuts')}
                 </h4>
                 <label className="flex flex-col gap-1 max-w-sm">
-                  <span className="text-gray-300 font-medium">{t('Run current cell')}</span>
+                  <span className="text-nb-text font-medium">{t('Run current cell')}</span>
                   <input
                     type="text"
                     readOnly
@@ -249,35 +264,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       const shortcut = shortcutFromKeyboardEvent(event.nativeEvent);
                       if (shortcut) saveGlobalSettings({ ...settings, runCurrentCellShortcut: shortcut });
                     }}
-                    className="px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-gray-200 font-mono focus:outline-none focus:border-brand-primary cursor-text"
+                    className="px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-nb-text font-mono focus:outline-none focus:border-brand-primary cursor-text"
                     title={t('Focus this field and press the desired key combination')}
                   />
-                  <span className="text-xs text-gray-500">{t('Click the field, then press a new key combination.')}</span>
+                  <span className="text-xs text-nb-text-secondary">{t('Click the field, then press a new key combination.')}</span>
                 </label>
               </div>
 
               {/* Section: Default Proxy */}
               <div className="space-y-3">
-                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider border-b border-dark-border pb-1">
-                  {t('🛡️ Default SOCKS5 Proxy')}
+                <h4 className="text-xs font-semibold text-nb-text-secondary uppercase tracking-wider border-b border-dark-border pb-1.5 flex items-center gap-1.5">
+                  <Shield size={13} strokeWidth={1.8} />
+                  {t('Default SOCKS5 Proxy')}
                 </h4>
                 <div className="grid grid-cols-2 gap-4 max-w-sm">
                   <label className="flex flex-col gap-1">
-                    <span className="text-gray-300 font-medium">{t('Host')}</span>
+                    <span className="text-nb-text font-medium">{t('Host')}</span>
                     <input
                       type="text"
                       value={settings.defaultProxyHost}
                       onChange={(e) => saveGlobalSettings({ ...settings, defaultProxyHost: e.target.value })}
-                      className="px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-gray-200 font-mono focus:outline-none focus:border-brand-primary"
+                      className="px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-nb-text font-mono focus:outline-none focus:border-brand-primary"
                     />
                   </label>
                   <label className="flex flex-col gap-1">
-                    <span className="text-gray-300 font-medium">{t('Port')}</span>
+                    <span className="text-nb-text font-medium">{t('Port')}</span>
                     <input
                       type="number"
                       value={settings.defaultProxyPort}
                       onChange={(e) => saveGlobalSettings({ ...settings, defaultProxyPort: Number(e.target.value) })}
-                      className="px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-gray-200 font-mono focus:outline-none focus:border-brand-primary"
+                      className="px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-nb-text font-mono focus:outline-none focus:border-brand-primary"
                     />
                   </label>
                 </div>
@@ -285,13 +301,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               {/* Section: AI Agent Preferences */}
               <div className="space-y-3">
-                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider border-b border-dark-border pb-1">
-                  {t('🤖 AI Agent Preferences')}
+                <h4 className="text-xs font-semibold text-nb-text-secondary uppercase tracking-wider border-b border-dark-border pb-1.5 flex items-center gap-1.5">
+                  <Sparkles size={13} strokeWidth={1.8} />
+                  {t('AI Agent Preferences')}
                 </h4>
                 <label className="flex items-center justify-between p-3 rounded-lg bg-dark-bg border border-dark-border cursor-pointer max-w-md">
                   <div className="flex flex-col">
-                    <span className="text-gray-200 font-medium">{t('Auto-confirm Safe Tools')}</span>
-                    <span className="text-xs text-gray-500">{t('Skip confirmation modal for read-only skills')}</span>
+                    <span className="text-nb-text font-medium">{t('Auto-confirm Safe Tools')}</span>
+                    <span className="text-xs text-nb-text-secondary">{t('Skip confirmation modal for read-only skills')}</span>
                   </div>
                   <input
                     type="checkbox"
@@ -306,7 +323,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {activeTab === 'ai' && (
             <div className="space-y-6">
-              <p className="text-xs text-gray-400 mb-2">
+              <p className="text-xs text-nb-text-secondary mb-2">
                 {t('Configure Hybrid LLM strategy: Remote API priority or Local Ollama / llama.cpp fallback.')}
               </p>
 
@@ -325,7 +342,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       ['reliability', t('Reliability')],
                       ['mcp', t('MCP Servers')],
                     ] as const).map(([id, label]) => (
-                      <button key={id} type="button" onClick={() => setAiSection(id)} className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${aiSection === id ? 'bg-brand-primary text-white shadow' : 'text-gray-400 hover:bg-dark-border hover:text-gray-200'}`}>
+                      <button key={id} type="button" onClick={() => setAiSection(id)} className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${aiSection === id ? 'bg-brand-primary text-white shadow' : 'text-nb-text-secondary hover:bg-dark-border hover:text-nb-text'}`}>
                         {label}
                       </button>
                     ))}
@@ -336,23 +353,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="flex border-b border-dark-border gap-4 mb-4">
                     <button
                       onClick={() => setAiStrategyTab('remote')}
-                      className={`pb-2 text-sm font-medium transition-colors border-b-2 ${
+                      className={`pb-2 text-sm font-medium transition-colors border-b-2 inline-flex items-center gap-1.5 ${
                         aiStrategyTab === 'remote'
                           ? 'border-brand-primary text-brand-primary'
-                          : 'border-transparent text-gray-400 hover:text-gray-200'
+                          : 'border-transparent text-nb-text-secondary hover:text-nb-text'
                       }`}
                     >
-                      {t('🌐 Remote API (OpenAI / DeepSeek)')}
+                      <Globe size={14} strokeWidth={1.8} />
+                      {t('Remote API (OpenAI / DeepSeek)')}
                     </button>
                     <button
                       onClick={() => setAiStrategyTab('ollama')}
-                      className={`pb-2 text-sm font-medium transition-colors border-b-2 ${
+                      className={`pb-2 text-sm font-medium transition-colors border-b-2 inline-flex items-center gap-1.5 ${
                         aiStrategyTab === 'ollama'
                           ? 'border-brand-primary text-brand-primary'
-                          : 'border-transparent text-gray-400 hover:text-gray-200'
+                          : 'border-transparent text-nb-text-secondary hover:text-nb-text'
                       }`}
                     >
-                      {t('🦙 Local Ollama / llama.cpp')}
+                      <Cpu size={14} strokeWidth={1.8} />
+                      {t('Local Ollama / llama.cpp')}
                     </button>
                   </div>
 
@@ -361,7 +380,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     {aiStrategyTab === 'remote' ? (
                       <div className="space-y-4">
                         <div>
-                          <label className="block text-xs font-semibold text-gray-300 mb-1">
+                          <label className="block text-xs font-semibold text-nb-text-secondary mb-1">
                             {t('Base URL')}
                           </label>
                           <input
@@ -374,12 +393,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               })
                             }
                             placeholder="https://api.deepseek.com or https://api.openai.com/v1"
-                            className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-brand-primary"
+                            className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-nb-text focus:outline-none focus:border-brand-primary"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-xs font-semibold text-gray-300 mb-1">
+                          <label className="block text-xs font-semibold text-nb-text-secondary mb-1">
                             {t('API Key')}
                           </label>
                           <input
@@ -392,13 +411,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               })
                             }
                             placeholder="sk-..."
-                            className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-brand-primary"
+                            className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-nb-text focus:outline-none focus:border-brand-primary"
                           />
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <label className="block text-xs font-semibold text-gray-300 mb-1">
+                            <label className="block text-xs font-semibold text-nb-text-secondary mb-1">
                               {t('Chat Model')}
                             </label>
                             <input
@@ -410,13 +429,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                   remote: { ...aiConfig.remote, chat_model: e.target.value },
                                 })
                               }
-                              placeholder="deepseek-chat or gpt-4o"
-                              className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-brand-primary"
+                              placeholder="deepseek-flash, deepseek-chat, or gpt-4.1"
+                              className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-nb-text focus:outline-none focus:border-brand-primary"
                             />
                           </div>
 
                           <div>
-                            <label className="block text-xs font-semibold text-gray-300 mb-1">
+                            <label className="block text-xs font-semibold text-nb-text-secondary mb-1">
                               {t('Reasoning Model')}
                             </label>
                             <input
@@ -428,15 +447,65 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                   remote: { ...aiConfig.remote, reasoning_model: e.target.value },
                                 })
                               }
-                              placeholder="deepseek-reasoner or o1"
-                              className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-brand-primary"
+                              placeholder="deepseek-reasoner or o3"
+                              className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-nb-text focus:outline-none focus:border-brand-primary"
                             />
                           </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <label className="block text-xs font-semibold text-gray-300 mb-1">
+                            <label className="block text-xs font-semibold text-nb-text-secondary mb-1">
+                              {t('Thinking Mode')}
+                            </label>
+                            <select
+                              value={aiConfig.remote.thinking_mode || 'auto'}
+                              onChange={(e) =>
+                                setAiConfig({
+                                  ...aiConfig,
+                                  remote: {
+                                    ...aiConfig.remote,
+                                    thinking_mode: e.target.value as 'auto' | 'enabled' | 'disabled',
+                                  },
+                                })
+                              }
+                              className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-nb-text focus:outline-none focus:border-brand-primary"
+                            >
+                              <option value="auto">{t('Auto (model default)')}</option>
+                              <option value="enabled">{t('Enabled (DeepSeek / CoT)')}</option>
+                              <option value="disabled">{t('Disabled (Fast response)')}</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-nb-text-secondary mb-1">
+                              {t('Reasoning Effort')}
+                            </label>
+                            <select
+                              value={aiConfig.remote.reasoning_effort || 'medium'}
+                              disabled={(aiConfig.remote.thinking_mode || 'auto') === 'disabled'}
+                              onChange={(e) =>
+                                setAiConfig({
+                                  ...aiConfig,
+                                  remote: {
+                                    ...aiConfig.remote,
+                                    reasoning_effort: e.target.value as 'low' | 'medium' | 'high' | 'max',
+                                  },
+                                })
+                              }
+                              className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-nb-text focus:outline-none focus:border-brand-primary disabled:opacity-50"
+                            >
+                              <option value="low">{t('Low (Faster tool loops)')}</option>
+                              <option value="medium">{t('Medium (Balanced)')}</option>
+                              <option value="high">{t('High (Deep analysis)')}</option>
+                              <option value="max">{t('Max (Maximum CoT budget)')}</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-semibold text-nb-text-secondary mb-1">
                               {t('Temperature (')}{aiConfig.remote.temperature})
                             </label>
                             <input
@@ -445,18 +514,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               max="1"
                               step="0.05"
                               value={aiConfig.remote.temperature}
+                              disabled={
+                                aiConfig.remote.thinking_mode === 'enabled' ||
+                                ((aiConfig.remote.thinking_mode || 'auto') === 'auto' &&
+                                  /flash|reasoner|r1|^o[134]/i.test(aiConfig.remote.chat_model))
+                              }
                               onChange={(e) =>
                                 setAiConfig({
                                   ...aiConfig,
                                   remote: { ...aiConfig.remote, temperature: parseFloat(e.target.value) },
                                 })
                               }
-                              className="w-full accent-brand-primary"
+                              className="w-full accent-brand-primary disabled:opacity-40"
                             />
+                            {(aiConfig.remote.thinking_mode === 'enabled' ||
+                              ((aiConfig.remote.thinking_mode || 'auto') === 'auto' &&
+                                /flash|reasoner|r1|^o[134]/i.test(aiConfig.remote.chat_model))) && (
+                              <span className="text-[11px] text-nb-text-secondary block mt-0.5">
+                                {t('Omitted automatically when Thinking Mode is active.')}
+                              </span>
+                            )}
                           </div>
 
                           <div>
-                            <label className="block text-xs font-semibold text-gray-300 mb-1">
+                            <label className="block text-xs font-semibold text-nb-text-secondary mb-1">
                               {t('Top P (')}{aiConfig.remote.top_p})
                             </label>
                             <input
@@ -479,7 +560,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     ) : (
                       <div className="space-y-4">
                         <div>
-                          <label className="block text-xs font-semibold text-gray-300 mb-1">
+                          <label className="block text-xs font-semibold text-nb-text-secondary mb-1">
                             {t('Ollama Base URL')}
                           </label>
                           <input
@@ -492,12 +573,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               })
                             }
                             placeholder="http://127.0.0.1:11434"
-                            className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-brand-primary"
+                            className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-nb-text focus:outline-none focus:border-brand-primary"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-xs font-semibold text-gray-300 mb-1">
+                          <label className="block text-xs font-semibold text-nb-text-secondary mb-1">
                             {t('Local Chat Model')}
                           </label>
                           <input
@@ -510,13 +591,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               })
                             }
                             placeholder="qwen2.5-coder:7b or llama3.1:8b"
-                            className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-brand-primary"
+                            className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-nb-text focus:outline-none focus:border-brand-primary"
                           />
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <label className="block text-xs font-semibold text-gray-300 mb-1">
+                            <label className="block text-xs font-semibold text-nb-text-secondary mb-1">
                               {t('Temperature (')}{aiConfig.ollama.temperature})
                             </label>
                             <input
@@ -536,7 +617,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           </div>
 
                           <div>
-                            <label className="block text-xs font-semibold text-gray-300 mb-1">
+                            <label className="block text-xs font-semibold text-nb-text-secondary mb-1">
                               {t('Top P (')}{aiConfig.ollama.top_p})
                             </label>
                             <input
@@ -563,12 +644,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   {aiSection === 'context' && (
                   <div className="space-y-5 rounded-xl border border-dark-border bg-dark-bg/35 p-5">
                     <div>
-                      <h4 className="text-sm font-semibold text-gray-100">{t('Context budget')}</h4>
-                      <p className="mt-1 text-xs text-gray-500">{t('Configure the active model\'s input window and reserved response capacity.')}</p>
+                      <h4 className="text-sm font-semibold text-nb-text">{t('Context budget')}</h4>
+                      <p className="mt-1 text-xs text-nb-text-secondary">{t('Configure the active model\'s input window and reserved response capacity.')}</p>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                     <label className="space-y-1">
-                      <span className="text-xs text-gray-400">{t('Context window (tokens)')}</span>
+                      <span className="text-xs text-nb-text-secondary">{t('Context window (tokens)')}</span>
                       <input
                         type="number"
                         min="2048"
@@ -579,11 +660,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             ? { ...aiConfig, remote: { ...aiConfig.remote, context_window_tokens: value } }
                             : { ...aiConfig, ollama: { ...aiConfig.ollama, context_window_tokens: value } });
                         }}
-                        className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-xs text-gray-200"
+                        className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-xs text-nb-text"
                       />
                     </label>
                     <label className="space-y-1">
-                      <span className="text-xs text-gray-400">{t('Maximum output (tokens)')}</span>
+                      <span className="text-xs text-nb-text-secondary">{t('Maximum output (tokens)')}</span>
                       <input
                         type="number"
                         min="256"
@@ -594,11 +675,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             ? { ...aiConfig, remote: { ...aiConfig.remote, max_output_tokens: value } }
                             : { ...aiConfig, ollama: { ...aiConfig.ollama, max_output_tokens: value } });
                         }}
-                        className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-xs text-gray-200"
+                        className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-xs text-nb-text"
                       />
                     </label>
                     </div>
-                    <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3 text-xs leading-relaxed text-blue-200/80">
+                    <div className="rounded-lg border border-brand-primary/25 bg-brand-primary/10 p-3 text-xs leading-relaxed text-nb-text-secondary">
                       {t('LabNexus reserves output and tool-schema tokens first, then keeps complete user/tool turns within the remaining budget.')}
                     </div>
                   </div>
@@ -606,9 +687,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                   {aiSection === 'reliability' && (
                   <div className="space-y-4 rounded-xl border border-dark-border bg-dark-bg/35 p-5">
-                    <h4 className="text-xs font-semibold text-gray-300 uppercase tracking-wider">{t('Provider Resilience')}</h4>
+                    <h4 className="text-xs font-semibold text-nb-text-secondary uppercase tracking-wider">{t('Provider Resilience')}</h4>
                     <label className="flex items-center justify-between p-3 rounded-lg bg-dark-bg border border-dark-border">
-                      <span className="text-xs text-gray-300">{t('Automatically switch to the other enabled provider on transient failures')}</span>
+                      <span className="text-xs text-nb-text">{t('Automatically switch to the other enabled provider on transient failures')}</span>
                       <input
                         type="checkbox"
                         checked={aiConfig.resilience.fallback_enabled}
@@ -621,28 +702,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </label>
                     <div className="grid grid-cols-4 gap-3">
                       <label className="space-y-1">
-                        <span className="text-xs text-gray-400">{t('Maximum retries')}</span>
+                        <span className="text-xs text-nb-text-secondary">{t('Maximum retries')}</span>
                         <input type="number" min="0" max="8" value={aiConfig.resilience.max_retries}
                           onChange={(event) => setAiConfig({ ...aiConfig, resilience: { ...aiConfig.resilience, max_retries: Number(event.target.value) } })}
-                          className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-xs text-gray-200" />
+                          className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-xs text-nb-text" />
                       </label>
                       <label className="space-y-1">
-                        <span className="text-xs text-gray-400">{t('Retry base (ms)')}</span>
+                        <span className="text-xs text-nb-text-secondary">{t('Retry base (ms)')}</span>
                         <input type="number" min="50" max="60000" value={aiConfig.resilience.retry_base_delay_ms}
                           onChange={(event) => setAiConfig({ ...aiConfig, resilience: { ...aiConfig.resilience, retry_base_delay_ms: Number(event.target.value) } })}
-                          className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-xs text-gray-200" />
+                          className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-xs text-nb-text" />
                       </label>
                       <label className="space-y-1">
-                        <span className="text-xs text-gray-400">{t('Circuit failures')}</span>
+                        <span className="text-xs text-nb-text-secondary">{t('Circuit failures')}</span>
                         <input type="number" min="1" max="20" value={aiConfig.resilience.circuit_breaker_threshold}
                           onChange={(event) => setAiConfig({ ...aiConfig, resilience: { ...aiConfig.resilience, circuit_breaker_threshold: Number(event.target.value) } })}
-                          className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-xs text-gray-200" />
+                          className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-xs text-nb-text" />
                       </label>
                       <label className="space-y-1">
-                        <span className="text-xs text-gray-400">{t('Cooldown (seconds)')}</span>
+                        <span className="text-xs text-nb-text-secondary">{t('Cooldown (seconds)')}</span>
                         <input type="number" min="1" max="3600" value={aiConfig.resilience.circuit_breaker_cooldown_seconds}
                           onChange={(event) => setAiConfig({ ...aiConfig, resilience: { ...aiConfig.resilience, circuit_breaker_cooldown_seconds: Number(event.target.value) } })}
-                          className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-xs text-gray-200" />
+                          className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-xs text-nb-text" />
                       </label>
                     </div>
                   </div>
@@ -652,10 +733,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="space-y-3 rounded-xl border border-dark-border bg-dark-bg/35 p-5">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h4 className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                        <h4 className="text-xs font-semibold text-nb-text-secondary uppercase tracking-wider">
                           {t('External MCP Servers')}
                         </h4>
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-nb-text-secondary mt-1">
                           {t('Enabled servers are connected and discovered on save. External tool calls always require one-time approval.')}
                         </p>
                       </div>
@@ -681,14 +762,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             ],
                           });
                         }}
-                        className="px-3 py-1.5 rounded-lg text-xs border border-dark-border text-gray-300 hover:border-brand-primary hover:text-gray-100"
+                        className="px-3 py-1.5 rounded-lg text-xs border border-dark-border text-nb-text-secondary hover:border-brand-primary hover:text-nb-text inline-flex items-center gap-1"
                       >
-                        {t('+ Add Server')}
+                        <Plus size={12} strokeWidth={2} />
+                        {t('Add Server')}
                       </button>
                     </div>
 
                     {mcpWarnings.length > 0 && (
-                      <div className="bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs p-3 rounded-lg space-y-1">
+                      <div className="bg-amber-500/10 border border-amber-500/30 text-amber-500 text-xs p-3 rounded-lg space-y-1">
                         <div className="font-semibold">{t('Saved, but discovery reported:')}</div>
                         {mcpWarnings.map((warning) => <div key={warning}>{warning}</div>)}
                       </div>
@@ -713,7 +795,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               servers: mcpConfig.servers.map((item, itemIndex) =>
                                 itemIndex === index ? { ...item, name: event.target.value } : item),
                             })}
-                            className="flex-1 bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-sm text-gray-200"
+                            className="flex-1 bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-sm text-nb-text"
                             placeholder={t('Display name')}
                           />
                           <button
@@ -726,19 +808,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </div>
                         <div className="grid grid-cols-3 gap-3">
                           <label className="space-y-1">
-                            <span className="text-xs text-gray-400">{t('Server ID')}</span>
+                            <span className="text-xs text-nb-text-secondary">{t('Server ID')}</span>
                             <input
                               value={server.id}
                               onChange={(event) => setMcpConfig({
                                 servers: mcpConfig.servers.map((item, itemIndex) =>
                                   itemIndex === index ? { ...item, id: event.target.value } : item),
                               })}
-                              className="w-full bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-xs font-mono text-gray-200"
+                              className="w-full bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-xs font-mono text-nb-text"
                               placeholder="filesystem"
                             />
                           </label>
                           <label className="space-y-1">
-                            <span className="text-xs text-gray-400">{t('Transport')}</span>
+                            <span className="text-xs text-nb-text-secondary">{t('Transport')}</span>
                             <select
                               value={server.transport}
                               onChange={(event) => setMcpConfig({
@@ -747,14 +829,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                     ? { ...item, transport: event.target.value as 'stdio' | 'streamable_http' }
                                     : item),
                               })}
-                              className="w-full bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-xs text-gray-200"
+                              className="w-full bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-xs text-nb-text"
                             >
                               <option value="stdio">stdio</option>
                               <option value="streamable_http">{t('Streamable HTTP')}</option>
                             </select>
                           </label>
                           <label className="space-y-1">
-                            <span className="text-xs text-gray-400">{t('Timeout (seconds)')}</span>
+                            <span className="text-xs text-nb-text-secondary">{t('Timeout (seconds)')}</span>
                             <input
                               type="number"
                               min="1"
@@ -764,26 +846,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 servers: mcpConfig.servers.map((item, itemIndex) =>
                                   itemIndex === index ? { ...item, timeout_seconds: Number(event.target.value) } : item),
                               })}
-                              className="w-full bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-xs text-gray-200"
+                              className="w-full bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-xs text-nb-text"
                             />
                           </label>
                         </div>
                         {server.transport === 'stdio' ? (
                           <>
                             <label className="block space-y-1">
-                              <span className="text-xs text-gray-400">{t('Command')}</span>
+                              <span className="text-xs text-nb-text-secondary">{t('Command')}</span>
                               <input
                                 value={server.command}
                                 onChange={(event) => setMcpConfig({
                                   servers: mcpConfig.servers.map((item, itemIndex) =>
                                     itemIndex === index ? { ...item, command: event.target.value } : item),
                                 })}
-                                className="w-full bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-xs font-mono text-gray-200"
+                                className="w-full bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-xs font-mono text-nb-text"
                                 placeholder="npx or /absolute/path/to/server"
                               />
                             </label>
                             <label className="block space-y-1">
-                              <span className="text-xs text-gray-400">{t('Arguments (one per line)')}</span>
+                              <span className="text-xs text-nb-text-secondary">{t('Arguments (one per line)')}</span>
                               <textarea
                                 rows={Math.max(2, Math.min(5, server.args.length + 1))}
                                 value={server.args.join('\n')}
@@ -793,11 +875,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                       ? { ...item, args: event.target.value.split('\n').filter((argument) => argument.length > 0) }
                                       : item),
                                 })}
-                                className="w-full bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-xs font-mono text-gray-200 resize-y"
+                                className="w-full bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-xs font-mono text-nb-text resize-y"
                               />
                             </label>
                             <label className="block space-y-1">
-                              <span className="text-xs text-gray-400">{t('Environment (NAME=VALUE, one per line)')}</span>
+                              <span className="text-xs text-nb-text-secondary">{t('Environment (NAME=VALUE, one per line)')}</span>
                               <textarea
                                 rows={Math.max(2, Math.min(5, Object.keys(server.env).length + 1))}
                                 value={Object.entries(server.env).map(([key, value]) => `${key}=${value}`).join('\n')}
@@ -811,26 +893,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                       itemIndex === index ? { ...item, env } : item),
                                   });
                                 }}
-                                className="w-full bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-xs font-mono text-gray-200 resize-y"
+                                className="w-full bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-xs font-mono text-nb-text resize-y"
                               />
                             </label>
                           </>
                         ) : (
                           <>
                             <label className="block space-y-1">
-                              <span className="text-xs text-gray-400">{t('MCP Endpoint URL')}</span>
+                              <span className="text-xs text-nb-text-secondary">{t('MCP Endpoint URL')}</span>
                               <input
                                 value={server.url}
                                 onChange={(event) => setMcpConfig({
                                   servers: mcpConfig.servers.map((item, itemIndex) =>
                                     itemIndex === index ? { ...item, url: event.target.value } : item),
                                 })}
-                                className="w-full bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-xs font-mono text-gray-200"
+                                className="w-full bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-xs font-mono text-nb-text"
                                 placeholder="https://example.com/mcp"
                               />
                             </label>
                             <label className="block space-y-1">
-                              <span className="text-xs text-gray-400">{t('HTTP Headers (NAME=VALUE, one per line)')}</span>
+                              <span className="text-xs text-nb-text-secondary">{t('HTTP Headers (NAME=VALUE, one per line)')}</span>
                               <textarea
                                 rows={Math.max(2, Math.min(5, Object.keys(server.headers).length + 1))}
                                 value={Object.entries(server.headers).map(([key, value]) => `${key}=${value}`).join('\n')}
@@ -844,7 +926,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                       itemIndex === index ? { ...item, headers } : item),
                                   });
                                 }}
-                                className="w-full bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-xs font-mono text-gray-200 resize-y"
+                                className="w-full bg-dark-surface border border-dark-border rounded px-2 py-1.5 text-xs font-mono text-nb-text resize-y"
                                 placeholder="Authorization=Bearer ..."
                               />
                             </label>
@@ -856,7 +938,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   )}
 
                   <div className="sticky bottom-0 -mx-6 flex items-center justify-between border-t border-dark-border bg-dark-surface/95 px-6 pb-1 pt-4 backdrop-blur">
-                    <span className={`text-xs ${aiSaved ? 'text-emerald-400' : 'text-gray-500'}`}>{aiSaved ? t('✓ Configuration saved') : t('Changes are validated before they are saved.')}</span>
+                    <span className={`text-xs ${aiSaved ? 'text-emerald-500' : 'text-nb-text-secondary'}`}>{aiSaved ? t('✓ Configuration saved') : t('Changes are validated before they are saved.')}</span>
                     <button
                       onClick={handleSaveAi}
                       disabled={isSavingAi}
@@ -871,9 +953,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="space-y-3 animate-pulse"><div className="h-10 rounded-lg bg-dark-border/50" /><div className="h-32 rounded-xl bg-dark-border/30" /></div>
                 ) : (
                   <div className="rounded-xl border border-red-500/25 bg-red-500/5 p-6 text-center">
-                    <p className="text-sm font-semibold text-red-300">{t('AI configuration could not be loaded')}</p>
-                    <p className="mt-1 text-xs text-gray-500">{t('Check the desktop runtime and try again.')}</p>
-                    <button type="button" onClick={() => setAiReloadNonce((value) => value + 1)} className="mt-4 rounded-lg border border-dark-border px-4 py-2 text-xs font-semibold text-gray-200 hover:bg-dark-border">{t('Retry')}</button>
+                    <p className="text-sm font-semibold text-red-400">{t('AI configuration could not be loaded')}</p>
+                    <p className="mt-1 text-xs text-nb-text-secondary">{t('Check the desktop runtime and try again.')}</p>
+                    <button type="button" onClick={() => setAiReloadNonce((value) => value + 1)} className="mt-4 rounded-lg border border-dark-border px-4 py-2 text-xs font-semibold text-nb-text hover:bg-dark-border">{t('Retry')}</button>
                   </div>
                 )
               )}

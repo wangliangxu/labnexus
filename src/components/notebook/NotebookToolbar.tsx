@@ -10,6 +10,7 @@ import {
   Check,
   AlertCircle,
   WifiOff,
+  Eraser,
 } from 'lucide-react';
 import type { CellType, KernelStatus } from '../../types/jupyter';
 
@@ -27,6 +28,7 @@ interface NotebookToolbarProps {
   onAddMarkdown: () => void;
   onRunSelected: () => void;
   onRunAll: () => void;
+  onClearOutputs?: () => void;
   onInterrupt: () => void;
   onRestart: () => void;
   onConnect: () => void;
@@ -42,7 +44,7 @@ const tbBtnStyle: React.CSSProperties = {
   minHeight: '26px',
   padding: '0 8px',
   border: '1px solid transparent',
-  borderRadius: '2px',
+  borderRadius: '4px',
   background: 'transparent',
   color: 'var(--color-nb-text-secondary)',
   fontSize: '12px',
@@ -88,6 +90,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   onAddMarkdown,
   onRunSelected,
   onRunAll,
+  onClearOutputs,
   onInterrupt,
   onRestart,
   onConnect,
@@ -256,6 +259,17 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
           <Play size={15} fill="currentColor" />
           <span>{t('Run All')}</span>
         </button>
+
+        {onClearOutputs && (
+          <button
+            onClick={onClearOutputs}
+            title={t('Clear All Outputs')}
+            style={tbBtnStyle}
+          >
+            <Eraser size={14} />
+            <span>{t('Clear Outputs')}</span>
+          </button>
+        )}
       </div>
 
       {/* Spacer */}

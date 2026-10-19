@@ -6,7 +6,13 @@ import { t } from '../i18n';
 import { useState, type ReactNode } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { Sparkles, Settings, TableOfContents } from 'lucide-react';
+import {
+  FolderTree,
+  Terminal,
+  TableOfContents,
+  Sparkles,
+  Settings,
+} from 'lucide-react';
 import { BrandLogo } from '../components/common/BrandLogo';
 import './WorkbenchLayout.css';
 
@@ -99,7 +105,7 @@ export function WorkbenchLayout({
         '--assistant-width': `${assistantWidth}px`,
       } as React.CSSProperties}
     >
-      {/* Title Bar (replaces Activity Bar) */}
+      {/* Title Bar */}
       <div
         className="workbench__titlebar"
         onPointerDown={handleTitlebarPointerDown}
@@ -112,9 +118,7 @@ export function WorkbenchLayout({
             title={t('Explorer')}
             aria-label={t('Explorer')}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V9C21 7.89543 20.1046 7 19 7H13L11 5H5C3.89543 5 3 5.89543 3 7Z" />
-            </svg>
+            <FolderTree size={17} strokeWidth={1.7} aria-hidden="true" />
           </button>
           <button
             data-no-drag
@@ -123,10 +127,7 @@ export function WorkbenchLayout({
             title={t('Remote Terminals')}
             aria-label={t('Remote Terminals')}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <polyline points="4 17 10 11 4 5" />
-              <line x1="12" y1="19" x2="20" y2="19" />
-            </svg>
+            <Terminal size={17} strokeWidth={1.7} aria-hidden="true" />
           </button>
           <button
             data-no-drag
@@ -135,7 +136,7 @@ export function WorkbenchLayout({
             title={t('Table of Contents')}
             aria-label={t('Table of Contents')}
           >
-            <TableOfContents size={18} strokeWidth={1.6} />
+            <TableOfContents size={17} strokeWidth={1.7} aria-hidden="true" />
           </button>
         </div>
         <div className="titlebar__center">
@@ -152,7 +153,7 @@ export function WorkbenchLayout({
             title={t('AI Agent')}
             aria-label={t('AI Agent')}
           >
-            <Sparkles size={18} strokeWidth={1.5} aria-hidden="true" />
+            <Sparkles size={17} strokeWidth={1.7} aria-hidden="true" />
           </button>
           <button
             data-no-drag
@@ -161,7 +162,7 @@ export function WorkbenchLayout({
             title={t('Settings')}
             aria-label={t('Settings')}
           >
-            <Settings size={18} strokeWidth={1.5} aria-hidden="true" />
+            <Settings size={17} strokeWidth={1.7} aria-hidden="true" />
           </button>
         </div>
       </div>

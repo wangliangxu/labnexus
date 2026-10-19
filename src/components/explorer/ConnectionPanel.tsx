@@ -4,16 +4,23 @@ import { t } from '../../i18n';
  */
 
 import { useState } from 'react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import type { JupyterServerConfig, JupyterHubLoginConfig, ProxyConfig } from '../../types/jupyter';
 import './ConnectionPanel.css';
 
 interface ConnectionPanelProps {
   onConnect: (config: JupyterServerConfig) => Promise<void>;
   onConnectHub?: (config: JupyterHubLoginConfig) => Promise<void>;
+  onBack?: () => void;
   isConnecting: boolean;
 }
 
-export function ConnectionPanel({ onConnect, onConnectHub, isConnecting }: ConnectionPanelProps) {
+export function ConnectionPanel({
+  onConnect,
+  onConnectHub,
+  onBack,
+  isConnecting,
+}: ConnectionPanelProps) {
   const [authMode, setAuthMode] = useState<'token' | 'tljh'>('token');
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
@@ -66,6 +73,17 @@ export function ConnectionPanel({ onConnect, onConnectHub, isConnecting }: Conne
     <div className="connection-panel">
       <div className="panel-header">
         <h3 className="panel-header__title">{t('Connect to Server')}</h3>
+        {onBack && (
+          <button
+            type="button"
+            className="btn btn-icon btn-ghost"
+            onClick={onBack}
+            title={t('Back to Explorer')}
+            aria-label={t('Back to Explorer')}
+          >
+            <ArrowLeft size={14} />
+          </button>
+        )}
       </div>
 
       <form className="connection-form" onSubmit={handleSubmit}>
@@ -231,8 +249,10 @@ export function ConnectionPanel({ onConnect, onConnectHub, isConnecting }: Conne
           }
         >
           {isConnecting ? (
-            <>
-              <span className="animate-spin">⟳</span> {t('Connecting...')}</>
+            <span className="inline-flex items-center justify-center gap-1.5">
+              <Loader2 size={14} className="animate-spin" />
+              <span>{t('Connecting...')}</span>
+            </span>
           ) : (
             t('Connect')
           )}

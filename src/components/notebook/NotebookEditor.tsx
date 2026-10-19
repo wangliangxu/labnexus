@@ -850,6 +850,17 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     ]
   );
 
+  const handleClearAllOutputs = useCallback(() => {
+    updateCellsSnapshot((prev) =>
+      prev.map((c) =>
+        c.cell_type === 'code'
+          ? { ...c, outputs: [], execution_count: null }
+          : c
+      )
+    );
+    setIsDirty(true);
+  }, [updateCellsSnapshot]);
+
   if (isLoading) {
     return (
       <div className="flex flex-1 items-center justify-center flex-col gap-3 bg-nb-shell text-nb-text-secondary text-[13px]">
@@ -893,6 +904,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         onRunAll={() => {
           void handleRunAll();
         }}
+        onClearOutputs={handleClearAllOutputs}
         onInterrupt={handleInterruptKernel}
         onRestart={handleRestartKernel}
         onConnect={kernel.startSession}

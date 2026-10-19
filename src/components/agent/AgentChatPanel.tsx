@@ -54,7 +54,7 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const {
-    messages, status, currentStreamingAnswer, activeToolCall, error, sendPrompt,
+    messages, status, currentStreamingThought, currentStreamingAnswer, activeToolCall, error, sendPrompt,
     confirmTool, cancelTask, clearHistory, dismissError,
   } = useAgent(sessionId);
 
@@ -95,7 +95,7 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, currentStreamingAnswer]);
+  }, [messages, currentStreamingThought, currentStreamingAnswer]);
 
   useEffect(() => {
     const input = inputRef.current;
@@ -270,7 +270,7 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
         {status !== 'idle' && <div className="agent-workspace__status" role="status"><span className={`agent-status-dot ${status}`} />{runLabel}</div>}
 
         <main className="agent-conversation" aria-live="polite">
-          {messages.length === 0 && !currentStreamingAnswer && (
+          {messages.length === 0 && !currentStreamingThought && !currentStreamingAnswer && (
             <div className="agent-empty-state">
               <h3>{t('How can I help?')}</h3>
               <p>{t('Ask about your notebook or describe a task.')}</p>
@@ -288,6 +288,12 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
               <article key={message.id} className="agent-message agent-message--assistant">
                 <div className="agent-message__avatar"><Sparkles size={14} strokeWidth={1.5} /></div>
                 <div className="agent-message__body">
+                  {message.reasoning_content && (
+                    <details className="agent-tool-timeline">
+                      <summary><Sparkles size={13} />{t('Reasoning')}</summary>
+                      <div style={{ padding: '6px 10px', fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>{message.reasoning_content}</div>
+                    </details>
+                  )}
                   {message.content && <MarkdownMessage content={message.content} onUseCode={(code) => setInputPrompt((current) => `${current}${current ? '\n\n' : ''}${code}`)} />}
                   {message.tool_calls && message.tool_calls.length > 0 && (
                     <details className="agent-tool-timeline">
@@ -300,8 +306,19 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
             );
           })}
 
-          {currentStreamingAnswer && (
-            <article className="agent-message agent-message--assistant"><div className="agent-message__avatar"><Sparkles size={14} strokeWidth={1.5} /></div><div className="agent-message__body"><MarkdownMessage content={currentStreamingAnswer} /><span className="agent-stream-cursor" /></div></article>
+          {(currentStreamingThought || currentStreamingAnswer) && (
+            <article className="agent-message agent-message--assistant">
+              <div className="agent-message__avatar"><Sparkles size={14} strokeWidth={1.5} /></div>
+              <div className="agent-message__body">
+                {currentStreamingThought && (
+                  <details className="agent-tool-timeline" open={!currentStreamingAnswer}>
+                    <summary><Sparkles size={13} />{t('Thinking')}</summary>
+                    <div style={{ padding: '6px 10px', fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>{currentStreamingThought}</div>
+                  </details>
+                )}
+                {currentStreamingAnswer && <><MarkdownMessage content={currentStreamingAnswer} /><span className="agent-stream-cursor" /></>}
+              </div>
+            </article>
           )}
 
           {activeToolCall?.status === 'running' && (

@@ -9,6 +9,8 @@
 
 .statusbar__left {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .statusbar__right {
@@ -23,7 +25,7 @@
 
 .statusbar__server-name {
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .statusbar__version {
@@ -34,12 +36,64 @@
   color: var(--text-tertiary);
 }
 
-.statusbar__info {
+.statusbar__telemetry {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.statusbar__cell-index {
   color: var(--text-tertiary);
+}
+
+.statusbar__info {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-tertiary);
+}
+
+.statusbar__agent-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.statusbar__agent-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+}
+
+.statusbar__agent-btn--active {
+  color: #ffffff;
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.statusbar__agent-btn--active:hover {
+  color: #ffffff;
+  background: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
 }
 
 .statusbar__brand {
   color: var(--color-primary);
   font-weight: 600;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.2px;
 }
