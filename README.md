@@ -156,3 +156,29 @@ cargo test --manifest-path src-tauri/Cargo.toml
 # 5. 构建可分发的原生桌面安装包 (.dmg / .app / .msi / .deb)
 npm run tauri build
 ```
+
+
+### GitHub 自动打包
+
+工作流：[`Build desktop installers`](https://github.com/wangliangxu/labnexus/actions/workflows/build.yml)。
+
+- 推送到 `main`：检查版本一致性与前端构建，随后并行构建四个平台的安装包；在该次 Actions 运行页面的 **Artifacts** 中下载。
+- 手动打包：在 Actions 中选择上述工作流，点击 **Run workflow**，选择分支运行。
+- 推送版本标签（如 `v0.4.0`）：构建全部成功后，将安装包上传至 [Releases](https://github.com/wangliangxu/labnexus/releases) 草稿；检查后点击 **Publish release** 正式发布。
+
+| 平台 | 架构 | 安装包 |
+| --- | --- | --- |
+| macOS | Apple Silicon / Intel | `.dmg` |
+| Windows | x64 | `.exe`（NSIS）、`.msi` |
+| Linux | x64 | `.deb`、`.AppImage` |
+
+发布前需保持 `package.json`、`package-lock.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock` 与 `src-tauri/tauri.conf.json` 中的应用版本一致，标签须为 `v` 加应用版本：
+
+```bash
+# 确认版本更新已提交并推送后，为当前提交创建标签
+# 当前版本为 0.4.0；后续发布请替换为新的版本号
+git tag v0.4.0
+git push origin v0.4.0
+```
+
+工作流使用 GitHub 自动提供的 `GITHUB_TOKEN`，无需额外配置个人访问令牌。当前产物未配置开发者证书签名，macOS 产物也未公证，安装时系统可能提示来源未验证；面向正式分发时应另行配置 Apple / Windows 代码签名。打包不包含 Python 或 Jupyter 环境，使用本地 Jupyter 功能仍需自行安装。

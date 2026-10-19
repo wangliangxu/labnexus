@@ -1,0 +1,144 @@
+name: Build desktop installers
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+jobs:
+  validate:
+    name: Validate versions and frontend
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Check version consistency
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const version = require('./package.json').version;
+          const lock = require('./package-lock.json');
+          const tauri = require('./src-tauri/tauri.conf.json').version;
+          const cargo = fs.readFileSync('src-tauri/Cargo.toml', 'utf8')
+            .match(/^version\s*=\s*"([^"]+)"/m)?.[1];
+          for (const [name, value] of Object.entries({
+            'package-lock.json': lock.version,
+            'package-lock.json packages root': lock.packages[''].version,
+            'tauri.conf.json': tauri,
+            'Cargo.toml': cargo,
+          })) {
+            if (value !== version) throw new Error(`${name}: ${value} != ${version}`);
+          }
+          if (process.env.REF_TYPE === 'tag' && process.env.REF_NAME !== `v${version}`) {
+            throw new Error(`Expected tag v${version}, received ${process.env.REF_NAME}`);
+          }
+          console.log(`Version validated: ${version}`);
+          NODE
+      - run: npm ci
+      - run: npm run build
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: validate
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS Apple Silicon
+            os: macos-15
+            target: aarch64-apple-darwin
+            bundles: dmg
+          - name: macOS Intel
+            os: macos-15-intel
+            target: x86_64-apple-darwin
+            bundles: dmg
+          - name: Windows x64
+            os: windows-2022
+            target: x86_64-pc-windows-msvc
+            bundles: nsis,msi
+          - name: Linux x64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            bundles: deb,appimage
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils libssl-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: ${{ matrix.target }}
+      - run: npm ci
+      - name: Build and upload installers
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Allow AppImage packaging on hosted runners without a FUSE mount.
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        with:
+          args: --ci --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} -- --locked
+          uploadWorkflowArtifacts: true
+          workflowArtifactNamePattern: LabNexus-[version]-[platform]-[arch]-[bundle]
+
+  release:
+    name: Create draft release
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: LabNexus-*
+          path: installers
+          merge-multiple: true
+      - name: Upload installers to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' assets < <(find installers -type f -print0)
+          if (( ${#assets[@]} == 0 )); then
+            echo 'No installers were downloaded.' >&2
+            exit 1
+          fi
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --verify-tag --draft \
+              --title "LabNexus $RELEASE_TAG" \
+              --notes 'Download the installer for your platform. These builds are unsigned; macOS builds are not notarized.'
+          fi
+          gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
