@@ -111,13 +111,16 @@ jobs:
           workflowArtifactNamePattern: LabNexus-[version]-[platform]-[arch]-[bundle]
 
   release:
-    name: Create draft release
+    name: Publish release
     if: github.ref_type == 'tag'
     needs: build
     runs-on: ubuntu-22.04
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@v5
         with:
           pattern: LabNexus-*
@@ -136,9 +139,16 @@ jobs:
             echo 'No installers were downloaded.' >&2
             exit 1
           fi
+          notes_file="docs/releases/$RELEASE_TAG.md"
+          if [[ ! -f "$notes_file" ]]; then
+            notes_file="$RUNNER_TEMP/release-notes.md"
+            printf '%s\n' 'Download the installer for your platform. These builds are unsigned; macOS builds are not notarized.' > "$notes_file"
+          fi
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --verify-tag --draft \
               --title "LabNexus $RELEASE_TAG" \
-              --notes 'Download the installer for your platform. These builds are unsigned; macOS builds are not notarized.'
+              --notes-file "$notes_file"
           fi
           gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+          # Publish only after every installer has been uploaded successfully.
+          gh release edit "$RELEASE_TAG" --draft=false --notes-file "$notes_file"

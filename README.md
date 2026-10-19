@@ -164,7 +164,7 @@ npm run tauri build
 
 - 推送到 `main`：检查版本一致性与前端构建，随后并行构建四个平台的安装包；在该次 Actions 运行页面的 **Artifacts** 中下载。
 - 手动打包：在 Actions 中选择上述工作流，点击 **Run workflow**，选择分支运行。
-- 推送版本标签（如 `v0.4.0`）：构建全部成功后，将安装包上传至 [Releases](https://github.com/wangliangxu/labnexus/releases) 草稿；检查后点击 **Publish release** 正式发布。
+- 推送版本标签（如 `v0.4.0`）：构建全部成功后，将安装包上传至 [Releases](https://github.com/wangliangxu/labnexus/releases) 草稿，全部上传成功后自动正式发布。版本说明优先读取 `docs/releases/<标签>.md`。
 
 | 平台 | 架构 | 安装包 |
 | --- | --- | --- |
