@@ -3,8 +3,6 @@ import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import CodeMirror from '@uiw/react-codemirror';
 import { python } from '@codemirror/lang-python';
 import { markdown } from '@codemirror/lang-markdown';
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import { tags } from '@lezer/highlight';
 import { keymap, EditorView, type ViewUpdate } from '@codemirror/view';
 import { Prec } from '@codemirror/state';
 import {
@@ -20,51 +18,6 @@ import {
 import type { Cell, CellType } from '../../types/jupyter';
 import { CellOutputView } from './CellOutputView';
 import { renderSanitizedMarkdown } from '../../utils/sanitizeHtml';
-
-/* Both editors use the same live palette as the workbench. */
-function createJupyterTheme(dark: boolean) {
-  return [
-    EditorView.theme({
-      '&': { backgroundColor: 'var(--color-nb-editor)', color: 'var(--color-nb-text)' },
-      '.cm-content': { caretColor: 'var(--text-primary)' },
-      '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--text-primary)' },
-      '.cm-gutters': {
-        backgroundColor: 'var(--color-nb-gutter)',
-        color: 'var(--color-nb-gutter-text)',
-        borderRight: '1px solid var(--color-nb-editor-border)',
-      },
-      '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'var(--bg-active)' },
-      '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
-        backgroundColor: 'var(--bg-selected)',
-      },
-      '.cm-tooltip, .cm-panels': {
-        backgroundColor: 'var(--bg-tooltip)', color: 'var(--text-primary)',
-        border: '1px solid var(--border-default)',
-      },
-      '.cm-tooltip-autocomplete > ul > li[aria-selected]': {
-        backgroundColor: 'var(--bg-selected)', color: 'var(--text-primary)',
-      },
-      '.cm-searchMatch': { backgroundColor: 'var(--color-warning-subtle)' },
-      '.cm-searchMatch.cm-searchMatch-selected': { outline: '1px solid var(--color-warning)' },
-    }, { dark }),
-    syntaxHighlighting(HighlightStyle.define([
-      { tag: tags.keyword, color: 'var(--syntax-keyword)', fontWeight: 'bold' },
-      { tag: [tags.atom, tags.bool, tags.null], color: 'var(--syntax-atom)' },
-      { tag: tags.number, color: 'var(--syntax-number)' },
-      { tag: [tags.definition(tags.variableName), tags.function(tags.variableName)], color: 'var(--syntax-def)' },
-      { tag: [tags.string, tags.regexp], color: 'var(--syntax-string)' },
-      { tag: tags.comment, color: 'var(--syntax-comment)', fontStyle: 'italic' },
-      { tag: [tags.meta, tags.annotation], color: 'var(--syntax-meta)' },
-      { tag: tags.heading, color: 'var(--text-link)', fontWeight: 'bold' },
-      { tag: tags.link, color: 'var(--text-link)', textDecoration: 'underline' },
-      { tag: tags.strong, fontWeight: 'bold' },
-      { tag: tags.emphasis, fontStyle: 'italic' },
-      { tag: tags.invalid, color: 'var(--color-error)' },
-    ])),
-  ];
-}
-const jupyterLight = createJupyterTheme(false);
-const jupyterDark = createJupyterTheme(true);
 
 /* ── Shared button class tokens ──────────────────────────────────── */
 const cellBtn =
@@ -390,7 +343,7 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
                 extensions={extensions}
                 onChange={handleEditorChange}
                 onUpdate={handleEditorUpdate}
-                theme={isDarkTheme ? jupyterDark : jupyterLight}
+                theme={isDarkTheme ? 'dark' : 'light'}
                 basicSetup={basicSetup}
                 autoFocus={isMarkdown && isEditingMarkdown}
                 height="auto"
