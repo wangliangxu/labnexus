@@ -25,6 +25,7 @@ interface UseKernelProps {
   notebookPath: string;
   kernelName?: string;
   onCellOutput?: (cellId: string, output: CellOutput) => void;
+  onCellExecutionCount?: (cellId: string, executionCount: number) => void;
   onCellExecutionDone?: (cellId: string, executionCount?: number, hadError?: boolean) => void;
 }
 
@@ -57,6 +58,7 @@ export function useKernel({
   notebookPath,
   kernelName = 'python3',
   onCellOutput,
+  onCellExecutionCount,
   onCellExecutionDone,
 }: UseKernelProps): UseKernelReturn {
   const [session, setSession] = useState<SessionInfo | null>(null);
@@ -73,6 +75,8 @@ export function useKernel({
   // Store callbacks in refs to avoid re-triggering useEffects
   const onOutputRef = useRef(onCellOutput);
   onOutputRef.current = onCellOutput;
+  const onCountRef = useRef(onCellExecutionCount);
+  onCountRef.current = onCellExecutionCount;
   const onDoneRef = useRef(onCellExecutionDone);
   onDoneRef.current = onCellExecutionDone;
 
@@ -152,6 +156,7 @@ export function useKernel({
         'display_data',
         'execute_result',
         'error',
+        'execute_input',
         'execute_reply',
         'status',
       ]);
@@ -166,7 +171,13 @@ export function useKernel({
 
       // If this message belongs to a cell execution request
       if (cellId) {
-        if (msgType === 'stream') {
+        if (msgType === 'execute_input') {
+          // IOPub announces the count before output/idle. Shell execute_reply
+          // may arrive after idle has already removed the request mapping.
+          if (typeof content.execution_count === 'number') {
+            onCountRef.current?.(cellId, content.execution_count);
+          }
+        } else if (msgType === 'stream') {
           onOutputRef.current?.(cellId, {
             output_type: 'stream',
             name: content.name,

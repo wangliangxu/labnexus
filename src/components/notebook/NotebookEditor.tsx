@@ -222,25 +222,34 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     [updateCellsSnapshot]
   );
 
-  const handleCellExecutionDone = useCallback(
-    (cellId: string, executionCount?: number, hadError?: boolean) => {
+  const handleCellExecutionCount = useCallback(
+    (cellId: string, executionCount: number) => {
       updateCellsSnapshot((prevCells) =>
         prevCells.map((cell) => {
           if (cell.id === cellId) {
             return {
               ...cell,
-              execution_count:
-                executionCount !== undefined ? executionCount : cell.execution_count,
+              execution_count: executionCount,
             };
           }
           return cell;
         })
       );
+      setIsDirty(true);
+    },
+    [updateCellsSnapshot]
+  );
+
+  const handleCellExecutionDone = useCallback(
+    (cellId: string, executionCount?: number, hadError?: boolean) => {
+      if (executionCount !== undefined) {
+        handleCellExecutionCount(cellId, executionCount);
+      }
       setExecutingCellIds((prev) => prev.filter((id) => id !== cellId));
       resolvePendingCellExecution(cellId, Boolean(hadError));
       setIsDirty(true);
     },
-    [resolvePendingCellExecution, updateCellsSnapshot]
+    [handleCellExecutionCount, resolvePendingCellExecution]
   );
 
   // Initialize kernel hook
@@ -249,6 +258,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     notebookPath: path,
     kernelName: nbMetadata?.kernelspec?.name || 'python3',
     onCellOutput: handleCellOutput,
+    onCellExecutionCount: handleCellExecutionCount,
     onCellExecutionDone: handleCellExecutionDone,
   });
   const canRunCode = kernel.isReady;
