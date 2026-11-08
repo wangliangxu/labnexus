@@ -806,7 +806,7 @@ mod tests {
                         .map(event)
                         .collect::<String>()
                     };
-                    let headers = format!("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n");
+                    let headers = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n".to_string();
                     socket.write_all(headers.as_bytes()).await.unwrap();
                     // Single-byte transport chunks deliberately split Chinese UTF-8 and SSE fields.
                     for byte in response.as_bytes() {

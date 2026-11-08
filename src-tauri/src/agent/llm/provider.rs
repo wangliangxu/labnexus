@@ -67,9 +67,8 @@ impl LlmClient {
         }
     }
 
-    /// Send a chat completion request to the configured LLM provider.
-    /// Streams text deltas in real-time via `on_chunk`.
-    /// Returns the complete final message (including accumulated text and tool calls).
+    /// Test helper: stream a chat completion without a reasoning callback.
+    #[cfg(test)]
     pub async fn stream_chat<F>(
         &self,
         config: &AiConfig,

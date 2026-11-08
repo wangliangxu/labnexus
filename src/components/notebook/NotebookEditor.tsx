@@ -26,6 +26,7 @@ import {
   type NotebookTocState,
 } from './notebookToc';
 import './Notebook.css';
+import { applyPendingOutputs, MAX_STREAM_CHARS } from './notebookOutputs';
 import {
   GLOBAL_SETTINGS_CHANGED_EVENT,
   isEditableKeyboardTarget,
@@ -181,45 +182,46 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     return () => window.removeEventListener(GLOBAL_SETTINGS_CHANGED_EVENT, handleSettingsChanged);
   }, []);
 
+  // Kernel outputs are buffered and applied once per animation frame, so chatty
+  // `print` loops cause one React render per frame instead of one per message.
+  const pendingOutputsRef = useRef<Map<string, CellOutput[]>>(new Map());
+  const outputFlushFrameRef = useRef<number | null>(null);
+
+  const flushPendingOutputs = useCallback(() => {
+    if (outputFlushFrameRef.current !== null) {
+      window.cancelAnimationFrame(outputFlushFrameRef.current);
+      outputFlushFrameRef.current = null;
+    }
+    const pending = pendingOutputsRef.current;
+    if (pending.size === 0) return;
+    pendingOutputsRef.current = new Map();
+    const marker = t('Output truncated: showing the last {size} of stream output', {
+      size: `${Math.round(MAX_STREAM_CHARS / 1000)}K chars`,
+    });
+    updateCellsSnapshot((prevCells) => applyPendingOutputs(prevCells, pending, marker));
+  }, [updateCellsSnapshot]);
+
+  useEffect(() => () => {
+    if (outputFlushFrameRef.current !== null) {
+      window.cancelAnimationFrame(outputFlushFrameRef.current);
+    }
+  }, []);
+
   // Handle incoming outputs from kernel WebSocket
   const handleCellOutput = useCallback(
     (cellId: string, output: CellOutput) => {
-      updateCellsSnapshot((prevCells) =>
-        prevCells.map((cell) => {
-          if (cell.id === cellId) {
-            const currentOutputs = cell.outputs || [];
-            // If it's a stream of the same name (e.g. stdout), we can merge text or append
-            if (
-              output.output_type === 'stream' &&
-              currentOutputs.length > 0 &&
-              currentOutputs[currentOutputs.length - 1].output_type === 'stream' &&
-              (currentOutputs[currentOutputs.length - 1] as any).name === output.name
-            ) {
-              const last = currentOutputs[currentOutputs.length - 1] as any;
-              const updatedLast = {
-                ...last,
-                text: (typeof last.text === 'string' ? last.text : last.text.join('')) +
-                  (typeof output.text === 'string' ? output.text : output.text.join('')),
-              };
-              return {
-                ...cell,
-                outputs: [
-                  ...currentOutputs.slice(0, currentOutputs.length - 1),
-                  updatedLast,
-                ],
-              };
-            }
-            return {
-              ...cell,
-              outputs: [...currentOutputs, output],
-            };
-          }
-          return cell;
-        })
-      );
+      const queue = pendingOutputsRef.current.get(cellId);
+      if (queue) queue.push(output);
+      else pendingOutputsRef.current.set(cellId, [output]);
+      if (outputFlushFrameRef.current === null) {
+        outputFlushFrameRef.current = window.requestAnimationFrame(() => {
+          outputFlushFrameRef.current = null;
+          flushPendingOutputs();
+        });
+      }
       setIsDirty(true);
     },
-    [updateCellsSnapshot]
+    [flushPendingOutputs]
   );
 
   const handleCellExecutionCount = useCallback(
@@ -242,6 +244,8 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
 
   const handleCellExecutionDone = useCallback(
     (cellId: string, executionCount?: number, hadError?: boolean) => {
+      // Make sure every output of this execution is in cellsRef before waiters resume.
+      flushPendingOutputs();
       if (executionCount !== undefined) {
         handleCellExecutionCount(cellId, executionCount);
       }
@@ -249,7 +253,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
       resolvePendingCellExecution(cellId, Boolean(hadError));
       setIsDirty(true);
     },
-    [handleCellExecutionCount, resolvePendingCellExecution]
+    [flushPendingOutputs, handleCellExecutionCount, resolvePendingCellExecution]
   );
 
   // Initialize kernel hook
@@ -392,6 +396,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
       throw new Error('Notebook save is already in progress');
     }
     if (!isDirty) return;
+    flushPendingOutputs();
     flushSourceCommits();
     setIsSaving(true);
     try {
@@ -417,7 +422,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     } finally {
       setIsSaving(false);
     }
-  }, [flushSourceCommits, nbMetadata, path, serverId, isSaving, isDirty]);
+  }, [flushPendingOutputs, flushSourceCommits, nbMetadata, path, serverId, isSaving, isDirty]);
 
   // Execute notebook mutations requested by the Agent and acknowledge the real result.
   useEffect(() => {

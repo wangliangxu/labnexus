@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 
 export interface SanitizeHtmlOptions {
@@ -5,8 +6,6 @@ export interface SanitizeHtmlOptions {
   allowSvg?: boolean;
   allowStyles?: boolean;
 }
-
-const DANGEROUS_PROTOCOL_RE = /^\s*(javascript|vbscript|data\s*:\s*text\/html)\s*:/i;
 
 function sanitizeCssText(css: string): string {
   return css
@@ -41,8 +40,37 @@ function regexFallbackSanitize(html: string, options: SanitizeHtmlOptions): stri
   return out;
 }
 
+type PurifyInstance = ReturnType<typeof DOMPurify>;
+let purifier: PurifyInstance | null = null;
+
+function getPurifier(): PurifyInstance | null {
+  if (purifier) return purifier;
+  if (typeof window === 'undefined' || typeof window.document === 'undefined') return null;
+  const instance = DOMPurify(window);
+  if (!instance.isSupported) return null;
+  instance.addHook('uponSanitizeElement', (node, data) => {
+    if (data.tagName === 'style' && node.textContent) {
+      node.textContent = sanitizeCssText(node.textContent);
+    }
+  });
+  instance.addHook('afterSanitizeAttributes', (node) => {
+    const element = node as Element;
+    if (element.hasAttribute?.('style')) {
+      element.setAttribute('style', sanitizeCssText(element.getAttribute('style') || ''));
+    }
+    if (element.tagName === 'A') {
+      element.setAttribute('target', '_blank');
+      element.setAttribute('rel', 'noreferrer noopener');
+    }
+  });
+  purifier = instance;
+  return purifier;
+}
+
 /**
  * Sanitize untrusted HTML or SVG strings before passing to `dangerouslySetInnerHTML`.
+ * Uses DOMPurify in the browser; a conservative regex fallback is used only when no DOM exists
+ * (for example in Node-based unit tests).
  */
 export function sanitizeRichHtml(
   rawHtml: string,
@@ -56,70 +84,22 @@ export function sanitizeRichHtml(
 
   if (!rawHtml) return '';
 
-  if (typeof DOMParser === 'undefined') {
+  const instance = getPurifier();
+  if (!instance) {
     return regexFallbackSanitize(rawHtml, { allowImages, allowSvg, allowStyles });
   }
 
-  const doc = new DOMParser().parseFromString(rawHtml, 'text/html');
-  const blockedSelectors = [
-    'script',
-    'iframe',
-    'object',
-    'embed',
-    'applet',
-    'meta',
-    'link',
-    'base',
-    'form',
-  ];
-  if (!allowStyles) blockedSelectors.push('style');
-  if (!allowImages) blockedSelectors.push('img');
-  if (!allowSvg) blockedSelectors.push('svg', 'foreignObject');
-  else blockedSelectors.push('foreignObject');
+  const forbidTags = ['form', 'foreignObject', 'base', 'meta', 'link'];
+  if (!allowStyles) forbidTags.push('style');
+  if (!allowImages) forbidTags.push('img');
+  if (!allowSvg) forbidTags.push('svg');
 
-  doc.querySelectorAll(blockedSelectors.join(', ')).forEach((node) => node.remove());
-
-  doc.querySelectorAll('*').forEach((element) => {
-    if (element.tagName.toLowerCase() === 'style' && allowStyles) {
-      element.textContent = sanitizeCssText(element.textContent || '');
-    }
-
-    for (const attribute of Array.from(element.attributes)) {
-      const name = attribute.name.toLowerCase();
-      const value = attribute.value.trim();
-
-      if (name.startsWith('on') || name === 'srcdoc') {
-        element.removeAttribute(attribute.name);
-        continue;
-      }
-
-      if (
-        (name === 'href' ||
-          name === 'src' ||
-          name === 'xlink:href' ||
-          name === 'action' ||
-          name === 'formaction') &&
-        DANGEROUS_PROTOCOL_RE.test(value)
-      ) {
-        element.removeAttribute(attribute.name);
-        continue;
-      }
-
-      if (name === 'style') {
-        const cleaned = sanitizeCssText(value);
-        if (cleaned !== value) {
-          element.setAttribute('style', cleaned);
-        }
-      }
-    }
-
-    if (element.tagName === 'A') {
-      element.setAttribute('target', '_blank');
-      element.setAttribute('rel', 'noreferrer noopener');
-    }
+  return instance.sanitize(rawHtml, {
+    USE_PROFILES: allowSvg ? { html: true, svg: true, svgFilters: true } : { html: true },
+    FORBID_TAGS: forbidTags,
+    FORBID_ATTR: ['srcdoc'],
+    ALLOW_DATA_ATTR: false,
   });
-
-  return doc.body.innerHTML;
 }
 
 export function renderSanitizedMarkdown(
@@ -145,4 +125,3 @@ export function sanitizeSvgFragment(rawSvg: string): string {
     allowStyles: true,
   });
 }
-

@@ -246,8 +246,10 @@ mod tests {
         ] {
             assert!(validate_proxy(&manual(url)).is_err(), "{}", url);
         }
-        let mut config = AiNetworkConfig::default();
-        config.chatgpt = manual("socks5h://127.0.0.1:7891");
+        let config = AiNetworkConfig {
+            chatgpt: manual("socks5h://127.0.0.1:7891"),
+            ..Default::default()
+        };
         assert_eq!(config.for_auth("api_key").mode, "system");
         assert_eq!(config.for_auth("chatgpt").url, "socks5h://127.0.0.1:7891");
         let restored: AiNetworkConfig =

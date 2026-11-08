@@ -7,6 +7,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter};
 use tokio::net::TcpStream;
 use tokio::sync::{mpsc, RwLock};
@@ -34,7 +35,8 @@ pub struct KernelConnection {
     pub write_task: JoinHandle<()>,
     /// Handle to the read task.
     pub read_task: JoinHandle<()>,
-    /// Kernel ID.
+    /// Kernel ID (kept for diagnostics).
+    #[allow(dead_code)]
     pub kernel_id: String,
     /// Server ID this kernel belongs to.
     pub server_id: String,
@@ -94,6 +96,7 @@ impl KernelWsManager {
         config: &JupyterServerConfig,
         kernel_id: &str,
         ws_url: &str,
+        on_message: Channel<serde_json::Value>,
     ) -> Result<(), AppError> {
         // If already connected, disconnect first
         self.disconnect(kernel_id).await;
@@ -101,7 +104,7 @@ impl KernelWsManager {
         log::info!(
             "[KernelWS] Connecting kernel {} to WebSocket URL: {}",
             kernel_id,
-            ws_url
+            redact_url_query(ws_url)
         );
 
         let url = Url::parse(ws_url)
@@ -139,7 +142,7 @@ impl KernelWsManager {
                     k_id_write,
                     msg_str.len()
                 );
-                if let Err(e) = write_half.send(Message::Text(msg_str.into())).await {
+                if let Err(e) = write_half.send(Message::Text(msg_str)).await {
                     log::error!(
                         "[KernelWS] Error sending message to kernel {}: {}",
                         k_id_write,
@@ -189,35 +192,32 @@ impl KernelWsManager {
                                 .and_then(|h| h.get("msg_id"))
                                 .and_then(|t| t.as_str())
                                 .unwrap_or("");
-                            log::info!(
+                            log::debug!(
                                 "[KernelWS] Text JSON msg_type={} parent={} from kernel {}",
                                 msg_type,
                                 parent_id,
                                 k_id_read
                             );
                             if let Some(tx) = listeners_ref.read().await.get(&k_id_read) {
-                                let _ = tx.send(json_val.clone());
+                                if tx.receiver_count() > 0 {
+                                    let _ = tx.send(json_val.clone());
+                                }
                             }
-                            let _ = app_read.emit(
-                                "kernel:msg",
-                                serde_json::json!({
-                                    "kernel_id": &k_id_read,
-                                    "msg": json_val,
-                                }),
-                            );
+                            // Point-to-point delivery to the notebook that owns this kernel.
+                            let _ = on_message.send(serde_json::json!({
+                                "kernel_id": &k_id_read,
+                                "msg": json_val,
+                            }));
                         } else {
                             log::warn!(
                                 "[KernelWS] Non-JSON text from kernel {}: {}...",
                                 k_id_read,
                                 &text[..text.len().min(200)]
                             );
-                            let _ = app_read.emit(
-                                "kernel:msg",
-                                serde_json::json!({
-                                    "kernel_id": &k_id_read,
-                                    "raw": text,
-                                }),
-                            );
+                            let _ = on_message.send(serde_json::json!({
+                                "kernel_id": &k_id_read,
+                                "raw": text,
+                            }));
                         }
                     }
                     Ok(Message::Binary(bin)) => {
@@ -244,15 +244,15 @@ impl KernelWsManager {
                                 k_id_read
                             );
                             if let Some(tx) = listeners_ref.read().await.get(&k_id_read) {
-                                let _ = tx.send(json_val.clone());
+                                if tx.receiver_count() > 0 {
+                                    let _ = tx.send(json_val.clone());
+                                }
                             }
-                            let _ = app_read.emit(
-                                "kernel:msg",
-                                serde_json::json!({
-                                    "kernel_id": &k_id_read,
-                                    "msg": json_val,
-                                }),
-                            );
+                            // Point-to-point delivery to the notebook that owns this kernel.
+                            let _ = on_message.send(serde_json::json!({
+                                "kernel_id": &k_id_read,
+                                "msg": json_val,
+                            }));
                         } else {
                             log::warn!(
                                 "[KernelWS] Failed to parse binary msg ({} bytes) from kernel {}. First 64 bytes: {:?}",
@@ -364,16 +364,10 @@ impl KernelWsManager {
         }
     }
 
-    /// Check if a kernel is currently connected via WebSocket.
-    pub async fn is_connected(&self, kernel_id: &str) -> bool {
-        let conns = self.connections.read().await;
-        conns.contains_key(kernel_id)
-    }
-
-    /// Get list of all currently connected kernel IDs.
-    pub async fn get_connected_kernel_ids(&self) -> Vec<String> {
-        let conns = self.connections.read().await;
-        conns.keys().cloned().collect()
+    /// Disconnect every kernel WebSocket (used on application exit).
+    pub async fn disconnect_all(&self) {
+        self.connections.write().await.clear();
+        self.listeners.write().await.clear();
     }
 }
 
@@ -703,6 +697,19 @@ fn build_ws_client_request(url: &Url, config: &JupyterServerConfig) -> Result<Re
     }
 
     Ok(request)
+}
+
+/// Strip the query string (which may carry `token=`) before logging a URL.
+pub fn redact_url_query(raw: &str) -> String {
+    match Url::parse(raw) {
+        Ok(mut url) => {
+            if url.query().is_some() {
+                url.set_query(Some("<redacted>"));
+            }
+            url.to_string()
+        }
+        Err(_) => "<invalid url>".to_string(),
+    }
 }
 
 #[cfg(test)]

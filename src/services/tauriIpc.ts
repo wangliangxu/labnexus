@@ -2,7 +2,7 @@
  * Tauri IPC service — Type-safe wrappers for Tauri invoke calls.
  */
 
-import { invoke } from '@tauri-apps/api/core';
+import { Channel, invoke } from '@tauri-apps/api/core';
 import type {
   LocalJupyterInstallation,
   JupyterServerConfig,
@@ -156,11 +156,49 @@ export async function jupyterCreateSession(
 
 // ─── Kernel WebSocket API ──────────────────────────────────────────
 
+export interface KernelMsgPayload {
+  kernel_id: string;
+  msg?: {
+    header: { msg_id: string; msg_type: string; username?: string; session?: string };
+    parent_header?: { msg_id?: string; username?: string; session?: string };
+    content: Record<string, any>;
+  };
+  raw?: string;
+}
+
+type KernelMsgHandler = (payload: KernelMsgPayload) => void;
+const kernelMsgHandlers = new Map<string, Set<KernelMsgHandler>>();
+
+/**
+ * Subscribe to messages of one kernel. Messages arrive over a dedicated IPC Channel
+ * opened by `jupyterConnectKernelWs`, instead of a global event broadcast to every listener.
+ */
+export function subscribeKernelMessages(
+  kernelId: string,
+  handler: KernelMsgHandler
+): () => void {
+  let handlers = kernelMsgHandlers.get(kernelId);
+  if (!handlers) {
+    handlers = new Set();
+    kernelMsgHandlers.set(kernelId, handlers);
+  }
+  handlers.add(handler);
+  return () => {
+    const current = kernelMsgHandlers.get(kernelId);
+    current?.delete(handler);
+    if (current && current.size === 0) kernelMsgHandlers.delete(kernelId);
+  };
+}
+
 export async function jupyterConnectKernelWs(
   kernelId: string,
   serverId?: string
 ): Promise<void> {
-  return invoke('jupyter_connect_kernel_ws', { serverId, kernelId });
+  const onMessage = new Channel<KernelMsgPayload>();
+  onMessage.onmessage = (payload) => {
+    kernelMsgHandlers.get(payload.kernel_id)?.forEach((handler) => handler(payload));
+  };
+  return invoke('jupyter_connect_kernel_ws', { serverId, kernelId, onMessage });
 }
 
 export async function jupyterSendKernelMsg(

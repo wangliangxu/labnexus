@@ -6,6 +6,7 @@ mod agent;
 mod commands;
 mod error;
 mod jupyter;
+mod secrets;
 mod state;
 
 use state::AppState;
@@ -17,11 +18,7 @@ fn app_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wr
     let menu = Menu::default(app)?;
 
     #[cfg(target_os = "macos")]
-    if let Some(app_submenu) = menu
-        .items()?
-        .first()
-        .and_then(|item| item.as_submenu())
-    {
+    if let Some(app_submenu) = menu.items()?.first().and_then(|item| item.as_submenu()) {
         let metadata = AboutMetadataBuilder::new()
             .name(Some(app.package_info().name.clone()))
             .version(Some(app.package_info().version.to_string()))
@@ -127,7 +124,14 @@ pub fn run() {
             if matches!(event, tauri::RunEvent::Exit) {
                 use tauri::Manager;
                 let state = app.state::<AppState>();
-                tauri::async_runtime::block_on(state.local_jupyter.stop()).ok();
+                tauri::async_runtime::block_on(async {
+                    if tokio::time::timeout(std::time::Duration::from_secs(5), state.shutdown())
+                        .await
+                        .is_err()
+                    {
+                        log::warn!("Shutdown cleanup timed out");
+                    }
+                });
             }
         });
 }

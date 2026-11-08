@@ -42,6 +42,11 @@ pub struct TraceStore {
 }
 
 impl TraceStore {
+    /// Close the connection pool, flushing pending SQLite writes.
+    pub async fn close(&self) {
+        self.pool.close().await;
+    }
+
     pub async fn init() -> Result<Self, String> {
         let home_dir = std::env::var("HOME")
             .or_else(|_| std::env::var("USERPROFILE"))

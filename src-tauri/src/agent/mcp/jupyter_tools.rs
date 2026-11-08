@@ -105,11 +105,11 @@ pub async fn execute_cell(
                                 output_str.push_str("\nTraceback:\n");
                                 output_str.push_str(&tb_str.join("\n"));
                             }
-                        } else if msg_type == "status" {
-                            if content["execution_state"].as_str() == Some("idle") {
-                                completed = true;
-                                break;
-                            }
+                        } else if msg_type == "status"
+                            && content["execution_state"].as_str() == Some("idle")
+                        {
+                            completed = true;
+                            break;
                         }
                     }
                 }
@@ -260,11 +260,7 @@ pub async fn list_cells(
         .and_then(|c| c.as_array())
         .ok_or_else(|| AppError::Agent("Notebook has no readable cells array".to_string()))?;
 
-    let mut summary = format!(
-        "Notebook '{}' ({} cells):\n",
-        notebook_path,
-        cells.len()
-    );
+    let mut summary = format!("Notebook '{}' ({} cells):\n", notebook_path, cells.len());
     for (idx, cell) in cells.iter().enumerate() {
         let cell_type = cell["cell_type"].as_str().unwrap_or("code");
         let exec_count = cell["execution_count"]

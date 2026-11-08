@@ -19,6 +19,8 @@ use tauri::AppHandle;
 pub struct RegisteredTool {
     pub definition: ToolDefinition,
     pub requires_confirmation: bool,
+    /// Display grouping for built-in tools (not yet surfaced in the UI).
+    #[allow(dead_code)]
     pub category: String,
 }
 
@@ -45,6 +47,19 @@ impl Default for ToolRegistry {
 }
 
 impl ToolRegistry {
+    /// Drop all external MCP clients; stdio server processes are killed on drop.
+    pub async fn shutdown_external(&self) {
+        if let Ok(mut tools) = self.external_tools.write() {
+            tools.clear();
+        }
+        let clients = self
+            .external_clients
+            .write()
+            .map(|mut clients| std::mem::take(&mut *clients))
+            .unwrap_or_default();
+        drop(clients);
+    }
+
     pub fn new() -> Self {
         let tools = vec![
             RegisteredTool {
@@ -532,9 +547,7 @@ impl ToolRegistry {
             "jupyter.cell.delete" => {
                 jupyter_tools::delete_cell(arguments, context, state, app).await
             }
-            "jupyter.notebook.list_cells" => {
-                jupyter_tools::list_cells(context, state, app).await
-            }
+            "jupyter.notebook.list_cells" => jupyter_tools::list_cells(context, state, app).await,
             "jupyter.notebook.save" => jupyter_tools::save_notebook(context, state, app).await,
             "jupyter.file.list" => jupyter_tools::list_files(arguments, context, state).await,
             "jupyter.file.read" => jupyter_tools::read_file(arguments, context, state).await,

@@ -7,12 +7,8 @@ use crate::error::AppError;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-#[cfg(target_os = "macos")]
-use std::process::Command;
 
-#[cfg(target_os = "macos")]
 const KEYCHAIN_SERVICE: &str = "com.labnexus.ai";
-#[cfg(target_os = "macos")]
 const KEYCHAIN_ACCOUNT: &str = "remote-api-key";
 
 /// Top-level AI configuration.
@@ -228,7 +224,6 @@ pub fn load_ai_config() -> AiConfig {
         }
     };
 
-    #[cfg(target_os = "macos")]
     {
         if config.remote.api_key.is_empty() {
             match load_keychain_api_key() {
@@ -258,10 +253,13 @@ pub fn load_ai_config() -> AiConfig {
 pub fn save_ai_config(config: &AiConfig) -> Result<(), AppError> {
     validate_ai_config(config)?;
     let mut disk_config = config.clone();
-    #[cfg(target_os = "macos")]
-    {
-        save_keychain_api_key(&config.remote.api_key).map_err(AppError::Agent)?;
-        disk_config.remote.api_key.clear();
+    match save_keychain_api_key(&config.remote.api_key) {
+        Ok(()) => disk_config.remote.api_key.clear(),
+        // Headless Linux without a Secret Service: keep the key in the 0600 config file.
+        Err(error) => log::warn!(
+            "Credential store unavailable, API key kept in local config file: {}",
+            error
+        ),
     }
     write_config_file(&disk_config)
 }
@@ -300,89 +298,12 @@ fn write_config_file(config: &AiConfig) -> Result<(), AppError> {
     Ok(())
 }
 
-#[cfg(target_os = "macos")]
-pub fn load_keychain_secret(service: &str, account: &str) -> Result<Option<String>, String> {
-    let output = Command::new("security")
-        .args([
-            "find-generic-password",
-            "-a",
-            account,
-            "-s",
-            service,
-            "-w",
-        ])
-        .output()
-        .map_err(|error| format!("Could not start macOS security tool: {}", error))?;
-    if output.status.success() {
-        let secret = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        return Ok((!secret.is_empty()).then_some(secret));
-    }
-    let error = String::from_utf8_lossy(&output.stderr);
-    if error.contains("could not be found") {
-        Ok(None)
-    } else {
-        Err(error.trim().to_string())
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
-pub fn load_keychain_secret(_service: &str, _account: &str) -> Result<Option<String>, String> {
-    Ok(None)
-}
-
-#[cfg(target_os = "macos")]
-pub fn save_keychain_secret(service: &str, account: &str, secret: &str) -> Result<(), String> {
-    if secret.is_empty() {
-        let output = Command::new("security")
-            .args([
-                "delete-generic-password",
-                "-a",
-                account,
-                "-s",
-                service,
-            ])
-            .output()
-            .map_err(|error| format!("Could not start macOS security tool: {}", error))?;
-        let error = String::from_utf8_lossy(&output.stderr);
-        if output.status.success() || error.contains("could not be found") {
-            return Ok(());
-        }
-        return Err(error.trim().to_string());
-    }
-
-    let output = Command::new("security")
-        .args([
-            "add-generic-password",
-            "-U",
-            "-a",
-            account,
-            "-s",
-            service,
-            "-w",
-            secret,
-        ])
-        .output()
-        .map_err(|error| format!("Could not start macOS security tool: {}", error))?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
-pub fn save_keychain_secret(_service: &str, _account: &str, _secret: &str) -> Result<(), String> {
-    Ok(())
-}
-
-#[cfg(target_os = "macos")]
 fn load_keychain_api_key() -> Result<Option<String>, String> {
-    load_keychain_secret(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT)
+    crate::secrets::load_secret(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT)
 }
 
-#[cfg(target_os = "macos")]
 fn save_keychain_api_key(secret: &str) -> Result<(), String> {
-    save_keychain_secret(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT, secret)
+    crate::secrets::save_secret(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT, secret)
 }
 
 fn validate_ai_config(config: &AiConfig) -> Result<(), AppError> {
@@ -548,8 +469,10 @@ mod tests {
 
     #[test]
     fn rejects_unknown_provider() {
-        let mut config = AiConfig::default();
-        config.provider = "unknown".to_string();
+        let config = AiConfig {
+            provider: "unknown".to_string(),
+            ..Default::default()
+        };
         assert!(validate_ai_config(&config).is_err());
     }
 

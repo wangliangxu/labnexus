@@ -99,7 +99,8 @@ fn now() -> i64 {
 }
 fn client() -> Result<Client, String> {
     let network = super::network::load_network_config().map_err(|error| error.to_string())?;
-    super::network::client_builder(&network.chatgpt, ISSUER).map_err(|error| error.to_string())?
+    super::network::client_builder(&network.chatgpt, ISSUER)
+        .map_err(|error| error.to_string())?
         .timeout(Duration::from_secs(20))
         .redirect(reqwest::redirect::Policy::none())
         .build()

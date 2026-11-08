@@ -466,3 +466,9 @@ button.nb-toc-tree__twisty:hover {
 .nb-markdown-rendered input[type="checkbox"] {
   margin-right: 0.4em;
 }
+
+/* Skip layout and paint of off-screen outputs (large tables, plots) in long notebooks. */
+.notebook-output-list {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 160px;
+}

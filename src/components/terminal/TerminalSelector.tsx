@@ -1,3 +1,4 @@
+import { listen } from '@tauri-apps/api/event';
 import { t } from '../../i18n';
 /**
  * TerminalSelector — Panel to list active remote terminals or create a new one.
@@ -55,15 +56,13 @@ export function TerminalSelector({
     void fetchTerminals();
 
     let unlistenExited: (() => void) | undefined;
-    import('@tauri-apps/api/event').then(({ listen }) => {
-      listen<{ server_id?: string; terminal_name: string }>(
-        'jupyter:terminal_exited',
-        () => {
-          void fetchTerminals();
-        }
-      ).then((unlisten) => {
-        unlistenExited = unlisten;
-      });
+    listen<{ server_id?: string; terminal_name: string }>(
+      'jupyter:terminal_exited',
+      () => {
+        void fetchTerminals();
+      }
+    ).then((unlisten) => {
+      unlistenExited = unlisten;
     });
 
     return () => {

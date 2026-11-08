@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Check, ChevronDown, ChevronUp, Copy } from 'lucide-react';
 import type { CellOutput } from '../../types/jupyter';
 import { renderSanitizedMarkdown, sanitizeRichHtml } from '../../utils/sanitizeHtml';
+import { SandboxedHtmlOutput } from './SandboxedHtmlOutput';
 
 interface CellOutputViewProps {
   outputs: CellOutput[];
@@ -106,7 +107,7 @@ export const CellOutputView: React.FC<CellOutputViewProps> = ({ outputs }) => {
   if (!outputs || outputs.length === 0) return null;
 
   return (
-    <div className="flex flex-col gap-1 mt-1.5">
+    <div className="notebook-output-list flex flex-col gap-1 mt-1.5">
       {outputs.map((out, index) => {
         if (out.output_type === 'stream') {
           const isErr = out.name === 'stderr';
@@ -132,11 +133,9 @@ export const CellOutputView: React.FC<CellOutputViewProps> = ({ outputs }) => {
               allowStyles: true,
             });
             return (
-              <div
-                key={index}
-                className={outRich}
-                dangerouslySetInnerHTML={{ __html: htmlContent }}
-              />
+              <div key={index} className={outRich}>
+                <SandboxedHtmlOutput html={htmlContent} />
+              </div>
             );
           }
 

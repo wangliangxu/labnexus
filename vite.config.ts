@@ -9,6 +9,22 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(async () => ({
   plugins: [tailwindcss(), react()],
 
+  build: {
+    // CodeMirror is shared by the notebook and file editors and is loaded on demand.
+    chunkSizeWarningLimit: 700,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            { name: 'codemirror', test: /node_modules[\\/](@codemirror|@lezer|@uiw|codemirror)/ },
+            { name: 'xterm', test: /node_modules[\\/]@xterm/ },
+            { name: 'markdown', test: /node_modules[\\/](marked|dompurify)/ },
+          ],
+        },
+      },
+    },
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors

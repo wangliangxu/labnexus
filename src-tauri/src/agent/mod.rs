@@ -1,12 +1,12 @@
 //! LabNexus — Agent Module.
 
-pub mod config;
-pub mod network;
 pub mod chatgpt;
+pub mod config;
 pub mod engine;
 pub mod knowledge;
 pub mod llm;
 pub mod mcp;
+pub mod network;
 pub mod session;
 pub mod skill;
 pub mod trace;

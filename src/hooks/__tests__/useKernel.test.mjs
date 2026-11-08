@@ -35,6 +35,12 @@ const dependencies = {
   },
   '../services/tauriIpc': {
     jupyterSendKernelMsg: async (_kernelId, request) => { requests.push(request); },
+    subscribeKernelMessages: (kernelId, handler) => {
+      listeners.set('kernel:msg', (event) => {
+        if (event.payload.kernel_id === kernelId) handler(event.payload);
+      });
+      return () => {};
+    },
   },
 };
 const exports = {};

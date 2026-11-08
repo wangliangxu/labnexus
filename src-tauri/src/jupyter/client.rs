@@ -65,9 +65,11 @@ impl JupyterClient {
             .map_err(|e| AppError::JupyterConnection(format!("Invalid URL: {}", e)))?;
 
         let http = if config.id == crate::jupyter::local::LOCAL_SERVER_ID {
-            Client::builder().no_proxy()
+            Client::builder()
+                .no_proxy()
                 .timeout(std::time::Duration::from_secs(30))
-                .connect_timeout(std::time::Duration::from_secs(10)).build()?
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .build()?
         } else {
             build_http_client(config.proxy.as_ref())?
         };
@@ -390,7 +392,7 @@ impl JupyterClient {
     ) -> Result<SessionInfo, AppError> {
         let body = CreateSessionRequest {
             path: path.to_string(),
-            name: path.split('/').last().unwrap_or(path).to_string(),
+            name: path.split('/').next_back().unwrap_or(path).to_string(),
             session_type: "notebook".to_string(),
             kernel: CreateKernelRequest {
                 name: kernel_name.to_string(),
@@ -398,24 +400,6 @@ impl JupyterClient {
         };
         let response = self.post("/api/sessions")?.json(&body).send().await?;
         self.parse_response(response).await
-    }
-
-    /// Delete a session.
-    pub async fn delete_session(&self, session_id: &str) -> Result<(), AppError> {
-        let api_path = format!("/api/sessions/{}", session_id);
-        let response = self.delete(&api_path)?.send().await?;
-        let status = response.status();
-        if !status.is_success() {
-            let message = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(AppError::JupyterApi {
-                status: status.as_u16(),
-                message,
-            });
-        }
-        Ok(())
     }
 
     // ─── WebSocket URL ─────────────────────────────────────────────

@@ -25,9 +25,11 @@ pub struct TerminalConnection {
     pub write_task: JoinHandle<()>,
     /// Handle to the read task.
     pub read_task: JoinHandle<()>,
-    /// Terminal name.
+    /// Terminal name (kept for diagnostics).
+    #[allow(dead_code)]
     pub terminal_name: String,
-    /// Server ID this terminal belongs to.
+    /// Server ID this terminal belongs to (kept for diagnostics).
+    #[allow(dead_code)]
     pub server_id: String,
 }
 
@@ -91,7 +93,7 @@ impl TerminalWsManager {
         let write_task = tokio::spawn(async move {
             use futures_util::SinkExt;
             while let Some(msg_str) = rx.recv().await {
-                if let Err(e) = write_half.send(Message::Text(msg_str.into())).await {
+                if let Err(e) = write_half.send(Message::Text(msg_str)).await {
                     log::error!("Error sending message to terminal {}: {}", t_name_write, e);
                     break;
                 }
@@ -251,6 +253,11 @@ impl TerminalWsManager {
         if let Some(conn) = conns.remove(&key) {
             drop(conn);
         }
+    }
+
+    /// Disconnect every terminal WebSocket (used on application exit).
+    pub async fn disconnect_all(&self) {
+        self.connections.write().await.clear();
     }
 }
 

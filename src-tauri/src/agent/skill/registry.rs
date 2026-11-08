@@ -16,10 +16,6 @@ impl SkillRegistry {
         self.skills.clone()
     }
 
-    pub fn get_skill(&self, id: &str) -> Option<Skill> {
-        self.skills.iter().find(|s| s.id == id).cloned()
-    }
-
     pub fn match_query(&self, query: &str) -> Option<Skill> {
         let query_lower = query.trim().to_lowercase();
 
@@ -81,6 +77,12 @@ impl SkillRegistry {
     }
 }
 
+impl Default for SkillRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::SkillRegistry;
@@ -98,11 +100,5 @@ mod tests {
             registry.match_query(&query).map(|item| item.id),
             Some(skill.id)
         );
-    }
-}
-
-impl Default for SkillRegistry {
-    fn default() -> Self {
-        Self::new()
     }
 }

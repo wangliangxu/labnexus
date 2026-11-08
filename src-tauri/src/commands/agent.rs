@@ -81,10 +81,7 @@ pub async fn agent_complete_notebook_action(
     message: String,
 ) -> Result<(), AppError> {
     let result = if success { Ok(message) } else { Err(message) };
-    state
-        .complete_notebook_action(&action_id, result)
-        .await
-        .map_err(AppError::Agent)
+    state.complete_notebook_action(&action_id, result).await
 }
 
 /// Retrieve the current AI configuration.
@@ -99,7 +96,10 @@ pub async fn agent_get_config() -> Result<AiConfig, AppError> {
 
 /// Save AI configuration to disk.
 #[tauri::command]
-pub async fn agent_save_config(state: State<'_, AppState>, mut config: AiConfig) -> Result<(), AppError> {
+pub async fn agent_save_config(
+    state: State<'_, AppState>,
+    mut config: AiConfig,
+) -> Result<(), AppError> {
     if config.remote.api_key == REDACTED_API_KEY {
         config.remote.api_key = load_ai_config().remote.api_key;
     }
@@ -283,11 +283,8 @@ pub async fn agent_list_skills(state: State<'_, AppState>) -> Result<Vec<Skill>,
 pub async fn agent_list_knowledge(
     state: State<'_, AppState>,
 ) -> Result<Vec<KnowledgeEntry>, AppError> {
-    let store = state
-        .get_knowledge_store()
-        .await
-        .map_err(|e| AppError::Agent(e))?;
-    store.list_entries().await.map_err(|e| AppError::Agent(e))
+    let store = state.get_knowledge_store().await?;
+    store.list_entries().await.map_err(AppError::Agent)
 }
 
 /// Save or update a domain knowledge base entry.
@@ -326,14 +323,8 @@ pub async fn agent_save_knowledge(
         entry.created_at = now.clone();
     }
     entry.updated_at = now;
-    let store = state
-        .get_knowledge_store()
-        .await
-        .map_err(|e| AppError::Agent(e))?;
-    store
-        .save_entry(&entry)
-        .await
-        .map_err(|e| AppError::Agent(e))
+    let store = state.get_knowledge_store().await?;
+    store.save_entry(&entry).await.map_err(AppError::Agent)
 }
 
 /// Delete a domain knowledge base entry.
@@ -342,14 +333,8 @@ pub async fn agent_delete_knowledge(
     state: State<'_, AppState>,
     id: String,
 ) -> Result<(), AppError> {
-    let store = state
-        .get_knowledge_store()
-        .await
-        .map_err(|e| AppError::Agent(e))?;
-    store
-        .delete_entry(&id)
-        .await
-        .map_err(|e| AppError::Agent(e))
+    let store = state.get_knowledge_store().await?;
+    store.delete_entry(&id).await.map_err(AppError::Agent)
 }
 
 /// List agent execution traces for audit review.
@@ -358,14 +343,11 @@ pub async fn agent_list_traces(
     state: State<'_, AppState>,
     limit: Option<usize>,
 ) -> Result<Vec<AgentTrace>, AppError> {
-    let store = state
-        .get_trace_store()
-        .await
-        .map_err(|e| AppError::Agent(e))?;
+    let store = state.get_trace_store().await?;
     store
         .list_traces(limit.unwrap_or(20).clamp(1, 200))
         .await
-        .map_err(|e| AppError::Agent(e))
+        .map_err(AppError::Agent)
 }
 
 #[tauri::command]
@@ -417,8 +399,11 @@ pub fn agent_chatgpt_manage_usage(app: AppHandle) -> Result<(), AppError> {
         .map_err(|_| AppError::Agent("Unable to open ChatGPT usage settings".into()))
 }
 
-
 #[tauri::command]
-pub async fn agent_test_ai_proxy(route: String, proxy: crate::agent::network::AiProxyConfig, base_url: String) -> Result<Vec<crate::agent::network::AiProxyTestResult>, AppError> {
+pub async fn agent_test_ai_proxy(
+    route: String,
+    proxy: crate::agent::network::AiProxyConfig,
+    base_url: String,
+) -> Result<Vec<crate::agent::network::AiProxyTestResult>, AppError> {
     crate::agent::network::test_proxy(&route, &proxy, &base_url).await
 }

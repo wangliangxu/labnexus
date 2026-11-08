@@ -121,6 +121,8 @@ export const zhCN = {
   'Double-click to edit': '双击编辑',
   'Double-click to edit…': '双击编辑…',
   'Plot output': '图表输出',
+  'HTML output': 'HTML 输出',
+  'Output truncated: showing the last {size} of stream output': '输出已截断：仅保留最近 {size} 的流式输出',
   '⚙️ Settings': '⚙️ 设置',
   '🌍 Global Settings': '🌍 全局设置',
   '🤖 AI Configuration': '🤖 AI 配置',

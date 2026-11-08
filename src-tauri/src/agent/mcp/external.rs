@@ -701,12 +701,9 @@ async fn ensure_connected(
     Ok(())
 }
 
-#[cfg(target_os = "macos")]
 const MCP_KEYCHAIN_SERVICE: &str = "com.labnexus.mcp";
-#[cfg(target_os = "macos")]
 const MCP_KEYCHAIN_ACCOUNT: &str = "server-secrets";
 
-#[cfg(target_os = "macos")]
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct McpSecretsBundle {
     #[serde(default)]
@@ -725,16 +722,12 @@ pub fn load_external_mcp_config() -> Result<ExternalMcpConfigFile, String> {
     let mut config: ExternalMcpConfigFile = serde_json::from_str(&content)
         .map_err(|error| format!("Invalid MCP config {:?}: {}", path, error))?;
 
-    #[cfg(target_os = "macos")]
     {
-        let mut bundle = crate::agent::config::load_keychain_secret(
-            MCP_KEYCHAIN_SERVICE,
-            MCP_KEYCHAIN_ACCOUNT,
-        )
-        .ok()
-        .flatten()
-        .and_then(|raw| serde_json::from_str::<McpSecretsBundle>(&raw).ok())
-        .unwrap_or_default();
+        let mut bundle = crate::secrets::load_secret(MCP_KEYCHAIN_SERVICE, MCP_KEYCHAIN_ACCOUNT)
+            .ok()
+            .flatten()
+            .and_then(|raw| serde_json::from_str::<McpSecretsBundle>(&raw).ok())
+            .unwrap_or_default();
 
         let mut migrated_plaintext = false;
         for server in &mut config.servers {
@@ -776,7 +769,6 @@ pub fn save_external_mcp_config(config: &ExternalMcpConfigFile) -> Result<(), St
     validate_config_file(config)?;
     let mut disk_config = config.clone();
 
-    #[cfg(target_os = "macos")]
     {
         let mut bundle = McpSecretsBundle::default();
         for server in &mut disk_config.servers {
@@ -802,12 +794,10 @@ pub fn save_external_mcp_config(config: &ExternalMcpConfigFile) -> Result<(), St
             }
         }
         if let Ok(serialized) = serde_json::to_string(&bundle) {
-            if let Err(err) = crate::agent::config::save_keychain_secret(
-                MCP_KEYCHAIN_SERVICE,
-                MCP_KEYCHAIN_ACCOUNT,
-                &serialized,
-            ) {
-                log::warn!("Failed to store MCP secrets in Keychain: {}", err);
+            if let Err(err) =
+                crate::secrets::save_secret(MCP_KEYCHAIN_SERVICE, MCP_KEYCHAIN_ACCOUNT, &serialized)
+            {
+                log::warn!("Failed to store MCP secrets in credential store: {}", err);
                 disk_config = config.clone();
             }
         }

@@ -1,5 +1,5 @@
 import { t, useLocale, localizeStatus } from '../../i18n';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
 import {
   Activity, Sparkles, ChevronDown, Database, FileText, GripVertical, History,
@@ -13,9 +13,14 @@ import {
 } from '../../services/tauriIpc';
 import { ToolConfirmModal } from './ToolConfirmModal';
 import { SkillSelector } from './SkillSelector';
-import { KnowledgeModal } from './KnowledgeModal';
-import { TraceViewerModal } from './TraceViewerModal';
 import { MarkdownMessage, ToolExecutionCard } from './AgentMessageContent';
+
+const KnowledgeModal = lazy(() =>
+  import('./KnowledgeModal').then((m) => ({ default: m.KnowledgeModal }))
+);
+const TraceViewerModal = lazy(() =>
+  import('./TraceViewerModal').then((m) => ({ default: m.TraceViewerModal }))
+);
 
 interface AgentChatPanelProps {
   isOpen: boolean;
@@ -370,8 +375,10 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
 
       <ToolConfirmModal toolCall={activeToolCall} onConfirm={confirmTool} />
       {isSkillOpen && <SkillSelector onClose={() => setIsSkillOpen(false)} onSelectSkill={(skill: Skill) => setInputPrompt((current) => `/${skill.id} ${current}`.trim() + ' ')} />}
-      {isKnowledgeOpen && <KnowledgeModal onClose={() => setIsKnowledgeOpen(false)} />}
-      {isTraceOpen && <TraceViewerModal onClose={() => setIsTraceOpen(false)} />}
+      <Suspense fallback={null}>
+        {isKnowledgeOpen && <KnowledgeModal onClose={() => setIsKnowledgeOpen(false)} />}
+        {isTraceOpen && <TraceViewerModal onClose={() => setIsTraceOpen(false)} />}
+      </Suspense>
 
       {renameTitle !== null && <AgentDialog title={t('Rename conversation')} onClose={() => setRenameTitle(null)} actions={<><button type="button" onClick={() => setRenameTitle(null)}>{t('Cancel')}</button><button type="button" className="primary" onClick={renameSession}>{t('Save')}</button></>}><input autoFocus value={renameTitle} onChange={(event) => setRenameTitle(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && void renameSession()} /></AgentDialog>}
       {deleteConfirmOpen && <AgentDialog title={t('Delete this conversation?')} onClose={() => setDeleteConfirmOpen(false)} actions={<><button type="button" onClick={() => setDeleteConfirmOpen(false)}>{t('Cancel')}</button><button type="button" className="danger" onClick={deleteSession}>{t('Delete')}</button></>}><p>{t('This removes the conversation and its history. This action cannot be undone.')}</p></AgentDialog>}

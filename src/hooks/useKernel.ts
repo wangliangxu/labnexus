@@ -18,6 +18,8 @@ import {
   jupyterDisconnectKernelWs,
   jupyterInterruptKernel,
   jupyterRestartKernel,
+  subscribeKernelMessages,
+  type KernelMsgPayload,
 } from '../services/tauriIpc';
 
 interface UseKernelProps {
@@ -41,16 +43,6 @@ interface UseKernelReturn {
   executeCell: (cellId: string, code: string) => Promise<boolean>;
   interrupt: () => Promise<void>;
   restart: () => Promise<void>;
-}
-
-interface KernelMsgPayload {
-  kernel_id: string;
-  msg?: {
-    header: { msg_id: string; msg_type: string; username?: string; session?: string };
-    parent_header?: { msg_id?: string; username?: string; session?: string };
-    content: Record<string, any>;
-  };
-  raw?: string;
 }
 
 export function useKernel({
@@ -97,12 +89,10 @@ export function useKernel({
 
   // Listen for kernel WebSocket events from Rust backend
   useEffect(() => {
-    console.log('[useKernel] Setting up listeners for kernelId:', kernelId);
 
     const unlistenStatus = listen<{ kernel_id: string; status: string; message?: string }>(
       'kernel:status',
       (event) => {
-        console.log('[useKernel] kernel:status event:', event.payload);
         if (event.payload.kernel_id === kernelId) {
           if (event.payload.status === 'connected') {
             setIsWsConnected(true);
@@ -126,8 +116,9 @@ export function useKernel({
       }
     );
 
-    const unlistenMsg = listen<KernelMsgPayload>('kernel:msg', (event) => {
-      const { kernel_id, msg } = event.payload;
+    const unsubscribeMsg = kernelId
+      ? subscribeKernelMessages(kernelId, (payload: KernelMsgPayload) => {
+      const { kernel_id, msg } = payload;
       if (kernel_id !== kernelId || !msg) return;
 
       const msgType = msg.header?.msg_type;
@@ -232,11 +223,12 @@ export function useKernel({
           onDoneRef.current?.(cellId, undefined, hadError);
         }
       }
-    });
+      })
+      : undefined;
 
     return () => {
       unlistenStatus.then((fn) => fn());
-      unlistenMsg.then((fn) => fn());
+      unsubscribeMsg?.();
     };
   }, [kernelId, clearPendingExecutions]);
 

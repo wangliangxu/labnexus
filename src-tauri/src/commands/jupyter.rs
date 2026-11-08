@@ -15,10 +15,7 @@ use crate::state::{AppState, ManagedConnection};
 const JUPYTER_KEYCHAIN_SERVICE: &str = "com.labnexus.jupyter";
 const REDACTED_SECRET: &str = "••••••••";
 
-async fn resolve_and_persist_server_secrets(
-    state: &AppState,
-    config: &mut JupyterServerConfig,
-) {
+async fn resolve_and_persist_server_secrets(state: &AppState, config: &mut JupyterServerConfig) {
     let token_account = format!("token:{}", config.id);
     if config.token.as_deref() == Some(REDACTED_SECRET) {
         let in_memory = state
@@ -31,17 +28,21 @@ async fn resolve_and_persist_server_secrets(
         if let Some(token) = in_memory {
             config.token = Some(token);
         } else if let Ok(Some(token)) =
-            crate::agent::config::load_keychain_secret(JUPYTER_KEYCHAIN_SERVICE, &token_account)
+            crate::secrets::load_secret(JUPYTER_KEYCHAIN_SERVICE, &token_account)
         {
             config.token = Some(token);
+        } else {
+            // Never send the redaction placeholder as a real token.
+            log::warn!("Token for server {} is unavailable; re-enter it", config.id);
+            config.token = None;
         }
     } else if let Some(token) = config.token.as_deref() {
         if !token.is_empty() && config.id != crate::jupyter::local::LOCAL_SERVER_ID {
-            let _ = crate::agent::config::save_keychain_secret(
-                JUPYTER_KEYCHAIN_SERVICE,
-                &token_account,
-                token,
-            );
+            if let Err(error) =
+                crate::secrets::save_secret(JUPYTER_KEYCHAIN_SERVICE, &token_account, token)
+            {
+                log::warn!("Failed to store Jupyter token: {}", error);
+            }
         }
     }
 
@@ -59,17 +60,24 @@ async fn resolve_and_persist_server_secrets(
             if let Some(pass) = in_memory {
                 proxy.password = Some(pass);
             } else if let Ok(Some(pass)) =
-                crate::agent::config::load_keychain_secret(JUPYTER_KEYCHAIN_SERVICE, &proxy_account)
+                crate::secrets::load_secret(JUPYTER_KEYCHAIN_SERVICE, &proxy_account)
             {
                 proxy.password = Some(pass);
+            } else {
+                // Never send the redaction placeholder as a real password.
+                log::warn!(
+                    "Proxy password for server {} is unavailable; re-enter it",
+                    config.id
+                );
+                proxy.password = None;
             }
         } else if let Some(pass) = proxy.password.as_deref() {
             if !pass.is_empty() {
-                let _ = crate::agent::config::save_keychain_secret(
-                    JUPYTER_KEYCHAIN_SERVICE,
-                    &proxy_account,
-                    pass,
-                );
+                if let Err(error) =
+                    crate::secrets::save_secret(JUPYTER_KEYCHAIN_SERVICE, &proxy_account, pass)
+                {
+                    log::warn!("Failed to store proxy password: {}", error);
+                }
             }
         }
     }
@@ -696,6 +704,7 @@ pub async fn jupyter_connect_kernel_ws(
     app: AppHandle,
     kernel_id: String,
     server_id: Option<String>,
+    on_message: tauri::ipc::Channel<serde_json::Value>,
 ) -> Result<(), AppError> {
     log::info!(
         "[KernelCmd] Connecting kernel WebSocket for kernel_id={}",
@@ -703,7 +712,10 @@ pub async fn jupyter_connect_kernel_ws(
     );
     let client = get_client(&state, server_id.as_deref()).await?;
     let ws_url = client.kernel_ws_url(&kernel_id)?;
-    log::info!("[KernelCmd] Kernel WebSocket URL: {}", ws_url);
+    log::debug!(
+        "[KernelCmd] Kernel WebSocket URL: {}",
+        crate::jupyter::ws::redact_url_query(&ws_url)
+    );
 
     // Retrieve the server config
     let connections = state.connections.read().await;
@@ -715,7 +727,7 @@ pub async fn jupyter_connect_kernel_ws(
 
     state
         .kernel_ws
-        .connect(app, &config, &kernel_id, &ws_url)
+        .connect(app, &config, &kernel_id, &ws_url, on_message)
         .await
 }
 
@@ -731,7 +743,7 @@ pub async fn jupyter_send_kernel_msg(
         .and_then(|h| h.get("msg_type"))
         .and_then(|t| t.as_str())
         .unwrap_or("unknown");
-    log::info!("[KernelCmd] Sending {} to kernel {}", msg_type, kernel_id);
+    log::debug!("[KernelCmd] Sending {} to kernel {}", msg_type, kernel_id);
     let msg_str = serde_json::to_string(&msg)
         .map_err(|e| AppError::Serialization(format!("Failed to serialize message: {}", e)))?;
     log::debug!("[KernelCmd] Message payload: {} bytes", msg_str.len());
@@ -931,11 +943,7 @@ fn parse_hub_spawn_target(restart_url: &str) -> Result<HubSpawnTarget, AppError>
     })
 }
 
-async fn hub_server_is_ready(
-    http: &reqwest::Client,
-    target: &HubSpawnTarget,
-    token: &str,
-) -> bool {
+async fn hub_server_is_ready(http: &reqwest::Client, target: &HubSpawnTarget, token: &str) -> bool {
     let Ok(response) = http
         .get(target.user_api_url())
         .header("Authorization", format!("token {}", token))
@@ -956,17 +964,16 @@ async fn hub_server_is_ready(
     };
 
     match &target.server_name {
-        Some(server_name) => servers
-            .get(server_name)
-            .and_then(|server| server.get("ready"))
-            .and_then(|ready| ready.as_bool())
-            == Some(true),
-        None => servers.values().any(|server| {
-            server
-                .get("ready")
+        Some(server_name) => {
+            servers
+                .get(server_name)
+                .and_then(|server| server.get("ready"))
                 .and_then(|ready| ready.as_bool())
                 == Some(true)
-        }),
+        }
+        None => servers
+            .values()
+            .any(|server| server.get("ready").and_then(|ready| ready.as_bool()) == Some(true)),
     }
 }
 

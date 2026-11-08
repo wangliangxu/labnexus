@@ -7,7 +7,7 @@ import { useLocale } from './i18n';
 
 import { LocalJupyterPanel } from './components/explorer/LocalJupyterPanel';
 import { LOCAL_JUPYTER_SERVER_ID } from './types/jupyter';
-import { useState, useMemo, useRef, useCallback, useEffect, type SetStateAction } from 'react';
+import { lazy, Suspense, useState, useMemo, useRef, useCallback, useEffect, type SetStateAction } from 'react';
 import {
   Plus,
   RefreshCw,
@@ -17,19 +17,33 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { WorkbenchLayout, type PanelId } from './layouts/WorkbenchLayout';
+
+// Heavy views are split into their own chunks and loaded on first use.
+const NotebookEditor = lazy(() =>
+  import('./components/notebook/NotebookEditor').then((m) => ({ default: m.NotebookEditor }))
+);
+const FileEditor = lazy(() =>
+  import('./components/editor/FileEditor').then((m) => ({ default: m.FileEditor }))
+);
+const TerminalPanel = lazy(() =>
+  import('./components/terminal/TerminalPanel').then((m) => ({ default: m.TerminalPanel }))
+);
+const SettingsModal = lazy(() =>
+  import('./components/settings/SettingsModal').then((m) => ({ default: m.SettingsModal }))
+);
+const AgentChatPanel = lazy(() =>
+  import('./components/agent/AgentChatPanel').then((m) => ({ default: m.AgentChatPanel }))
+);
+
+const ViewFallback = () => <div className="app-view-loading" aria-busy="true" />;
 import { ConnectionPanel } from './components/explorer/ConnectionPanel';
 import { FileExplorer } from './components/explorer/FileExplorer';
 import type { TreeNode } from './components/explorer/fileExplorerTree';
 import { StatusBar } from './components/common/StatusBar';
 import { WelcomeScreen } from './components/common/WelcomeScreen';
 import { WorkbenchTabs, type TabItem } from './components/common/WorkbenchTabs';
-import { NotebookEditor } from './components/notebook/NotebookEditor';
-import { FileEditor } from './components/editor/FileEditor';
 import { NotebookTocPanel } from './components/notebook/NotebookTocPanel';
-import { TerminalPanel } from './components/terminal/TerminalPanel';
 import { TerminalSelector } from './components/terminal/TerminalSelector';
-import { SettingsModal } from './components/settings/SettingsModal';
-import { AgentChatPanel } from './components/agent/AgentChatPanel';
 import type { AgentChatContext } from './types/agent';
 import type {
   NotebookTocHeading,
@@ -643,6 +657,7 @@ function App() {
         assistantWidth={agentWidth}
         assistantFullscreen={isAgentFullscreen}
         assistant={isAgentOpen ? (
+          <Suspense fallback={<ViewFallback />}>
           <AgentChatPanel
             isOpen
             onClose={() => {
@@ -655,6 +670,7 @@ function App() {
             isFullscreen={isAgentFullscreen}
             onToggleFullscreen={() => setIsAgentFullscreen((value) => !value)}
           />
+          </Suspense>
         ) : undefined}
         onPanelChange={handlePanelChange}
         editor={
@@ -689,6 +705,7 @@ function App() {
                       className="app-editor-tab"
                       style={{ display: isCurrent ? 'flex' : 'none' }}
                     >
+                      <Suspense fallback={<ViewFallback />}>
                       {tab.type === 'notebook' ? (
                         <NotebookEditor
                           path={tab.data.path}
@@ -715,6 +732,7 @@ function App() {
                           onDirtyChange={(dirty) => handleTabDirtyChange(tab.id, dirty)}
                         />
                       )}
+                      </Suspense>
                     </div>
                   );
                 })
@@ -733,11 +751,15 @@ function App() {
           />
         }
       />
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        defaultTab={settingsTab}
-      />
+      {isSettingsOpen && (
+        <Suspense fallback={null}>
+          <SettingsModal
+            isOpen
+            onClose={() => setIsSettingsOpen(false)}
+            defaultTab={settingsTab}
+          />
+        </Suspense>
+      )}
     </>
   );
 }
