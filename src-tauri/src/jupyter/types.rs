@@ -21,6 +21,14 @@ pub struct JupyterServerConfig {
     pub token: Option<String>,
     /// Optional proxy configuration.
     pub proxy: Option<ProxyConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_launch: Option<RemoteJupyterLaunch>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoteJupyterLaunch {
+    pub alias: String,
+    pub python: String,
 }
 
 /// Request for logging into a JupyterHub/TLJH server with username and password.

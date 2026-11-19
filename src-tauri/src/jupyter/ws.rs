@@ -729,6 +729,7 @@ mod tests {
             base_url: "https://ius16.dataincity.com/user/wlx".to_string(),
             token: Some("secret-token".to_string()),
             proxy: None,
+            remote_launch: None,
         };
 
         let request = build_ws_client_request(&url, &config).unwrap();

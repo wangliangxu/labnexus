@@ -132,6 +132,7 @@ pub async fn launch(installation: &LocalInstallation) -> Result<LocalServer, App
         base_url: format!("http://127.0.0.1:{}", port),
         token: Some(token.clone()),
         proxy: None,
+        remote_launch: None,
     };
     let app_class = if installation.name == "Jupyter Notebook" {
         "NotebookApp"
@@ -333,6 +334,7 @@ mod tests {
                     base_url: "http://127.0.0.1:1".into(),
                     token: None,
                     proxy: None,
+                    remote_launch: None,
                 },
             });
             manager.stop().await.unwrap();

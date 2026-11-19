@@ -7,6 +7,7 @@ import type {
   LocalJupyterInstallation,
   JupyterServerConfig,
   JupyterHubLoginConfig,
+  RemoteJupyterLaunch,
   ServerConnection,
   ContentItem,
   KernelInfo,
@@ -53,6 +54,13 @@ export function jupyterDetectLocal(): Promise<LocalJupyterInstallation | null> {
 
 export function jupyterStartLocal(): Promise<ServerConnection> {
   return invoke('jupyter_start_local');
+}
+
+export function jupyterStartRemote(
+  launch: RemoteJupyterLaunch,
+  name?: string
+): Promise<ServerConnection> {
+  return invoke('jupyter_start_remote', { launch, name });
 }
 
 // ─── Contents API ──────────────────────────────────────────────────

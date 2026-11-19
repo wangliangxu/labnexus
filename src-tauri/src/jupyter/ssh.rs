@@ -5,9 +5,10 @@ use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::process::{Child, ChildStderr, Command};
+use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, timeout};
 
@@ -18,7 +19,7 @@ const SSH_START_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub struct SshTunnel {
     address: SocketAddrV4,
-    child: Child,
+    child: Mutex<Child>,
     stderr: JoinHandle<Vec<u8>>,
 }
 
@@ -37,6 +38,79 @@ impl SshTunnel {
     }
 
     async fn start(alias: &str) -> Result<Self, AppError> {
+        let mut tunnel = Self::spawn(alias, None)?;
+        let ready = timeout(SSH_START_TIMEOUT, wait_for_socks(tunnel.address));
+        tokio::select! {
+            biased;
+            status = tunnel.child.get_mut().wait() => {
+                Err(tunnel.failure(alias, &status?.to_string(), "").await)
+            }
+            result = ready => match result {
+                Ok(Ok(())) => Ok(tunnel),
+                Ok(Err(error)) => Err(AppError::Proxy(format!("SSH tunnel for {alias} failed: {error}"))),
+                Err(_) => Err(AppError::Proxy(format!("Timed out opening SSH tunnel for {alias}"))),
+            },
+        }
+    }
+
+    pub async fn start_remote(
+        alias: &str,
+        command: &str,
+        token: &str,
+    ) -> Result<(Arc<Self>, u16), AppError> {
+        let mut tunnel = Self::spawn(alias, Some(command))?;
+        let address = tunnel.address;
+        let child = tunnel.child.get_mut();
+        let mut stdout = BufReader::new(child.stdout.take().expect("piped SSH stdout").take(65536));
+        let stdin = child.stdin.as_mut().expect("piped SSH stdin");
+        let startup = timeout(Duration::from_secs(90), async {
+            stdin.write_all(format!("{token}\n").as_bytes()).await?;
+            let mut line = String::new();
+            while stdout.read_line(&mut line).await? != 0 {
+                if let Some(port) = line.trim().strip_prefix("LABNEXUS_JUPYTER_PORT=") {
+                    let port = port
+                        .parse::<u16>()
+                        .ok()
+                        .filter(|port| *port != 0)
+                        .ok_or_else(|| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "Invalid remote Jupyter port",
+                            )
+                        })?;
+                    wait_for_socks(address).await?;
+                    return Ok(port);
+                }
+                line.clear();
+            }
+            Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "Remote Jupyter exited before announcing its port",
+            ))
+        });
+        match startup.await {
+            Ok(Ok(port)) => Ok((Arc::new(tunnel), port)),
+            Ok(Err(error)) => Err(tunnel.failure(alias, &error.to_string(), token).await),
+            Err(_) => Err(AppError::JupyterConnection(format!(
+                "Timed out starting Jupyter on {alias}"
+            ))),
+        }
+    }
+
+    pub async fn is_running(&self) -> bool {
+        matches!(self.child.lock().await.try_wait(), Ok(None))
+    }
+
+    pub async fn stop_remote(&self) {
+        let mut child = self.child.lock().await;
+        // EOF tells the remote launcher to stop Jupyter before closing the SSH session.
+        drop(child.stdin.take());
+        if timeout(Duration::from_secs(5), child.wait()).await.is_err() {
+            let _ = child.kill().await;
+        }
+    }
+
+    fn spawn(alias: &str, remote_command: Option<&str>) -> Result<Self, AppError> {
         let alias = alias.trim();
         if alias.is_empty()
             || alias.starts_with('-')
@@ -55,27 +129,46 @@ impl SshTunnel {
             .local_addr()?
             .port();
         let address = SocketAddrV4::new(Ipv4Addr::LOCALHOST, port);
-        let mut child = Command::new("ssh")
-            .args([
-                "-N",
-                "-T",
+        let mut command = Command::new("ssh");
+        command.args([
+            "-T",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ExitOnForwardFailure=yes",
+            "-o",
+            "ClearAllForwardings=no",
+            "-o",
+            "ForkAfterAuthentication=no",
+            "-o",
+            "ControlPath=none",
+        ]);
+        if remote_command.is_some() {
+            command.args([
                 "-o",
-                "BatchMode=yes",
+                "RemoteCommand=none",
                 "-o",
-                "ExitOnForwardFailure=yes",
+                "SessionType=default",
                 "-o",
-                "ClearAllForwardings=no",
-                "-o",
-                "ForkAfterAuthentication=no",
-                "-o",
-                "ControlPath=none",
-                "-D",
-            ])
+                "StdinNull=no",
+            ]);
+        } else {
+            command.arg("-N");
+        }
+        command
+            .arg("-D")
             .arg(address.to_string())
             .arg("--")
-            .arg(alias)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
+            .arg(alias);
+        if let Some(remote_command) = remote_command {
+            command
+                .arg(remote_command)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped());
+        } else {
+            command.stdin(Stdio::null()).stdout(Stdio::null());
+        }
+        let mut child = command
             .stderr(Stdio::piped())
             .kill_on_drop(true)
             .spawn()
@@ -84,32 +177,28 @@ impl SshTunnel {
         let stderr = tokio::spawn(read_ssh_stderr(
             child.stderr.take().expect("piped SSH stderr"),
         ));
-        let mut tunnel = Self {
+        Ok(Self {
             address,
-            child,
+            child: Mutex::new(child),
             stderr,
-        };
+        })
+    }
 
-        tokio::select! {
-            biased;
-            status = tunnel.child.wait() => {
-                let status = status?;
-                let stderr = timeout(Duration::from_millis(200), &mut tunnel.stderr)
-                    .await
-                    .ok()
-                    .and_then(Result::ok)
-                    .unwrap_or_default();
-                let stderr = String::from_utf8_lossy(&stderr);
-                let detail = stderr.trim();
-                let detail = if detail.is_empty() { status.to_string() } else { detail.to_owned() };
-                Err(AppError::Proxy(format!("SSH tunnel for {alias} failed: {detail}")))
-            }
-            ready = timeout(SSH_START_TIMEOUT, wait_for_socks(address)) => match ready {
-                Ok(Ok(())) => Ok(tunnel),
-                Ok(Err(error)) => Err(AppError::Proxy(format!("SSH tunnel for {alias} failed: {error}"))),
-                Err(_) => Err(AppError::Proxy(format!("Timed out opening SSH tunnel for {alias}"))),
-            },
-        }
+    async fn failure(&mut self, alias: &str, fallback: &str, token: &str) -> AppError {
+        let stderr = timeout(Duration::from_millis(250), &mut self.stderr)
+            .await
+            .ok()
+            .and_then(Result::ok)
+            .unwrap_or_default();
+        let stderr = String::from_utf8_lossy(&stderr);
+        let detail = stderr.trim();
+        let detail = if detail.is_empty() { fallback } else { detail };
+        let detail = if token.is_empty() {
+            detail.to_owned()
+        } else {
+            detail.replace(token, "[redacted]")
+        };
+        AppError::Proxy(format!("SSH session for {alias} failed: {detail}"))
     }
 }
 

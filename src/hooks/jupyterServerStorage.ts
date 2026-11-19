@@ -64,6 +64,9 @@ export const REDACTED_SERVER_SECRET = '••••••••';
 export function redactServerSecretsForStorage(
   config: JupyterServerConfig
 ): JupyterServerConfig {
+  if (config.remote_launch) {
+    return { ...config, base_url: '', token: undefined };
+  }
   return {
     ...config,
     token: config.token ? REDACTED_SERVER_SECRET : config.token,

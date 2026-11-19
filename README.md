@@ -2,7 +2,12 @@
 
 **LabNexus** 是一款基于 **Tauri v2 (Rust)** 与 **React 19 (TypeScript)** 构建的原生桌面端远程 JupyterLab 客户端与科学计算 AI Agent 工作台。它专为连接远程算力集群、内网 GPU 服务器以及本地科学计算环境而设计，将多标签页 Notebook/代码编辑、SSH/SOCKS5 隧道穿透、远程终端与支持 MCP 协议的 ReAct 智能体深度融合在轻量级原生桌面应用中。
 
-> **Current Version**: `v0.5.1`
+> **Current Version**: `v0.6.0`
+
+### v0.6.0 更新
+
+- 支持直接使用 `~/.ssh/config` 中的主机别名连接 Jupyter，也可在远程 Python 或 Conda 环境中一键启动并连接 Jupyter。
+- 详细变更见 [v0.6.0 版本说明](docs/releases/v0.6.0.md)。
 
 ### v0.5.1 更新
 
@@ -23,6 +28,7 @@
 ### 1. 混合 Jupyter 连接与内网穿透 (Hybrid Connectivity & Proxy Tunneling)
 - **远程服务器管理**：支持连接标准 Jupyter Server（Token 认证）与 JupyterHub / TLJH（用户名 + 密码登录），支持一键重连、断开与服务重启。
 - **全链路 SOCKS5 / SSH `-D` 代理支持**：连接 Jupyter 时可填写 `~/.ssh/config` 中的 Host 别名，由 LabNexus 自动启动 SSH 隧道，也可填写已有的 SOCKS5 代理。REST API、Kernel WebSocket（含 TLS）与 Terminal WebSocket 均使用该代理。
+- **远程 Jupyter 一键启动**：在连接面板选择「通过 SSH 启动」，填写 SSH 别名和可选的远端 Python 路径，例如 `~/miniconda3/envs/research/bin/python`。远端 Linux 或 macOS 的该环境需已安装 Jupyter。LabNexus 使用远端回环地址和随机端口启动并连接服务，停止连接时回收该次启动的进程。
 - **本地 Jupyter 自动检测与托管**：自动探测本机 `jupyter lab` / `jupyter notebook` 环境，支持一键以随机空闲端口启动本地服务，并在断开或退出时自动回收进程。
 - **系统级凭据安全存储**：在 macOS 下自动将远程服务器 Token/密码与 AI API Key 托管至系统钥匙串（**macOS Keychain**），落盘配置文件自动脱敏并限制为 `0600` 权限。
 
@@ -199,9 +205,9 @@ npm run tauri build
 
 ```bash
 # 确认版本更新已提交并推送后，为当前提交创建标签
-# 当前版本为 0.5.1；后续发布请替换为新的版本号
-git tag v0.5.1
-git push origin v0.5.1
+# 当前版本为 0.6.0，后续发布请替换为新的版本号
+git tag v0.6.0
+git push origin v0.6.0
 ```
 
 工作流使用 GitHub 自动提供的 `GITHUB_TOKEN`，无需额外配置个人访问令牌。当前产物未配置开发者证书签名，macOS 产物也未公证，安装时系统可能提示来源未验证；面向正式分发时应另行配置 Apple / Windows 代码签名。打包不包含 Python 或 Jupyter 环境，使用本地 Jupyter 功能仍需自行安装。

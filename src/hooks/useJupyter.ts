@@ -9,12 +9,14 @@ import { LOCAL_JUPYTER_SERVER_ID } from '../types/jupyter';
 import type {
   JupyterServerConfig,
   JupyterHubLoginConfig,
+  RemoteJupyterLaunch,
   ServerConnection,
   ConnectionStatus,
   JupyterConnectionEvent,
 } from '../types/jupyter';
 import {
   jupyterStartLocal,
+  jupyterStartRemote,
   jupyterConnect,
   jupyterHubLogin,
   jupyterDisconnect,
@@ -34,6 +36,7 @@ import { connectWithStoppedServerAutoStart } from '../jupyterAutoStart';
 
 interface UseJupyterReturn {
   startLocal: () => Promise<boolean>;
+  startRemote: (launch: RemoteJupyterLaunch, name?: string, serverId?: string) => Promise<boolean>;
   /** All server connections */
   servers: ServerConnection[];
   /** ID of the active server */
@@ -51,7 +54,7 @@ interface UseJupyterReturn {
   /** Reconnect to a saved server */
   reconnect: (serverId: string) => Promise<void>;
   /** Forget a saved server and remove it from the list */
-  forget: (serverId: string) => void;
+  forget: (serverId: string) => Promise<void>;
   /** Set the active server */
   setActive: (serverId: string) => Promise<void>;
   /** Mark a server as errored after a connection-level operation fails */
@@ -66,6 +69,7 @@ interface UseJupyterReturn {
 
 export function useJupyter(): UseJupyterReturn {
   const localStartPending = useRef(false);
+  const remoteStartPending = useRef(false);
   const [servers, setServers] = useState<ServerConnection[]>([]);
   const [activeServerId, setActiveServerId] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -208,6 +212,40 @@ export function useJupyter(): UseJupyterReturn {
     }
   }, []);
 
+  const startRemote = useCallback(async (launch: RemoteJupyterLaunch, name?: string, serverId?: string) => {
+    if (remoteStartPending.current) return false;
+    remoteStartPending.current = true;
+    setIsConnecting(true);
+    setError(null);
+    try {
+      const connection = await jupyterStartRemote(launch, name);
+      setServers((prev) => {
+        if (!prev.some((server) => server.config.id === connection.config.id)) {
+          return [...prev, connection];
+        }
+        return prev.map((server) => server.config.id === connection.config.id ? connection : server);
+      });
+      setActiveServerId(connection.config.id);
+      try {
+        saveServerConfig(connection.config);
+      } catch (error) {
+        console.warn('Failed to save remote Jupyter launch profile:', error);
+      }
+      return true;
+    } catch (e: unknown) {
+      const message = typeof e === 'object' && e !== null && 'message' in e
+        ? String(e.message) : String(e);
+      setError(message);
+      if (serverId) {
+        setServers((prev) => markServerConnectionError(prev, serverId, message));
+      }
+      return false;
+    } finally {
+      remoteStartPending.current = false;
+      setIsConnecting(false);
+    }
+  }, []);
+
   const disconnect = useCallback(
     async (serverId: string) => {
       try {
@@ -238,21 +276,35 @@ export function useJupyter(): UseJupyterReturn {
       }
       const savedServer = servers.find((server) => server.config.id === serverId);
       if (!savedServer) return;
+      if (savedServer.config.remote_launch) {
+        await startRemote(savedServer.config.remote_launch, savedServer.config.name, serverId);
+        return;
+      }
       await connect(savedServer.config);
       setActiveServerId(serverId);
     },
-    [connect, servers, startLocal]
+    [connect, servers, startLocal, startRemote]
   );
 
   const forget = useCallback(
-    (serverId: string) => {
-      forgetServerConfig(serverId);
+    async (serverId: string) => {
+      try {
+        if (servers.some((server) => server.config.id === serverId && server.config.remote_launch)) {
+          await jupyterDisconnect(serverId);
+        }
+        forgetServerConfig(serverId);
+      } catch (e: unknown) {
+        const message = typeof e === 'object' && e !== null && 'message' in e
+          ? String(e.message) : String(e);
+        setError(message);
+        return;
+      }
       setServers((prev) => prev.filter((server) => server.config.id !== serverId));
       if (activeServerId === serverId) {
         setActiveServerId(null);
       }
     },
-    [activeServerId]
+    [activeServerId, servers]
   );
 
   const setActive = useCallback(async (serverId: string) => {
@@ -304,6 +356,7 @@ export function useJupyter(): UseJupyterReturn {
 
   return {
     startLocal,
+    startRemote,
     servers,
     activeServerId,
     isConnecting,

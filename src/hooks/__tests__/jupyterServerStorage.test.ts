@@ -1,5 +1,6 @@
 import {
   removeSavedServer,
+  redactServerSecretsForStorage,
   toDisconnectedConnections,
   upsertSavedServer,
 } from '../jupyterServerStorage';
@@ -67,6 +68,21 @@ const restoredSsh = toDisconnectedConnections(upsertSavedServer(appended, sshSer
 assert(
   restoredSsh.config.proxy?.proxy_type === 'ssh' && restoredSsh.config.proxy.host === 'lab-server',
   'reconnect uses the saved SSH host alias'
+);
+
+const managed = redactServerSecretsForStorage({
+  ...sshServer,
+  base_url: 'http://127.0.0.1:12345',
+  token: 'ephemeral-token',
+  remote_launch: { alias: 'lab-server', python: '~/venv/bin/python' },
+});
+assert(
+  managed.base_url === '' && managed.token === undefined,
+  'managed SSH profiles omit the runtime endpoint and token'
+);
+assert(
+  managed.remote_launch?.python === '~/venv/bin/python' && managed.remote_launch.alias === 'lab-server',
+  'managed SSH profiles preserve the selected environment for relaunch'
 );
 
 const removed = removeSavedServer(appended, 'server-1');

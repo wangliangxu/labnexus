@@ -74,6 +74,7 @@ function App() {
     connect,
     connectHub,
     startLocal,
+    startRemote,
     disconnect,
     reconnect,
     forget,
@@ -516,7 +517,7 @@ function App() {
                         {server.config.name}
                       </div>
                       <div className="server-item__url truncate">
-                        {server.config.base_url}
+                        {server.config.remote_launch?.alias ?? server.config.base_url}
                       </div>
                     </div>
                     <div className="server-item__actions">
@@ -545,14 +546,16 @@ function App() {
                           if (server.status === 'connected') {
                             disconnect(server.config.id);
                           } else {
-                            forget(server.config.id);
+                            void forget(server.config.id);
                           }
                         }}
                         title={
                           server.status === 'connected'
                             ? server.config.id === LOCAL_JUPYTER_SERVER_ID
                               ? t('Stop local server')
-                              : t('Disconnect')
+                              : server.config.remote_launch
+                                ? t('Stop remote server')
+                                : t('Disconnect')
                             : t('Forget')
                         }
                       >
@@ -572,6 +575,9 @@ function App() {
             <ConnectionPanel
               onConnect={handleConnect}
               onConnectHub={handleConnectHub}
+              onStartRemote={async (launch, name) => {
+                if (await startRemote(launch, name)) setViewMode('explore');
+              }}
               onBack={activeServer ? () => setViewMode('explore') : undefined}
               isConnecting={isConnecting}
             />

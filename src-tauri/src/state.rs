@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{oneshot, RwLock};
+use tokio::sync::{oneshot, Mutex, RwLock};
 
 use crate::error::AppError;
 use crate::jupyter::client::JupyterClient;
@@ -20,6 +20,7 @@ pub type NotebookActionSender = oneshot::Sender<Result<String, String>>;
 /// Global application state shared across Tauri commands.
 pub struct AppState {
     pub local_jupyter: crate::jupyter::local::LocalJupyter,
+    pub remote_jupyter_operations: Mutex<()>,
     /// Active Jupyter server connections (server_id → client).
     pub connections: Arc<RwLock<HashMap<String, ManagedConnection>>>,
     /// The currently active/focused server ID.
@@ -56,6 +57,15 @@ pub struct ManagedConnection {
 }
 
 impl ManagedConnection {
+    pub fn info(&self) -> ServerConnection {
+        ServerConnection {
+            config: self.config.clone(),
+            status: self.status.clone(),
+            server_info: self.server_info.clone(),
+            error_message: self.error_message.clone(),
+        }
+    }
+
     pub fn websocket_config(&self) -> JupyterServerConfig {
         let mut config = self.config.clone();
         if let Some(ssh) = &self.ssh {
@@ -77,6 +87,7 @@ impl AppState {
     pub fn new() -> Self {
         AppState {
             local_jupyter: Default::default(),
+            remote_jupyter_operations: Mutex::new(()),
             connections: Arc::new(RwLock::new(HashMap::new())),
             active_server_id: Arc::new(RwLock::new(None)),
             kernel_ws: Arc::new(KernelWsManager::new()),
@@ -148,6 +159,7 @@ impl AppState {
         self.agent.shutdown().await;
         self.kernel_ws.disconnect_all().await;
         self.terminal_ws.disconnect_all().await;
+        // Dropping each managed SSH session ends its remote launcher and Jupyter child.
         self.connections.write().await.clear();
         self.pending_notebook_actions.write().await.clear();
         if let Some(store) = self.trace_store.read().await.as_ref() {
@@ -176,15 +188,7 @@ impl AppState {
     /// Get connection info for all servers (serializable for frontend).
     pub async fn get_all_connections(&self) -> Vec<ServerConnection> {
         let connections = self.connections.read().await;
-        connections
-            .values()
-            .map(|c| ServerConnection {
-                config: c.config.clone(),
-                status: c.status.clone(),
-                server_info: c.server_info.clone(),
-                error_message: c.error_message.clone(),
-            })
-            .collect()
+        connections.values().map(ManagedConnection::info).collect()
     }
 }
 

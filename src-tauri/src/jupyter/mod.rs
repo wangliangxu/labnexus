@@ -10,4 +10,5 @@ pub mod types;
 pub mod ws;
 
 pub mod local;
+pub mod remote;
 pub mod ssh;

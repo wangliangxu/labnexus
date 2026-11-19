@@ -11,6 +11,12 @@ export interface JupyterServerConfig {
   base_url: string;
   token?: string;
   proxy?: ProxyConfig;
+  remote_launch?: RemoteJupyterLaunch;
+}
+
+export interface RemoteJupyterLaunch {
+  alias: string;
+  python: string;
 }
 
 export interface JupyterHubLoginConfig {

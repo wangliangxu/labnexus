@@ -50,6 +50,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::jupyter::jupyter_detect_local,
             commands::jupyter::jupyter_start_local,
+            commands::jupyter::jupyter_start_remote,
             // Jupyter connection management
             commands::jupyter::jupyter_connect,
             commands::jupyter::jupyter_hub_login,

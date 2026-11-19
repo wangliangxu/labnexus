@@ -8,8 +8,8 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::error::AppError;
 use crate::jupyter::client::{build_http_client, JupyterClient};
-use crate::jupyter::ssh::SshTunnel;
 use crate::jupyter::types::*;
+use crate::jupyter::{remote, ssh::SshTunnel};
 use crate::state::{AppState, ManagedConnection};
 
 // ─── Connection Management ─────────────────────────────────────────────
@@ -20,6 +20,9 @@ const REDACTED_SECRET: &str = "••••••••";
 
 async fn resolve_and_persist_server_secrets(state: &AppState, config: &mut JupyterServerConfig) {
     let token_account = format!("token:{}", config.id);
+    if config.remote_launch.is_some() {
+        return;
+    }
     if config.token.as_deref() == Some(REDACTED_SECRET) {
         let in_memory = state
             .connections
@@ -93,6 +96,11 @@ pub async fn jupyter_connect(
     app: AppHandle,
     config: JupyterServerConfig,
 ) -> Result<ServerConnection, AppError> {
+    if remote::is_managed(&config.id) || config.remote_launch.is_some() {
+        return Err(AppError::JupyterConnection(
+            "Start this managed Jupyter server through its SSH launch profile.".into(),
+        ));
+    }
     connect_server(state, app, config, None).await
 }
 
@@ -253,6 +261,66 @@ pub async fn jupyter_start_local(
     }
 }
 
+/// Start Jupyter on an SSH host and connect using the same SSH session.
+#[tauri::command]
+pub async fn jupyter_start_remote(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    launch: RemoteJupyterLaunch,
+    name: Option<String>,
+) -> Result<ServerConnection, AppError> {
+    let launch = RemoteJupyterLaunch {
+        alias: launch.alias.trim().to_string(),
+        python: match launch.python.trim() {
+            "" => "python3".into(),
+            executable => executable.to_string(),
+        },
+    };
+    let id = remote::server_id(&launch);
+    let _operation = state.remote_jupyter_operations.lock().await;
+
+    let existing = state
+        .connections
+        .read()
+        .await
+        .get(&id)
+        .and_then(|connection| {
+            Some((
+                connection.ssh.clone()?,
+                connection.client.clone()?,
+                connection.info(),
+            ))
+        });
+    if let Some((ssh, client, connection)) = existing {
+        if ssh.is_running().await
+            && matches!(
+                tokio::time::timeout(std::time::Duration::from_secs(2), client.get_server_info())
+                    .await,
+                Ok(Ok(_))
+            )
+        {
+            *state.active_server_id.write().await = Some(id);
+            return Ok(connection);
+        }
+        state.connections.write().await.remove(&id);
+        ssh.stop_remote().await;
+    }
+
+    let (config, ssh) = remote::launch(launch, name).await?;
+    let result = connect_server(state.clone(), app, config, Some(ssh.clone())).await;
+    match result {
+        Ok(connection) => {
+            *state.active_server_id.write().await = Some(id);
+            Ok(connection)
+        }
+        Err(error) => {
+            state.connections.write().await.remove(&id);
+            ssh.stop_remote().await;
+            Err(error)
+        }
+    }
+}
+
 /// Log into a JupyterHub/TLJH server using username and password, obtain a token,
 /// check/spawn the user's server, and connect to it.
 #[tauri::command]
@@ -270,6 +338,11 @@ pub async fn jupyter_hub_login(
         .id
         .clone()
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    if remote::is_managed(&id) {
+        return Err(AppError::JupyterConnection(
+            "Invalid JupyterHub server ID.".into(),
+        ));
+    }
     let _ = app.emit(
         "jupyter:connection",
         serde_json::json!({
@@ -445,6 +518,7 @@ pub async fn jupyter_hub_login(
         base_url: final_url,
         token: Some(token),
         proxy: req.proxy,
+        remote_launch: None,
     };
 
     // Connect using normal jupyter_connect flow
@@ -461,13 +535,26 @@ pub async fn jupyter_disconnect(
     if server_id == crate::jupyter::local::LOCAL_SERVER_ID {
         state.local_jupyter.stop().await?;
     }
-    let mut connections = state.connections.write().await;
-    connections.remove(&server_id);
-
-    // If the active server was disconnected, clear or switch
-    let mut active_id = state.active_server_id.write().await;
-    if active_id.as_ref() == Some(&server_id) {
-        *active_id = connections.keys().next().cloned();
+    let _remote_operation = if remote::is_managed(&server_id) {
+        Some(state.remote_jupyter_operations.lock().await)
+    } else {
+        None
+    };
+    let connection = {
+        let mut connections = state.connections.write().await;
+        let connection = connections.remove(&server_id);
+        let mut active_id = state.active_server_id.write().await;
+        if active_id.as_ref() == Some(&server_id) {
+            *active_id = connections.keys().next().cloned();
+        }
+        connection
+    };
+    if let Some(connection) = connection {
+        if connection.config.remote_launch.is_some() {
+            if let Some(ssh) = connection.ssh {
+                ssh.stop_remote().await;
+            }
+        }
     }
 
     let _ = app.emit(
@@ -521,6 +608,11 @@ pub async fn jupyter_restart_hub_server(
             .map(|connection| (connection.config.clone(), connection.ssh.clone()))
             .ok_or_else(|| AppError::ServerNotFound(server_id.clone()))?
     };
+    if config.remote_launch.is_some() {
+        return Err(AppError::JupyterConnection(
+            "Restart this managed Jupyter server through its SSH launch profile.".into(),
+        ));
+    }
     let token = config.token.clone().ok_or_else(|| {
         AppError::JupyterAuth("Restarting a JupyterHub server requires a saved token".to_string())
     })?;
