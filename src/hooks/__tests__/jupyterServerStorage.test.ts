@@ -59,6 +59,16 @@ assert(
   'restored saved servers preserve proxy settings'
 );
 
+const sshServer: JupyterServerConfig = {
+  ...second,
+  proxy: { proxy_type: 'ssh', host: 'lab-server' },
+};
+const restoredSsh = toDisconnectedConnections(upsertSavedServer(appended, sshServer))[1];
+assert(
+  restoredSsh.config.proxy?.proxy_type === 'ssh' && restoredSsh.config.proxy.host === 'lab-server',
+  'reconnect uses the saved SSH host alias'
+);
+
 const removed = removeSavedServer(appended, 'server-1');
 assert(removed.length === 1, 'remove deletes matching server id');
 assert(removed[0].id === 'server-2', 'remove keeps other saved servers');

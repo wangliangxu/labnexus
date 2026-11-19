@@ -7,6 +7,7 @@ use reqwest::{Client, Proxy};
 use url::Url;
 
 use crate::error::AppError;
+use crate::jupyter::ssh::SshTunnel;
 use crate::jupyter::types::*;
 
 /// A client for communicating with a single remote Jupyter server.
@@ -23,13 +24,19 @@ pub struct JupyterClient {
 }
 
 /// Build a reqwest::Client configured with optional proxy support.
-pub fn build_http_client(proxy_config: Option<&ProxyConfig>) -> Result<Client, AppError> {
+pub fn build_http_client(
+    proxy_config: Option<&ProxyConfig>,
+    ssh: Option<&SshTunnel>,
+) -> Result<Client, AppError> {
     let mut client_builder = Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .connect_timeout(std::time::Duration::from_secs(10));
 
-    if let Some(proxy_config) = proxy_config {
-        let proxy_url = match proxy_config.proxy_type {
+    let proxy_url = if let Some(ssh) = ssh {
+        // Resolve Jupyter hostnames on the SSH server, including private DNS names.
+        Some(format!("socks5h://{}", ssh.address()))
+    } else if let Some(proxy_config) = proxy_config {
+        Some(match proxy_config.proxy_type {
             ProxyType::Socks5 => {
                 if let (Some(user), Some(pass)) = (&proxy_config.username, &proxy_config.password) {
                     format!(
@@ -46,8 +53,13 @@ pub fn build_http_client(proxy_config: Option<&ProxyConfig>) -> Result<Client, A
             ProxyType::Https => {
                 format!("https://{}:{}", proxy_config.host, proxy_config.port)
             }
-        };
+            ProxyType::Ssh => return Err(AppError::Proxy("SSH tunnel is unavailable".into())),
+        })
+    } else {
+        None
+    };
 
+    if let Some(proxy_url) = proxy_url {
         let proxy = Proxy::all(&proxy_url)
             .map_err(|e| AppError::Proxy(format!("Failed to configure proxy: {}", e)))?;
         client_builder = client_builder.proxy(proxy);
@@ -60,7 +72,7 @@ pub fn build_http_client(proxy_config: Option<&ProxyConfig>) -> Result<Client, A
 
 impl JupyterClient {
     /// Create a new JupyterClient from a server configuration.
-    pub fn new(config: &JupyterServerConfig) -> Result<Self, AppError> {
+    pub fn new(config: &JupyterServerConfig, ssh: Option<&SshTunnel>) -> Result<Self, AppError> {
         let base_url = Url::parse(&config.base_url)
             .map_err(|e| AppError::JupyterConnection(format!("Invalid URL: {}", e)))?;
 
@@ -71,7 +83,7 @@ impl JupyterClient {
                 .connect_timeout(std::time::Duration::from_secs(10))
                 .build()?
         } else {
-            build_http_client(config.proxy.as_ref())?
+            build_http_client(config.proxy.as_ref(), ssh)?
         };
 
         Ok(JupyterClient {

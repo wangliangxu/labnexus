@@ -647,7 +647,8 @@ pub(crate) async fn connect_ws_stream(
                     Ok(ws_stream)
                 }
             }
-            _ => {
+            ProxyType::Ssh => Err(AppError::Proxy("SSH tunnel is unavailable".into())),
+            ProxyType::Http | ProxyType::Https => {
                 // For HTTP/HTTPS proxies or direct, fallback to default connect_async
                 let request = build_ws_client_request(url, config)?;
                 let (ws_stream, _) = timeout(

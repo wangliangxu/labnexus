@@ -10,3 +10,4 @@ pub mod types;
 pub mod ws;
 
 pub mod local;
+pub mod ssh;

@@ -37,11 +37,12 @@ pub struct JupyterHubLoginRequest {
 /// Proxy configuration for tunneled connections.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxyConfig {
-    /// Proxy type: "socks5" or "http".
+    /// Transport used to reach the Jupyter server.
     pub proxy_type: ProxyType,
-    /// Proxy host (e.g., "127.0.0.1").
+    /// Proxy host, or an OpenSSH host alias in SSH mode.
     pub host: String,
-    /// Proxy port (e.g., 1080 for SOCKS5 via SSH -D).
+    /// Proxy port for manual proxies. OpenSSH determines its server port.
+    #[serde(default)]
     pub port: u16,
     /// Optional proxy authentication username.
     pub username: Option<String>,
@@ -56,6 +57,7 @@ pub enum ProxyType {
     Socks5,
     Http,
     Https,
+    Ssh,
 }
 
 /// Information returned by the Jupyter server API.

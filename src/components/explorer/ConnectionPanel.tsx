@@ -28,7 +28,8 @@ export function ConnectionPanel({
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showProxy, setShowProxy] = useState(false);
-  const [proxyType, setProxyType] = useState<'socks5' | 'http'>('socks5');
+  const [proxyType, setProxyType] = useState<ProxyConfig['proxy_type']>('socks5');
+  const [sshAlias, setSshAlias] = useState('');
   const [proxyHost, setProxyHost] = useState('127.0.0.1');
   const [proxyPort, setProxyPort] = useState('1080');
 
@@ -36,13 +37,12 @@ export function ConnectionPanel({
     e.preventDefault();
     if (!url.trim()) return;
 
-    const proxy: ProxyConfig | undefined = showProxy
-      ? {
-          proxy_type: proxyType,
-          host: proxyHost,
-          port: parseInt(proxyPort, 10),
-        }
-      : undefined;
+    let proxy: ProxyConfig | undefined;
+    if (showProxy) {
+      proxy = proxyType === 'ssh'
+        ? { proxy_type: 'ssh', host: sshAlias.trim() }
+        : { proxy_type: proxyType, host: proxyHost, port: parseInt(proxyPort, 10) };
+    }
 
     if (authMode === 'tljh') {
       if (!username.trim() || !password) return;
@@ -184,7 +184,7 @@ export function ConnectionPanel({
               checked={showProxy}
               onChange={(e) => setShowProxy(e.target.checked)}
             />
-            <span>{t('Use Proxy (SOCKS / SSH -D)')}</span>
+            <span>{t('Use Proxy')}</span>
           </label>
         </div>
 
@@ -199,43 +199,64 @@ export function ConnectionPanel({
                 id="proxy-type"
                 value={proxyType}
                 onChange={(e) =>
-                  setProxyType(e.target.value as 'socks5' | 'http')
+                  setProxyType(e.target.value as ProxyConfig['proxy_type'])
                 }
               >
                 <option value="socks5">SOCKS5 (SSH -D)</option>
                 <option value="http">HTTP</option>
+                <option value="ssh">{t('SSH alias')}</option>
               </select>
             </div>
 
-            <div className="form-row">
-              <div className="form-group form-group--flex">
-                <label className="form-label" htmlFor="proxy-host">
-                  {t('Host')}
-                </label>
+            {proxyType === 'ssh' ? (
+              <div className="form-group">
+                <label className="form-label" htmlFor="ssh-alias">{t('SSH host alias')}</label>
                 <input
-                  id="proxy-host"
+                  id="ssh-alias"
                   type="text"
-                  placeholder="127.0.0.1"
-                  value={proxyHost}
-                  onChange={(e) => setProxyHost(e.target.value)}
+                  placeholder="lab-server"
+                  aria-describedby="ssh-alias-hint"
+                  value={sshAlias}
+                  onChange={(e) => setSshAlias(e.target.value)}
+                  required
                 />
+                <p id="ssh-alias-hint" className="form-hint">
+                  {t('Use a Host alias from ~/.ssh/config.')}
+                </p>
               </div>
-              <div className="form-group form-group--port">
-                <label className="form-label" htmlFor="proxy-port">
-                  {t('Port')}
-                </label>
-                <input
-                  id="proxy-port"
-                  type="number"
-                  placeholder="1080"
-                  value={proxyPort}
-                  onChange={(e) => setProxyPort(e.target.value)}
-                />
+            ) : (
+              <div className="form-row">
+                <div className="form-group form-group--flex">
+                  <label className="form-label" htmlFor="proxy-host">
+                    {t('Host')}
+                  </label>
+                  <input
+                    id="proxy-host"
+                    type="text"
+                    placeholder="127.0.0.1"
+                    value={proxyHost}
+                    onChange={(e) => setProxyHost(e.target.value)}
+                  />
+                </div>
+                <div className="form-group form-group--port">
+                  <label className="form-label" htmlFor="proxy-port">
+                    {t('Port')}
+                  </label>
+                  <input
+                    id="proxy-port"
+                    type="number"
+                    placeholder="1080"
+                    value={proxyPort}
+                    onChange={(e) => setProxyPort(e.target.value)}
+                  />
+                </div>
               </div>
-            </div>
-            <p className="form-hint">
-              {t('For SSH tunnel:')} <code>ssh -D 1080 user@server</code>
-            </p>
+            )}
+            {proxyType === 'socks5' && (
+              <p className="form-hint">
+                {t('For SSH tunnel:')} <code>ssh -D 1080 user@server</code>
+              </p>
+            )}
           </div>
         )}
 
@@ -245,6 +266,7 @@ export function ConnectionPanel({
           disabled={
             isConnecting ||
             !url.trim() ||
+            (showProxy && proxyType === 'ssh' && !sshAlias.trim()) ||
             (authMode === 'tljh' && (!username.trim() || !password))
           }
         >

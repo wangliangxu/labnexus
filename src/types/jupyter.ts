@@ -22,13 +22,14 @@ export interface JupyterHubLoginConfig {
   name?: string;
 }
 
-export interface ProxyConfig {
-  proxy_type: 'socks5' | 'http' | 'https';
+export type ProxyConfig = {
   host: string;
-  port: number;
   username?: string;
   password?: string;
-}
+} & (
+  | { proxy_type: 'socks5' | 'http' | 'https'; port: number }
+  | { proxy_type: 'ssh'; port?: number }
+);
 
 export interface ServerInfo {
   version: string;

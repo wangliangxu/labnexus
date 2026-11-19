@@ -9,6 +9,7 @@ use tokio::sync::{oneshot, RwLock};
 
 use crate::error::AppError;
 use crate::jupyter::client::JupyterClient;
+use crate::jupyter::ssh::SshTunnel;
 use crate::jupyter::terminal_ws::TerminalWsManager;
 use crate::jupyter::types::*;
 use crate::jupyter::ws::KernelWsManager;
@@ -42,15 +43,33 @@ pub struct AppState {
 /// A managed connection to a single Jupyter server.
 pub struct ManagedConnection {
     /// HTTP client for REST API calls.
-    pub client: JupyterClient,
+    pub client: Option<JupyterClient>,
     /// Current connection status.
     pub status: ConnectionStatus,
     /// Server information (populated after successful connection).
     pub server_info: Option<ServerInfo>,
     /// The server configuration used to create this connection.
     pub config: JupyterServerConfig,
+    pub ssh: Option<Arc<SshTunnel>>,
     /// Error message if connection failed.
     pub error_message: Option<String>,
+}
+
+impl ManagedConnection {
+    pub fn websocket_config(&self) -> JupyterServerConfig {
+        let mut config = self.config.clone();
+        if let Some(ssh) = &self.ssh {
+            let address = ssh.address();
+            config.proxy = Some(ProxyConfig {
+                proxy_type: ProxyType::Socks5,
+                host: address.ip().to_string(),
+                port: address.port(),
+                username: None,
+                password: None,
+            });
+        }
+        config
+    }
 }
 
 impl AppState {
@@ -129,6 +148,7 @@ impl AppState {
         self.agent.shutdown().await;
         self.kernel_ws.disconnect_all().await;
         self.terminal_ws.disconnect_all().await;
+        self.connections.write().await.clear();
         self.pending_notebook_actions.write().await.clear();
         if let Some(store) = self.trace_store.read().await.as_ref() {
             store.close().await;
@@ -143,19 +163,14 @@ impl AppState {
 
     /// Get the active server's client, if connected.
     pub async fn active_client(&self) -> Option<JupyterClient> {
-        let active_id = self.active_server_id.read().await;
-        if let Some(id) = active_id.as_ref() {
-            let connections = self.connections.read().await;
-            connections.get(id).map(|c| c.client.clone())
-        } else {
-            None
-        }
+        let active_id = self.active_server_id.read().await.clone()?;
+        self.get_client(&active_id).await
     }
 
     /// Get a specific server's client by ID.
     pub async fn get_client(&self, server_id: &str) -> Option<JupyterClient> {
         let connections = self.connections.read().await;
-        connections.get(server_id).map(|c| c.client.clone())
+        connections.get(server_id).and_then(|c| c.client.clone())
     }
 
     /// Get connection info for all servers (serializable for frontend).

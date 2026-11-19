@@ -2,10 +2,13 @@
 //!
 //! These commands are exposed to the frontend via Tauri's invoke mechanism.
 
+use std::sync::Arc;
+
 use tauri::{AppHandle, Emitter, State};
 
 use crate::error::AppError;
-use crate::jupyter::client::JupyterClient;
+use crate::jupyter::client::{build_http_client, JupyterClient};
+use crate::jupyter::ssh::SshTunnel;
 use crate::jupyter::types::*;
 use crate::state::{AppState, ManagedConnection};
 
@@ -88,7 +91,16 @@ async fn resolve_and_persist_server_secrets(state: &AppState, config: &mut Jupyt
 pub async fn jupyter_connect(
     state: State<'_, AppState>,
     app: AppHandle,
+    config: JupyterServerConfig,
+) -> Result<ServerConnection, AppError> {
+    connect_server(state, app, config, None).await
+}
+
+async fn connect_server(
+    state: State<'_, AppState>,
+    app: AppHandle,
     mut config: JupyterServerConfig,
+    ssh: Option<Arc<SshTunnel>>,
 ) -> Result<ServerConnection, AppError> {
     resolve_and_persist_server_secrets(&state, &mut config).await;
 
@@ -101,8 +113,28 @@ pub async fn jupyter_connect(
         }),
     );
 
-    // Build the client with proxy configuration
-    let client = JupyterClient::new(&config)?;
+    let setup = async {
+        let ssh = match ssh {
+            Some(ssh) => Some(ssh),
+            None => SshTunnel::for_proxy(config.proxy.as_ref()).await?,
+        };
+        let client = JupyterClient::new(&config, ssh.as_deref())?;
+        Ok::<_, AppError>((client, ssh))
+    };
+    let (client, ssh) = match setup.await {
+        Ok(connection) => connection,
+        Err(error) => {
+            let _ = app.emit(
+                "jupyter:connection",
+                serde_json::json!({
+                    "server_id": &config.id,
+                    "status": "error",
+                    "message": error.to_string(),
+                }),
+            );
+            return Err(error);
+        }
+    };
 
     // Test the connection by fetching server info
     let server_info = match client.get_server_info().await {
@@ -132,10 +164,13 @@ pub async fn jupyter_connect(
             connections.insert(
                 config.id.clone(),
                 ManagedConnection {
-                    client,
+                    // A failed SSH connection releases its tunnel. Keep its saved
+                    // configuration available for the JupyterHub restart flow.
+                    client: ssh.is_none().then_some(client),
                     status: ConnectionStatus::Error,
                     server_info: None,
                     config: config.clone(),
+                    ssh: None,
                     error_message: Some(error_msg.clone()),
                 },
             );
@@ -156,10 +191,11 @@ pub async fn jupyter_connect(
     connections.insert(
         config.id.clone(),
         ManagedConnection {
-            client,
+            client: Some(client),
             status: ConnectionStatus::Connected,
             server_info,
             config: config.clone(),
+            ssh,
             error_message: None,
         },
     );
@@ -243,7 +279,8 @@ pub async fn jupyter_hub_login(
         }),
     );
 
-    let http = crate::jupyter::client::build_http_client(req.proxy.as_ref())?;
+    let ssh = SshTunnel::for_proxy(req.proxy.as_ref()).await?;
+    let http = build_http_client(req.proxy.as_ref(), ssh.as_deref())?;
 
     // Step 1: Request token (JupyterHub 2.0+ standard endpoint first, then legacy 1.x fallback)
     let token_url_v2 = format!("{}/hub/api/users/{}/tokens", base_url, req.username);
@@ -411,7 +448,7 @@ pub async fn jupyter_hub_login(
     };
 
     // Connect using normal jupyter_connect flow
-    jupyter_connect(state, app, config).await
+    connect_server(state, app, config, ssh).await
 }
 
 /// Disconnect from a Jupyter server.
@@ -477,18 +514,22 @@ pub async fn jupyter_restart_hub_server(
     server_id: String,
     restart_url: String,
 ) -> Result<ServerConnection, AppError> {
-    let config = {
+    let (config, ssh) = {
         let connections = state.connections.read().await;
         connections
             .get(&server_id)
-            .map(|connection| connection.config.clone())
+            .map(|connection| (connection.config.clone(), connection.ssh.clone()))
             .ok_or_else(|| AppError::ServerNotFound(server_id.clone()))?
     };
     let token = config.token.clone().ok_or_else(|| {
         AppError::JupyterAuth("Restarting a JupyterHub server requires a saved token".to_string())
     })?;
     let target = parse_hub_spawn_target(&restart_url)?;
-    let http = crate::jupyter::client::build_http_client(config.proxy.as_ref())?;
+    let ssh = match ssh {
+        Some(ssh) => Some(ssh),
+        None => SshTunnel::for_proxy(config.proxy.as_ref()).await?,
+    };
+    let http = build_http_client(config.proxy.as_ref(), ssh.as_deref())?;
 
     let _ = app.emit(
         "jupyter:connection",
@@ -524,7 +565,7 @@ pub async fn jupyter_restart_hub_server(
     for _ in 0..30 {
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         if hub_server_is_ready(&http, &target, &token).await {
-            return jupyter_connect(state, app, config).await;
+            return connect_server(state, app, config, ssh).await;
         }
     }
 
@@ -722,7 +763,7 @@ pub async fn jupyter_connect_kernel_ws(
     let conn = connections
         .get(client.server_id())
         .ok_or_else(|| AppError::ServerNotFound(client.server_id().to_string()))?;
-    let config = conn.config.clone();
+    let config = conn.websocket_config();
     drop(connections);
 
     state
@@ -822,7 +863,7 @@ pub async fn jupyter_connect_terminal(
     let conn = connections
         .get(client.server_id())
         .ok_or_else(|| AppError::ServerNotFound(client.server_id().to_string()))?;
-    let config = conn.config.clone();
+    let config = conn.websocket_config();
     drop(connections);
 
     state

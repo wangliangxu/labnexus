@@ -22,7 +22,7 @@
 
 ### 1. 混合 Jupyter 连接与内网穿透 (Hybrid Connectivity & Proxy Tunneling)
 - **远程服务器管理**：支持连接标准 Jupyter Server（Token 认证）与 JupyterHub / TLJH（用户名 + 密码登录），支持一键重连、断开与服务重启。
-- **全链路 SOCKS5 / SSH `-D` 代理支持**：内置针对 `ssh -D` 动态端口转发的原生支持，REST API、Kernel WebSocket（含 TLS over SOCKS5）与 Terminal WebSocket 全链路走代理穿透内网计算节点。
+- **全链路 SOCKS5 / SSH `-D` 代理支持**：连接 Jupyter 时可填写 `~/.ssh/config` 中的 Host 别名，由 LabNexus 自动启动 SSH 隧道，也可填写已有的 SOCKS5 代理。REST API、Kernel WebSocket（含 TLS）与 Terminal WebSocket 均使用该代理。
 - **本地 Jupyter 自动检测与托管**：自动探测本机 `jupyter lab` / `jupyter notebook` 环境，支持一键以随机空闲端口启动本地服务，并在断开或退出时自动回收进程。
 - **系统级凭据安全存储**：在 macOS 下自动将远程服务器 Token/密码与 AI API Key 托管至系统钥匙串（**macOS Keychain**），落盘配置文件自动脱敏并限制为 `0600` 权限。
 

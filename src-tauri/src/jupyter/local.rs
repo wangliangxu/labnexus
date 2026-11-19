@@ -283,7 +283,7 @@ mod tests {
             !denied.status().is_success(),
             "contents must require authentication"
         );
-        let client = crate::jupyter::client::JupyterClient::new(&server.config).unwrap();
+        let client = crate::jupyter::client::JupyterClient::new(&server.config, None).unwrap();
         assert!(!client.get_server_info().await.unwrap().version.is_empty());
         client
             .list_contents("")
