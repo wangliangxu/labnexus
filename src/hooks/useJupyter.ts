@@ -17,6 +17,7 @@ import type {
 import {
   jupyterStartLocal,
   jupyterStartRemote,
+  jupyterSaveServerCredentials,
   jupyterConnect,
   jupyterHubLogin,
   jupyterDisconnect,
@@ -28,6 +29,9 @@ import {
   forgetServerConfig,
   loadSavedServers,
   saveServerConfig,
+  saveServersToStorage,
+  upsertSavedServer,
+  prepareServerConfigEdit,
   toDisconnectedConnections,
 } from './jupyterServerStorage';
 import { markServerConnectionError } from './jupyterConnectionState';
@@ -49,6 +53,8 @@ interface UseJupyterReturn {
   connect: (config: JupyterServerConfig) => Promise<void>;
   /** Connect to a JupyterHub/TLJH server via login */
   connectHub: (config: JupyterHubLoginConfig) => Promise<void>;
+  /** Save a connection profile for the next connection. */
+  saveConnectionConfig: (config: JupyterServerConfig, previous: JupyterServerConfig) => Promise<boolean>;
   /** Disconnect from a server */
   disconnect: (serverId: string) => Promise<void>;
   /** Reconnect to a saved server */
@@ -108,7 +114,15 @@ export function useJupyter(): UseJupyterReturn {
   const refresh = useCallback(async () => {
     try {
       const list = await jupyterListServers();
-      setServers(list);
+      const saved = loadSavedServers();
+      const connectedIds = new Set(list.map(({ config }) => config.id));
+      setServers([
+        ...list.map((server) => ({
+          ...server,
+          config: saved.find(({ id }) => id === server.config.id) ?? server.config,
+        })),
+        ...toDisconnectedConnections(saved.filter(({ id }) => !connectedIds.has(id))),
+      ]);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
@@ -218,7 +232,7 @@ export function useJupyter(): UseJupyterReturn {
     setIsConnecting(true);
     setError(null);
     try {
-      const connection = await jupyterStartRemote(launch, name);
+      const connection = await jupyterStartRemote(launch, name, serverId);
       setServers((prev) => {
         if (!prev.some((server) => server.config.id === connection.config.id)) {
           return [...prev, connection];
@@ -242,6 +256,38 @@ export function useJupyter(): UseJupyterReturn {
       return false;
     } finally {
       remoteStartPending.current = false;
+      setIsConnecting(false);
+    }
+  }, []);
+
+  const saveConnectionConfig = useCallback(async (
+    config: JupyterServerConfig,
+    previous: JupyterServerConfig,
+  ) => {
+    setIsConnecting(true);
+    setError(null);
+    try {
+      const saved = loadSavedServers();
+      const { profile, token, proxyPassword } = prepareServerConfigEdit(config, previous);
+
+      saveServersToStorage(upsertSavedServer(saved, profile));
+      try {
+        if (token !== undefined || proxyPassword !== undefined) {
+          await jupyterSaveServerCredentials(config.id, token, proxyPassword);
+        }
+      } catch (error) {
+        saveServersToStorage(saved);
+        throw error;
+      }
+      setServers((prev) => prev.map((server) =>
+        server.config.id === profile.id ? { ...server, config: profile } : server
+      ));
+      return true;
+    } catch (e: unknown) {
+      setError(typeof e === 'object' && e !== null && 'message' in e
+        ? String(e.message) : String(e));
+      return false;
+    } finally {
       setIsConnecting(false);
     }
   }, []);
@@ -329,6 +375,8 @@ export function useJupyter(): UseJupyterReturn {
       setError(null);
       try {
         const connection = await jupyterRestartHubServer(serverId, restartUrl);
+        // A Hub restart uses the live configuration. Keep any edits for the next connection.
+        connection.config = loadSavedServers().find(({ id }) => id === serverId) ?? connection.config;
         setServers((prev) => {
           const existing = prev.findIndex((server) => server.config.id === serverId);
           if (existing >= 0) {
@@ -363,6 +411,7 @@ export function useJupyter(): UseJupyterReturn {
     error,
     connect,
     connectHub,
+    saveConnectionConfig,
     disconnect,
     reconnect,
     forget,

@@ -1,5 +1,7 @@
 import {
   removeSavedServer,
+  prepareServerConfigEdit,
+  REDACTED_SERVER_SECRET,
   redactServerSecretsForStorage,
   toDisconnectedConnections,
   upsertSavedServer,
@@ -88,3 +90,18 @@ assert(
 const removed = removeSavedServer(appended, 'server-1');
 assert(removed.length === 1, 'remove deletes matching server id');
 assert(removed[0].id === 'server-2', 'remove keeps other saved servers');
+
+const savedCredentials: JupyterServerConfig = {
+  ...first,
+  token: REDACTED_SERVER_SECRET,
+  proxy: { proxy_type: 'socks5', host: '127.0.0.1', port: 1080, password: REDACTED_SERVER_SECRET },
+};
+const renamed = prepareServerConfigEdit({ ...savedCredentials, name: 'Renamed' }, savedCredentials);
+assert(renamed.profile.name === 'Renamed', 'the saved profile takes the new name');
+assert(renamed.token === undefined && renamed.proxyPassword === undefined, 'unchanged credentials stay in the credential store');
+assert(renamed.profile.token === REDACTED_SERVER_SECRET, 'the saved credential remains marked as present');
+
+const edited = prepareServerConfigEdit({ ...savedCredentials, token: 'new-token', proxy: undefined }, savedCredentials);
+assert(edited.token === 'new-token', 'the replacement token is sent to the credential store');
+assert(edited.profile.token === REDACTED_SERVER_SECRET, 'the replacement token is redacted in storage');
+assert(edited.proxyPassword === '' && edited.profile.proxy === undefined, 'turning off the proxy removes its credential');

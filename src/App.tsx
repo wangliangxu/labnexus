@@ -6,11 +6,12 @@ import { useLocale } from './i18n';
  */
 
 import { LocalJupyterPanel } from './components/explorer/LocalJupyterPanel';
-import { LOCAL_JUPYTER_SERVER_ID } from './types/jupyter';
+import { LOCAL_JUPYTER_SERVER_ID, type JupyterServerConfig } from './types/jupyter';
 import { lazy, Suspense, useState, useMemo, useRef, useCallback, useEffect, type SetStateAction } from 'react';
 import {
   Plus,
   RefreshCw,
+  Pencil,
   X,
   ChevronDown,
   ChevronRight,
@@ -75,6 +76,8 @@ function App() {
     connectHub,
     startLocal,
     startRemote,
+    saveConnectionConfig,
+    clearError,
     disconnect,
     reconnect,
     forget,
@@ -84,6 +87,9 @@ function App() {
   } = useJupyter();
 
   const [viewMode, setViewMode] = useState<ViewMode>('connect');
+  const [editingConfig, setEditingConfig] = useState<JupyterServerConfig | null>(null);
+  const [tabToClose, setTabToClose] = useState<TabItem | null>(null);
+  const closeTabDialogRef = useRef<HTMLDialogElement>(null);
   const [activePanel, setActivePanel] = useState<PanelId>('explorer');
   const [explorerTrees, setExplorerTrees] = useState<Record<string, TreeNode[]>>({});
   const connectedServerIdsRef = useRef<Set<string>>(new Set());
@@ -366,33 +372,27 @@ function App() {
     }
   };
 
-  // Close tab and switch focus
-  const handleCloseTab = (id: string) => {
-    const targetTab = tabs.find((tab) => tab.id === id);
-    if (targetTab?.isDirty) {
-      const confirmed = window.confirm(
-        t('"{name}" has unsaved changes. Close without saving?', {
-          name: targetTab.title,
-        })
-      );
-      if (!confirmed) return;
+  useEffect(() => {
+    const dialog = closeTabDialogRef.current;
+    if (tabToClose && dialog && !dialog.open) dialog.showModal();
+  }, [tabToClose]);
+
+  const closeTab = (id: string) => {
+    const index = tabs.findIndex((tab) => tab.id === id);
+    if (index === -1) return;
+    setTabs((prev) => prev.filter((tab) => tab.id !== id));
+    if (activeTabId === id) {
+      setActiveTabId(tabs[index + 1]?.id ?? tabs[index - 1]?.id ?? null);
     }
+  };
 
-    setTabs((prev) => {
-      const idx = prev.findIndex((t) => t.id === id);
-      if (idx === -1) return prev;
-      const nextTabs = prev.filter((t) => t.id !== id);
-
-      if (activeTabId === id) {
-        if (nextTabs.length > 0) {
-          const nextIdx = Math.min(idx, nextTabs.length - 1);
-          setActiveTabId(nextTabs[nextIdx].id);
-        } else {
-          setActiveTabId(null);
-        }
-      }
-      return nextTabs;
-    });
+  const handleCloseTab = (id: string) => {
+    const target = tabs.find((tab) => tab.id === id);
+    if (target?.isDirty) {
+      setTabToClose(target);
+      return;
+    }
+    closeTab(id);
   };
 
   // Handle activity bar panel clicks
@@ -482,8 +482,11 @@ function App() {
               <button
                 type="button"
                 className="btn btn-icon btn-ghost"
+                disabled={isConnecting}
                 onClick={(e) => {
                   e.stopPropagation();
+                  setEditingConfig(null);
+                  clearError();
                   setViewMode('connect');
                 }}
                 title={t('Add Server')}
@@ -498,6 +501,8 @@ function App() {
                     key={server.config.id}
                     className={`server-item ${server.config.id === activeServerId ? 'active' : ''}`}
                     onClick={() => {
+                      if (isConnecting && editingConfig) return;
+                      setEditingConfig(null);
                       if (server.status === 'connected') {
                         setViewMode((current) =>
                           resolveServerSelectionViewMode(current, server.status)
@@ -521,12 +526,30 @@ function App() {
                       </div>
                     </div>
                     <div className="server-item__actions">
+                      {server.config.id !== LOCAL_JUPYTER_SERVER_ID && (
+                        <button
+                          type="button"
+                          className="btn btn-icon btn-ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            clearError();
+                            setEditingConfig(server.config);
+                            setViewMode('connect');
+                          }}
+                          title={t('Edit server connection')}
+                          aria-label={t('Edit server connection')}
+                          disabled={isConnecting}
+                        >
+                          <Pencil size={12} />
+                        </button>
+                      )}
                       {(server.status === 'disconnected' || server.status === 'error') && (
                         <button
                           type="button"
                           className="btn btn-icon btn-ghost"
                           onClick={(e) => {
                             e.stopPropagation();
+                            setEditingConfig(null);
                             setViewMode((current) =>
                               resolveServerSelectionViewMode(current, server.status)
                             );
@@ -540,9 +563,11 @@ function App() {
                       )}
                       <button
                         type="button"
+                        disabled={isConnecting}
                         className="btn btn-icon btn-ghost btn-danger"
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (editingConfig?.id === server.config.id) setEditingConfig(null);
                           if (server.status === 'connected') {
                             disconnect(server.config.id);
                           } else {
@@ -573,12 +598,24 @@ function App() {
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {viewMode === 'connect' ? (
             <ConnectionPanel
+              key={editingConfig?.id ?? 'new'}
+              editConfig={editingConfig ?? undefined}
+              onSave={async (config) => {
+                if (editingConfig && await saveConnectionConfig(config, editingConfig)) {
+                  setEditingConfig(null);
+                  setViewMode(activeServer ? 'explore' : 'connect');
+                }
+              }}
               onConnect={handleConnect}
               onConnectHub={handleConnectHub}
               onStartRemote={async (launch, name) => {
                 if (await startRemote(launch, name)) setViewMode('explore');
               }}
-              onBack={activeServer ? () => setViewMode('explore') : undefined}
+              onBack={editingConfig || activeServer ? () => {
+                setEditingConfig(null);
+                clearError();
+                setViewMode(activeServer ? 'explore' : 'connect');
+              } : undefined}
               isConnecting={isConnecting}
             />
           ) : (
@@ -693,6 +730,7 @@ function App() {
                 <WelcomeScreen
                   onConnectServer={() => {
                     setActivePanel('explorer');
+                    setEditingConfig(null);
                     setViewMode('connect');
                   }}
                   onOpenExplorer={() => {
@@ -757,6 +795,35 @@ function App() {
           />
         }
       />
+      <dialog
+        ref={closeTabDialogRef}
+        className="close-tab-dialog"
+        aria-labelledby="close-tab-dialog-message"
+        onClose={() => setTabToClose(null)}
+      >
+        {tabToClose && (
+          <>
+            <p id="close-tab-dialog-message">
+              {t('"{name}" has unsaved changes. Close without saving?', { name: tabToClose.title })}
+            </p>
+            <div className="close-tab-dialog__actions">
+              <button type="button" className="btn btn-ghost" autoFocus onClick={() => closeTabDialogRef.current?.close()}>
+                {t('Cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  closeTab(tabToClose.id);
+                  closeTabDialogRef.current?.close();
+                }}
+              >
+                {t('Close without saving')}
+              </button>
+            </div>
+          </>
+        )}
+      </dialog>
       {isSettingsOpen && (
         <Suspense fallback={null}>
           <SettingsModal

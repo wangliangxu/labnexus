@@ -51,6 +51,7 @@ pub fn run() {
             commands::jupyter::jupyter_detect_local,
             commands::jupyter::jupyter_start_local,
             commands::jupyter::jupyter_start_remote,
+            commands::jupyter::jupyter_save_server_credentials,
             // Jupyter connection management
             commands::jupyter::jupyter_connect,
             commands::jupyter::jupyter_hub_login,

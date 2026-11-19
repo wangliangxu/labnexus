@@ -135,10 +135,10 @@ export function WorkbenchTabs({
               <span className="truncate min-w-[36px] leading-none">{title}</span>
 
               {/* Dirty Indicator / Close Button */}
-              <div className="flex items-center justify-center w-4 h-4 shrink-0 ml-0.5">
+              <div className="relative flex items-center justify-center w-4 h-4 shrink-0 ml-0.5">
                 {tab.isDirty ? (
                   <span
-                    className="w-2 h-2 rounded-full group-hover:hidden"
+                    className="pointer-events-none absolute w-2 h-2 rounded-full group-hover:hidden group-focus-within:hidden"
                     style={{ background: 'var(--color-warning)' }}
                     title={t('Unsaved changes')}
                   />
@@ -151,11 +151,12 @@ export function WorkbenchTabs({
                   }}
                   className={`inline-flex items-center justify-center w-4 h-4 rounded-xs transition-colors hover:bg-nb-btn-hover ${
                     tab.isDirty
-                      ? 'hidden group-hover:inline-flex'
+                      ? 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
                       : 'opacity-55 group-hover:opacity-100'
                   }`}
                   style={{ color: 'var(--text-secondary)' }}
                   title={t('Close Tab')}
+                  aria-label={t('Close Tab')}
                 >
                   <X size={12} strokeWidth={2} />
                 </button>

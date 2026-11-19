@@ -81,6 +81,19 @@ export function redactServerSecretsForStorage(
   };
 }
 
+export function prepareServerConfigEdit(config: JupyterServerConfig, previous: JupyterServerConfig) {
+  const profile = redactServerSecretsForStorage({
+    ...config,
+    token: config.token || undefined,
+    proxy: config.proxy ? { ...config.proxy, password: config.proxy.password || undefined } : undefined,
+  });
+  const token = config.token === REDACTED_SERVER_SECRET ? undefined : config.token;
+  const proxyPassword = config.proxy?.password === REDACTED_SERVER_SECRET
+    ? undefined
+    : config.proxy?.password ?? (previous.proxy?.password ? '' : undefined);
+  return { profile, token, proxyPassword };
+}
+
 export function saveServersToStorage(servers: JupyterServerConfig[]): void {
   const sanitized = servers.map(redactServerSecretsForStorage);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));

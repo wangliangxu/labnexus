@@ -38,14 +38,14 @@ pub fn build_http_client(
     } else if let Some(proxy_config) = proxy_config {
         Some(match proxy_config.proxy_type {
             ProxyType::Socks5 => {
+                let mut url = Url::parse(&format!("socks5://{}:{}", proxy_config.host, proxy_config.port))
+                    .map_err(|error| AppError::Proxy(format!("Invalid SOCKS5 proxy: {error}")))?;
                 if let (Some(user), Some(pass)) = (&proxy_config.username, &proxy_config.password) {
-                    format!(
-                        "socks5://{}:{}@{}:{}",
-                        user, pass, proxy_config.host, proxy_config.port
-                    )
-                } else {
-                    format!("socks5://{}:{}", proxy_config.host, proxy_config.port)
+                    url.set_username(user)
+                        .and_then(|_| url.set_password(Some(pass)))
+                        .map_err(|_| AppError::Proxy("Invalid SOCKS5 proxy credentials".into()))?;
                 }
+                url.to_string()
             }
             ProxyType::Http => {
                 format!("http://{}:{}", proxy_config.host, proxy_config.port)

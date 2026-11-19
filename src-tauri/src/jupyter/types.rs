@@ -25,7 +25,7 @@ pub struct JupyterServerConfig {
     pub remote_launch: Option<RemoteJupyterLaunch>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RemoteJupyterLaunch {
     pub alias: String,
     pub python: String,

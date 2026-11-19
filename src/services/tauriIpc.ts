@@ -58,9 +58,18 @@ export function jupyterStartLocal(): Promise<ServerConnection> {
 
 export function jupyterStartRemote(
   launch: RemoteJupyterLaunch,
-  name?: string
+  name?: string,
+  serverId?: string
 ): Promise<ServerConnection> {
-  return invoke('jupyter_start_remote', { launch, name });
+  return invoke('jupyter_start_remote', { launch, name, serverId });
+}
+
+export function jupyterSaveServerCredentials(
+  serverId: string,
+  token?: string,
+  proxyPassword?: string
+): Promise<void> {
+  return invoke('jupyter_save_server_credentials', { serverId, token, proxyPassword });
 }
 
 // ─── Contents API ──────────────────────────────────────────────────

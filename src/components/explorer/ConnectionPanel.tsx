@@ -6,12 +6,15 @@ import { t } from '../../i18n';
 import { useState } from 'react';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import type { JupyterServerConfig, JupyterHubLoginConfig, ProxyConfig, RemoteJupyterLaunch } from '../../types/jupyter';
+import { REDACTED_SERVER_SECRET } from '../../hooks/jupyterServerStorage';
 import './ConnectionPanel.css';
 
 interface ConnectionPanelProps {
   onConnect: (config: JupyterServerConfig) => Promise<void>;
   onConnectHub?: (config: JupyterHubLoginConfig) => Promise<void>;
   onStartRemote: (launch: RemoteJupyterLaunch, name?: string) => Promise<void>;
+  editConfig?: JupyterServerConfig;
+  onSave?: (config: JupyterServerConfig) => Promise<void>;
   onBack?: () => void;
   isConnecting: boolean;
 }
@@ -20,63 +23,122 @@ export function ConnectionPanel({
   onConnect,
   onConnectHub,
   onStartRemote,
+  editConfig,
+  onSave,
   onBack,
   isConnecting,
 }: ConnectionPanelProps) {
-  const [startViaSsh, setStartViaSsh] = useState(false);
-  const [remotePython, setRemotePython] = useState('');
+  const [startViaSsh, setStartViaSsh] = useState(Boolean(editConfig?.remote_launch));
+  const [remotePython, setRemotePython] = useState(editConfig?.remote_launch?.python ?? '');
   const [authMode, setAuthMode] = useState<'token' | 'tljh'>('token');
-  const [name, setName] = useState('');
-  const [url, setUrl] = useState('');
+  const [name, setName] = useState(editConfig?.name ?? '');
+  const [url, setUrl] = useState(editConfig?.base_url ?? '');
   const [token, setToken] = useState('');
+  const [removeToken, setRemoveToken] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [showProxy, setShowProxy] = useState(false);
-  const [proxyType, setProxyType] = useState<ProxyConfig['proxy_type']>('socks5');
-  const [sshAlias, setSshAlias] = useState('');
-  const [proxyHost, setProxyHost] = useState('127.0.0.1');
-  const [proxyPort, setProxyPort] = useState('1080');
+  const savedProxy = editConfig?.proxy;
+  const [showProxy, setShowProxy] = useState(Boolean(savedProxy));
+  const [proxyType, setProxyType] = useState<ProxyConfig['proxy_type']>(savedProxy?.proxy_type ?? 'socks5');
+  const [sshAlias, setSshAlias] = useState(editConfig?.remote_launch?.alias ?? (savedProxy?.proxy_type === 'ssh' ? savedProxy.host : ''));
+  const [proxyHost, setProxyHost] = useState(savedProxy && savedProxy.proxy_type !== 'ssh' ? savedProxy.host : '127.0.0.1');
+  const [proxyPort, setProxyPort] = useState(String(savedProxy?.port || 1080));
+  const [proxyUsername, setProxyUsername] = useState(savedProxy?.username ?? '');
+  const [proxyPassword, setProxyPassword] = useState('');
+  const [removeProxyPassword, setRemoveProxyPassword] = useState(false);
+  const [validationError, setValidationError] = useState<string>();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setValidationError(undefined);
     if (startViaSsh) {
-      if (sshAlias.trim()) {
-        await onStartRemote({ alias: sshAlias.trim(), python: remotePython.trim() }, name.trim() || undefined);
+      const alias = sshAlias.trim();
+      const python = remotePython.trim() || 'python3';
+      if (!/^[A-Za-z0-9_.][A-Za-z0-9_.-]*$/.test(alias)) {
+        setValidationError(t('Enter a valid SSH host alias.'));
+        return;
+      }
+      if (/^-|[\x00-\x1f\x7f]/.test(python)) {
+        setValidationError(t('Enter a valid remote Python executable.'));
+        return;
+      }
+      if (editConfig && onSave) {
+        await onSave({
+          ...editConfig,
+          name: name.trim() || `Jupyter @ ${alias}`,
+          base_url: '',
+          token: undefined,
+          proxy: { proxy_type: 'ssh', host: alias },
+          remote_launch: { alias, python },
+        });
+      } else {
+        await onStartRemote({ alias, python }, name.trim() || undefined);
       }
       return;
     }
-    if (!url.trim()) return;
+
+    let serverUrl: URL;
+    try {
+      serverUrl = new URL(url.trim());
+      if (!['http:', 'https:'].includes(serverUrl.protocol)) throw new Error();
+    } catch {
+      setValidationError(t('Enter a valid HTTP or HTTPS server URL.'));
+      return;
+    }
 
     let proxy: ProxyConfig | undefined;
     if (showProxy) {
-      proxy = proxyType === 'ssh'
-        ? { proxy_type: 'ssh', host: sshAlias.trim() }
-        : { proxy_type: proxyType, host: proxyHost, port: parseInt(proxyPort, 10) };
+      if (proxyType === 'ssh') {
+        if (!/^[A-Za-z0-9_.][A-Za-z0-9_.-]*$/.test(sshAlias.trim())) {
+          setValidationError(t('Enter a valid SSH host alias.'));
+          return;
+        }
+        proxy = { proxy_type: 'ssh', host: sshAlias.trim() };
+      } else {
+        const port = Number(proxyPort);
+        if (!proxyHost.trim() || !Number.isInteger(port) || port < 1 || port > 65535) {
+          setValidationError(t('Enter a proxy host and a port from 1 to 65535.'));
+          return;
+        }
+        proxy = {
+          proxy_type: proxyType,
+          host: proxyHost.trim(),
+          port,
+          username: proxyType === 'socks5' ? proxyUsername.trim() || undefined : undefined,
+          password: proxyType === 'socks5'
+            ? removeProxyPassword
+              ? ''
+              : proxyPassword || (savedProxy?.password ? REDACTED_SERVER_SECRET : undefined)
+            : undefined,
+        };
+      }
     }
 
+    const baseUrl = url.trim().replace(/\/$/, '');
     if (authMode === 'tljh') {
       if (!username.trim() || !password) return;
-      if (onConnectHub) {
-        await onConnectHub({
-          id: crypto.randomUUID(),
-          name: name.trim() || `${username.trim()} @ ${new URL(url).hostname}`,
-          url: url.trim().replace(/\/$/, ''),
-          username: username.trim(),
-          password,
-          proxy,
-        });
-      }
-    } else {
-      const config: JupyterServerConfig = {
+      await onConnectHub?.({
         id: crypto.randomUUID(),
-        name: name.trim() || new URL(url).hostname,
-        base_url: url.trim().replace(/\/$/, ''),
-        token: token.trim() || undefined,
+        name: name.trim() || `${username.trim()} @ ${serverUrl.hostname}`,
+        url: baseUrl,
+        username: username.trim(),
+        password,
         proxy,
-      };
-
-      await onConnect(config);
+      });
+      return;
     }
+
+    const config: JupyterServerConfig = {
+      id: editConfig?.id ?? crypto.randomUUID(),
+      name: name.trim() || serverUrl.hostname,
+      base_url: baseUrl,
+      token: removeToken
+        ? ''
+        : token.trim() || (editConfig?.token ? REDACTED_SERVER_SECRET : undefined),
+      proxy,
+    };
+    if (editConfig && onSave) await onSave(config);
+    else await onConnect(config);
   };
 
   const sshAliasField = (
@@ -100,21 +162,22 @@ export function ConnectionPanel({
   return (
     <div className="connection-panel">
       <div className="panel-header">
-        <h3 className="panel-header__title">{t('Connect to Server')}</h3>
+        <h3 className="panel-header__title">{t(editConfig ? 'Edit server connection' : 'Connect to Server')}</h3>
         {onBack && (
           <button
             type="button"
             className="btn btn-icon btn-ghost"
             onClick={onBack}
-            title={t('Back to Explorer')}
-            aria-label={t('Back to Explorer')}
+            disabled={isConnecting}
+            title={t(editConfig ? 'Cancel' : 'Back to Explorer')}
+            aria-label={t(editConfig ? 'Cancel' : 'Back to Explorer')}
           >
             <ArrowLeft size={14} />
           </button>
         )}
       </div>
 
-      <div className="auth-mode-tabs">
+      {!editConfig && <div className="auth-mode-tabs">
         <button
           type="button"
           className={`auth-mode-tab ${!startViaSsh ? 'active' : ''}`}
@@ -133,7 +196,7 @@ export function ConnectionPanel({
         >
           {t('Start via SSH')}
         </button>
-      </div>
+      </div>}
 
       <form className="connection-form" onSubmit={handleSubmit}>
         <div className="form-group">
@@ -183,8 +246,7 @@ export function ConnectionPanel({
               />
             </div>
 
-            {/* Auth Mode Tabs */}
-            <div className="auth-mode-tabs">
+            {!editConfig && <div className="auth-mode-tabs">
               <button
                 type="button"
                 className={`auth-mode-tab ${authMode === 'token' ? 'active' : ''}`}
@@ -199,7 +261,7 @@ export function ConnectionPanel({
               >
                 {t('TLJH / Login')}
               </button>
-            </div>
+            </div>}
 
             {authMode === 'token' ? (
               <div className="form-group animate-slide-in">
@@ -209,10 +271,18 @@ export function ConnectionPanel({
                 <input
                   id="conn-token"
                   type="password"
-                  placeholder={t('Authentication token')}
+                  placeholder={t(editConfig?.token ? 'Leave blank to keep the saved token' : 'Authentication token')}
+                  autoComplete="new-password"
+                  disabled={removeToken}
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
                 />
+                {editConfig?.token && (
+                  <label className="form-checkbox">
+                    <input type="checkbox" checked={removeToken} onChange={(e) => setRemoveToken(e.target.checked)} />
+                    {t('Remove saved token')}
+                  </label>
+                )}
               </div>
             ) : (
               <div className="tljh-auth-fields animate-slide-in">
@@ -273,6 +343,7 @@ export function ConnectionPanel({
                   >
                     <option value="socks5">SOCKS5 (SSH -D)</option>
                     <option value="http">HTTP</option>
+                    {savedProxy?.proxy_type === 'https' && <option value="https">HTTPS</option>}
                     <option value="ssh">{t('SSH alias')}</option>
                   </select>
                 </div>
@@ -308,14 +379,41 @@ export function ConnectionPanel({
                   </div>
                 )}
                 {proxyType === 'socks5' && (
-                  <p className="form-hint">
-                    {t('For SSH tunnel:')} <code>ssh -D 1080 user@server</code>
-                  </p>
+                  <>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="proxy-username">{t('Proxy username')}</label>
+                      <input id="proxy-username" value={proxyUsername} onChange={(e) => setProxyUsername(e.target.value)} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="proxy-password">{t('Proxy password')}</label>
+                      <input
+                        id="proxy-password"
+                        type="password"
+                        autoComplete="new-password"
+                        placeholder={savedProxy?.password ? t('Leave blank to keep the saved password') : undefined}
+                        disabled={removeProxyPassword}
+                        value={proxyPassword}
+                        onChange={(e) => setProxyPassword(e.target.value)}
+                      />
+                      {savedProxy?.password && (
+                        <label className="form-checkbox">
+                          <input type="checkbox" checked={removeProxyPassword} onChange={(e) => setRemoveProxyPassword(e.target.checked)} />
+                          {t('Remove saved proxy password')}
+                        </label>
+                      )}
+                    </div>
+                    {!editConfig && (
+                      <p className="form-hint">{t('For SSH tunnel:')} <code>ssh -D 1080 user@server</code></p>
+                    )}
+                  </>
                 )}
               </div>
             )}
           </>
         )}
+
+        {editConfig && <p className="form-hint">{t('Changes apply the next time you connect.')}</p>}
+        {validationError && <p role="alert" className="form-hint text-red-400">{validationError}</p>}
 
         <button
           type="submit"
@@ -332,10 +430,10 @@ export function ConnectionPanel({
           {isConnecting ? (
             <span className="inline-flex items-center justify-center gap-1.5">
               <Loader2 size={14} className="animate-spin" />
-              <span>{t('Connecting...')}</span>
+              <span>{t(editConfig ? 'Saving...' : 'Connecting...')}</span>
             </span>
           ) : (
-            t(startViaSsh ? 'Start and connect' : 'Connect')
+            t(editConfig ? 'Save changes' : startViaSsh ? 'Start and connect' : 'Connect')
           )}
         </button>
       </form>

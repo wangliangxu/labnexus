@@ -31,11 +31,11 @@ async fn resolve_and_persist_server_secrets(state: &AppState, config: &mut Jupyt
             .get(&config.id)
             .and_then(|c| c.config.token.clone())
             .filter(|t| t != REDACTED_SECRET && !t.is_empty());
-        if let Some(token) = in_memory {
-            config.token = Some(token);
-        } else if let Ok(Some(token)) =
+        if let Ok(Some(token)) =
             crate::secrets::load_secret(JUPYTER_KEYCHAIN_SERVICE, &token_account)
         {
+            config.token = Some(token);
+        } else if let Some(token) = in_memory {
             config.token = Some(token);
         } else {
             // Never send the redaction placeholder as a real token.
@@ -63,11 +63,11 @@ async fn resolve_and_persist_server_secrets(state: &AppState, config: &mut Jupyt
                 .and_then(|c| c.config.proxy.as_ref())
                 .and_then(|p| p.password.clone())
                 .filter(|p| p != REDACTED_SECRET && !p.is_empty());
-            if let Some(pass) = in_memory {
-                proxy.password = Some(pass);
-            } else if let Ok(Some(pass)) =
+            if let Ok(Some(pass)) =
                 crate::secrets::load_secret(JUPYTER_KEYCHAIN_SERVICE, &proxy_account)
             {
+                proxy.password = Some(pass);
+            } else if let Some(pass) = in_memory {
                 proxy.password = Some(pass);
             } else {
                 // Never send the redaction placeholder as a real password.
@@ -89,29 +89,66 @@ async fn resolve_and_persist_server_secrets(state: &AppState, config: &mut Jupyt
     }
 }
 
+/// Save credentials for the next connection without touching the live client.
+#[tauri::command]
+pub async fn jupyter_save_server_credentials(
+    server_id: String,
+    token: Option<String>,
+    proxy_password: Option<String>,
+) -> Result<(), AppError> {
+    if remote::is_managed(&server_id) || server_id == crate::jupyter::local::LOCAL_SERVER_ID {
+        return Err(AppError::Other(
+            "Managed servers use generated credentials.".into(),
+        ));
+    }
+    let mut changes = Vec::new();
+    for (kind, value) in [("token", token), ("proxy", proxy_password)] {
+        if let Some(value) = value.filter(|value| value != REDACTED_SECRET) {
+            let account = format!("{kind}:{server_id}");
+            let previous = crate::secrets::load_secret(JUPYTER_KEYCHAIN_SERVICE, &account)
+                .map_err(AppError::Other)?;
+            changes.push((account, value, previous));
+        }
+    }
+    for (index, (account, value, _)) in changes.iter().enumerate() {
+        if let Err(error) = crate::secrets::save_secret(JUPYTER_KEYCHAIN_SERVICE, account, value) {
+            for (account, _, previous) in &changes[..index] {
+                if let Err(error) = crate::secrets::save_secret(
+                    JUPYTER_KEYCHAIN_SERVICE,
+                    account,
+                    previous.as_deref().unwrap_or_default(),
+                ) {
+                    log::error!("Failed to restore a Jupyter credential: {error}");
+                }
+            }
+            return Err(AppError::Other(error));
+        }
+    }
+    Ok(())
+}
+
 /// Connect to a remote Jupyter server.
 #[tauri::command]
 pub async fn jupyter_connect(
     state: State<'_, AppState>,
     app: AppHandle,
-    config: JupyterServerConfig,
+    mut config: JupyterServerConfig,
 ) -> Result<ServerConnection, AppError> {
     if remote::is_managed(&config.id) || config.remote_launch.is_some() {
         return Err(AppError::JupyterConnection(
             "Start this managed Jupyter server through its SSH launch profile.".into(),
         ));
     }
+    resolve_and_persist_server_secrets(&state, &mut config).await;
     connect_server(state, app, config, None).await
 }
 
 async fn connect_server(
     state: State<'_, AppState>,
     app: AppHandle,
-    mut config: JupyterServerConfig,
+    config: JupyterServerConfig,
     ssh: Option<Arc<SshTunnel>>,
 ) -> Result<ServerConnection, AppError> {
-    resolve_and_persist_server_secrets(&state, &mut config).await;
-
     // Emit connecting status
     let _ = app.emit(
         "jupyter:connection",
@@ -268,6 +305,7 @@ pub async fn jupyter_start_remote(
     app: AppHandle,
     launch: RemoteJupyterLaunch,
     name: Option<String>,
+    server_id: Option<String>,
 ) -> Result<ServerConnection, AppError> {
     let launch = RemoteJupyterLaunch {
         alias: launch.alias.trim().to_string(),
@@ -276,7 +314,11 @@ pub async fn jupyter_start_remote(
             executable => executable.to_string(),
         },
     };
-    let id = remote::server_id(&launch);
+    let id = match server_id {
+        Some(id) if remote::is_managed(&id) => id,
+        Some(_) => return Err(AppError::Other("Invalid managed SSH server ID.".into())),
+        None => remote::server_id(&launch),
+    };
     let _operation = state.remote_jupyter_operations.lock().await;
 
     let existing = state
@@ -292,7 +334,8 @@ pub async fn jupyter_start_remote(
             ))
         });
     if let Some((ssh, client, connection)) = existing {
-        if ssh.is_running().await
+        if connection.config.remote_launch.as_ref() == Some(&launch)
+            && ssh.is_running().await
             && matches!(
                 tokio::time::timeout(std::time::Duration::from_secs(2), client.get_server_info())
                     .await,
@@ -306,7 +349,8 @@ pub async fn jupyter_start_remote(
         ssh.stop_remote().await;
     }
 
-    let (config, ssh) = remote::launch(launch, name).await?;
+    let (mut config, ssh) = remote::launch(launch, name).await?;
+    config.id = id.clone();
     let result = connect_server(state.clone(), app, config, Some(ssh.clone())).await;
     match result {
         Ok(connection) => {
@@ -327,7 +371,7 @@ pub async fn jupyter_start_remote(
 pub async fn jupyter_hub_login(
     state: State<'_, AppState>,
     app: AppHandle,
-    req: JupyterHubLoginRequest,
+    mut req: JupyterHubLoginRequest,
 ) -> Result<ServerConnection, AppError> {
     let mut base_url = req.url.trim().trim_end_matches('/').to_string();
     if base_url.ends_with("/hub") {
@@ -352,8 +396,20 @@ pub async fn jupyter_hub_login(
         }),
     );
 
-    let ssh = SshTunnel::for_proxy(req.proxy.as_ref()).await?;
-    let http = build_http_client(req.proxy.as_ref(), ssh.as_deref())?;
+    let mut config = JupyterServerConfig {
+        id: id.clone(),
+        name: req
+            .name
+            .take()
+            .unwrap_or_else(|| format!("{} @ {}", req.username, base_url)),
+        base_url: base_url.clone(),
+        token: None,
+        proxy: req.proxy.take(),
+        remote_launch: None,
+    };
+    resolve_and_persist_server_secrets(&state, &mut config).await;
+    let ssh = SshTunnel::for_proxy(config.proxy.as_ref()).await?;
+    let http = build_http_client(config.proxy.as_ref(), ssh.as_deref())?;
 
     // Step 1: Request token (JupyterHub 2.0+ standard endpoint first, then legacy 1.x fallback)
     let token_url_v2 = format!("{}/hub/api/users/{}/tokens", base_url, req.username);
@@ -508,18 +564,9 @@ pub async fn jupyter_hub_login(
         }
     }
 
-    let final_url = format!("{}{}", base_url, server_path.trim_end_matches('/'));
-
-    let config = JupyterServerConfig {
-        id: id.clone(),
-        name: req
-            .name
-            .unwrap_or_else(|| format!("{} @ {}", req.username, base_url)),
-        base_url: final_url,
-        token: Some(token),
-        proxy: req.proxy,
-        remote_launch: None,
-    };
+    config.base_url = format!("{}{}", base_url, server_path.trim_end_matches('/'));
+    config.token = Some(token);
+    resolve_and_persist_server_secrets(&state, &mut config).await;
 
     // Connect using normal jupyter_connect flow
     connect_server(state, app, config, ssh).await
