@@ -53,12 +53,13 @@ try {
   const noop = () => {};
   const renderToolbar = () => renderToStaticMarkup(createElement(NotebookToolbar, {
     notebookName: 'science.ipynb', kernelName: 'Python 3', status: 'idle', isDirty: true,
-    isSaving: false, isConnecting: false, canRun: true, activeCellType: 'code',
+    isSaving: false, isConnecting: false, canRun: true, activeCellType: 'code', zoom: 120, onZoom: noop,
     onSave: noop, onAddCode: noop, onAddMarkdown: noop, onRunSelected: noop, onRunAll: noop,
     onInterrupt: noop, onRestart: noop, onConnect: noop, onActiveCellTypeChange: noop,
   }));
   const chinese = renderToolbar();
   assert(chinese.includes('全部运行') && chinese.includes('保存 Notebook') && chinese.includes('空闲'), 'toolbar Chinese controls and statuses');
+  assert(chinese.includes('重置 Notebook 缩放（当前 120%）') && chinese.includes('aria-label="放大"'), 'zoom controls are localized');
   assert(chinese.includes('value="code"') && chinese.includes('science.ipynb'), 'translation preserves protocol values and user filenames');
   saveGlobalSettings({ ...loadGlobalSettings(), language: 'en' });
   const english = renderToolbar();

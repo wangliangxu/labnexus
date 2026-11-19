@@ -472,3 +472,38 @@ button.nb-toc-tree__twisty:hover {
   content-visibility: auto;
   contain-intrinsic-size: auto 160px;
 }
+
+.nb-zoom-controls {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 1px;
+  padding-left: 4px;
+  border-left: 1px solid var(--color-nb-toolbar-border);
+}
+
+.nb-zoom-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--color-nb-text-secondary);
+  font-size: 12px;
+}
+
+.nb-zoom-controls .nb-zoom-controls__level {
+  min-width: 48px;
+  font-variant-numeric: tabular-nums;
+}
+
+.nb-zoom-controls button:not(:disabled):hover {
+  background: var(--color-nb-btn-hover);
+}
+
+.nb-zoom-controls button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

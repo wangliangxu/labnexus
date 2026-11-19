@@ -3,6 +3,7 @@ import React from 'react';
 import {
   Save,
   Plus,
+  Minus,
   Play,
   Square,
   RotateCcw,
@@ -13,6 +14,7 @@ import {
   Eraser,
 } from 'lucide-react';
 import type { CellType, KernelStatus } from '../../types/jupyter';
+import { MAX_NOTEBOOK_ZOOM, MIN_NOTEBOOK_ZOOM, type NotebookZoomAction } from './notebookZoom';
 
 interface NotebookToolbarProps {
   notebookName: string;
@@ -23,6 +25,8 @@ interface NotebookToolbarProps {
   isConnecting: boolean;
   canRun: boolean;
   activeCellType: CellType;
+  zoom: number;
+  onZoom: (action: NotebookZoomAction) => void;
   onSave: () => void;
   onAddCode: () => void;
   onAddMarkdown: () => void;
@@ -85,6 +89,8 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   isConnecting,
   canRun,
   activeCellType,
+  zoom,
+  onZoom,
   onSave,
   onAddCode,
   onAddMarkdown,
@@ -149,7 +155,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
 
   return (
     <div
-      className="sticky top-0 z-20 max-[760px]:flex-wrap"
+      className="sticky top-0 z-20 flex-wrap"
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -270,6 +276,36 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
             <span>{t('Clear Outputs')}</span>
           </button>
         )}
+      </div>
+
+      <div role="group" aria-label={t('Notebook zoom')} className="nb-zoom-controls">
+        <button
+          type="button"
+          aria-label={t('Zoom out')}
+          title={t('Zoom out')}
+          disabled={zoom <= MIN_NOTEBOOK_ZOOM}
+          onClick={() => onZoom('out')}
+        >
+          <Minus size={14} />
+        </button>
+        <button
+          type="button"
+          aria-label={t('Reset Notebook zoom ({zoom}%)', { zoom: Math.round(zoom) })}
+          title={t('Reset Notebook zoom ({zoom}%)', { zoom: Math.round(zoom) })}
+          onClick={() => onZoom('reset')}
+          className="nb-zoom-controls__level"
+        >
+          {Math.round(zoom)}%
+        </button>
+        <button
+          type="button"
+          aria-label={t('Zoom in')}
+          title={t('Zoom in')}
+          disabled={zoom >= MAX_NOTEBOOK_ZOOM}
+          onClick={() => onZoom('in')}
+        >
+          <Plus size={14} />
+        </button>
       </div>
 
       {/* Spacer */}

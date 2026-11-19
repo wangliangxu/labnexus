@@ -1,6 +1,7 @@
 import { t } from '../../i18n';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
+import { EditorView } from '@codemirror/view';
 import { Loader2, AlertTriangle, FileCode } from 'lucide-react';
 import type { Cell, CellType, CellOutput } from '../../types/jupyter';
 import type { AgentChatContext } from '../../types/agent';
@@ -11,6 +12,15 @@ import {
 } from '../../services/tauriIpc';
 import { useKernel } from '../../hooks/useKernel';
 import { NotebookToolbar } from './NotebookToolbar';
+import {
+  DEFAULT_NOTEBOOK_ZOOM,
+  NOTEBOOK_ZOOM_STEP,
+  NotebookPinchContext,
+  clampNotebookZoom,
+  listenForNotebookPinch,
+  notebookZoomShortcut,
+  type NotebookZoomAction,
+} from './notebookZoom';
 import { CellEditor } from './CellEditor';
 import {
   createNotebookCell,
@@ -94,6 +104,8 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isDirty, setIsDirty] = useState<boolean>(false);
+  const [notebookZoom, setNotebookZoom] = useState(DEFAULT_NOTEBOOK_ZOOM);
+  const notebookRef = useRef<HTMLDivElement>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeCellIndex, setActiveCellIndex] = useState<number>(0);
   const [executingCellIds, setExecutingCellIds] = useState<string[]>([]);
@@ -661,6 +673,46 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleSave, isActiveTab]);
 
+  const adjustNotebookZoom = useCallback((action: NotebookZoomAction) => {
+    setNotebookZoom((current) => {
+      if (action === 'reset') return DEFAULT_NOTEBOOK_ZOOM;
+      const step = action === 'in' ? NOTEBOOK_ZOOM_STEP : -NOTEBOOK_ZOOM_STEP;
+      return clampNotebookZoom(Math.round(current) + step);
+    });
+  }, []);
+
+  const applyPinchZoom = useCallback((factor: number) => {
+    setNotebookZoom((current) => clampNotebookZoom(current * factor));
+  }, []);
+
+  useEffect(() => {
+    const notebook = notebookRef.current;
+    if (!notebook || !isActiveTab) return;
+    const stopListening = listenForNotebookPinch(notebook, applyPinchZoom);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || document.querySelector('dialog[open]')) return;
+      const target = event.target;
+      if (target !== document.body && !(target instanceof Node && notebook.contains(target))) return;
+      const action = notebookZoomShortcut(event);
+      if (!action) return;
+      event.preventDefault();
+      adjustNotebookZoom(action);
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      stopListening();
+      window.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [adjustNotebookZoom, applyPinchZoom, isActiveTab, isLoading, loadError]);
+
+  useEffect(() => {
+    if (!isActiveTab) return;
+    // CodeMirror caches geometry that can change even when CSS layout dimensions stay the same.
+    notebookRef.current?.querySelectorAll<HTMLElement>('.cm-editor').forEach((element) => {
+      EditorView.findFromDOM(element)?.requestMeasure();
+    });
+  }, [notebookZoom, isActiveTab]);
+
   // Cell operations
   const handleRunCell = async (
     index: number,
@@ -900,7 +952,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   }
 
   return (
-    <div className="flex flex-1 flex-col min-w-0 min-h-0 overflow-hidden bg-nb-shell text-nb-text">
+    <div ref={notebookRef} className="flex flex-1 flex-col min-w-0 min-h-0 overflow-hidden bg-nb-shell text-nb-text">
       <NotebookToolbar
         notebookName={notebookName}
         kernelName={nbMetadata?.kernelspec?.display_name || kernel.kernel?.name || 'Python 3'}
@@ -910,6 +962,8 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         isConnecting={kernel.isConnecting}
         canRun={canRunCode}
         activeCellType={activeCellType}
+        zoom={notebookZoom}
+        onZoom={adjustNotebookZoom}
         onSave={handleSave}
         onAddCode={() => handleAddCell('code')}
         onAddMarkdown={() => handleAddCell('markdown')}
@@ -934,78 +988,83 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         </div>
       )}
 
-      <div className="flex-1 min-h-0 overflow-auto">
-        <div className="w-full max-w-[1180px] mx-auto px-7 pt-[22px] max-[760px]:px-2.5 max-[760px]:pt-3.5">
-          {cells.map((cell, idx) => {
-            const cellId = cell.id || `cell-${idx}`;
-            return (
-              <div
-                key={cellId}
-                style={{ scrollMarginTop: '48px' }}
-                ref={(element) => {
-                  if (element) {
-                    cellElementsRef.current.set(cellId, element);
-                  } else {
-                    cellElementsRef.current.delete(cellId);
-                  }
-                }}
-              >
-                <CellEditor
-                  cell={cell}
-                  index={idx}
-                  isActive={idx === activeCellIndex}
-                  isExecuting={Boolean(cell.id && executingCellIds.includes(cell.id))}
-                  canRun={canRunCode}
-                  runCurrentCellShortcut={runCurrentCellShortcut}
-                  onSelect={() => handleSelectCell(idx)}
-                  onChange={(newSource) =>
-                    handleCellSourceChange(cell.id || '', idx, newSource)
-                  }
-                  onAddCell={(type) => handleAddCell(type, idx)}
-                  onRun={() => {
-                    void handleRunCell(idx, 'stay');
+      <NotebookPinchContext.Provider value={isActiveTab ? applyPinchZoom : null}>
+        <div className="flex-1 min-h-0 overflow-auto">
+          <div
+            className="w-full max-w-[1180px] mx-auto px-7 pt-[22px] max-[760px]:px-2.5 max-[760px]:pt-3.5"
+            style={{ zoom: notebookZoom / 100 }}
+          >
+            {cells.map((cell, idx) => {
+              const cellId = cell.id || `cell-${idx}`;
+              return (
+                <div
+                  key={cellId}
+                  style={{ scrollMarginTop: '48px' }}
+                  ref={(element) => {
+                    if (element) {
+                      cellElementsRef.current.set(cellId, element);
+                    } else {
+                      cellElementsRef.current.delete(cellId);
+                    }
                   }}
-                  onRunAndAdvance={() => {
-                    void handleRunCell(idx, 'advance');
-                  }}
-                  onRunAndInsert={() => {
-                    void handleRunCell(idx, 'insert');
-                  }}
-                  onDelete={() => handleDeleteCell(idx)}
-                  onMoveUp={() => handleMoveCell(idx, 'up')}
-                  onMoveDown={() => handleMoveCell(idx, 'down')}
-                  onCursorChange={(line) => handleCellCursorChange(idx, line)}
-                  canMoveUp={idx > 0}
-                  canMoveDown={idx < cells.length - 1}
-                />
-              </div>
-            );
-          })}
-
-          {cells.length === 0 && (
-            <div className="flex flex-col items-center justify-center min-h-[220px] gap-3 border border-dashed border-nb-cell-border bg-nb-cell text-nb-text-secondary">
-              <FileCode size={40} />
-              <span>{t('This notebook has no cells yet.')}</span>
-              <div className="flex flex-wrap justify-center gap-1.5">
-                <button
-                  onClick={() => handleAddCell('code')}
-                  className={nbBtnPrimary}
                 >
-                  {t('+ Add Code Cell')}
-                </button>
-                <button
-                  onClick={() => handleAddCell('markdown')}
-                  className={nbBtn}
-                >
-                  {t('+ Add Markdown Cell')}
-                </button>
-              </div>
-            </div>
-          )}
+                  <CellEditor
+                    cell={cell}
+                    index={idx}
+                    isActive={idx === activeCellIndex}
+                    isExecuting={Boolean(cell.id && executingCellIds.includes(cell.id))}
+                    canRun={canRunCode}
+                    runCurrentCellShortcut={runCurrentCellShortcut}
+                    onSelect={() => handleSelectCell(idx)}
+                    onChange={(newSource) =>
+                      handleCellSourceChange(cell.id || '', idx, newSource)
+                    }
+                    onAddCell={(type) => handleAddCell(type, idx)}
+                    onRun={() => {
+                      void handleRunCell(idx, 'stay');
+                    }}
+                    onRunAndAdvance={() => {
+                      void handleRunCell(idx, 'advance');
+                    }}
+                    onRunAndInsert={() => {
+                      void handleRunCell(idx, 'insert');
+                    }}
+                    onDelete={() => handleDeleteCell(idx)}
+                    onMoveUp={() => handleMoveCell(idx, 'up')}
+                    onMoveDown={() => handleMoveCell(idx, 'down')}
+                    onCursorChange={(line) => handleCellCursorChange(idx, line)}
+                    canMoveUp={idx > 0}
+                    canMoveDown={idx < cells.length - 1}
+                  />
+                </div>
+              );
+            })}
 
-          <div className="h-20" />
+            {cells.length === 0 && (
+              <div className="flex flex-col items-center justify-center min-h-[220px] gap-3 border border-dashed border-nb-cell-border bg-nb-cell text-nb-text-secondary">
+                <FileCode size={40} />
+                <span>{t('This notebook has no cells yet.')}</span>
+                <div className="flex flex-wrap justify-center gap-1.5">
+                  <button
+                    onClick={() => handleAddCell('code')}
+                    className={nbBtnPrimary}
+                  >
+                    {t('+ Add Code Cell')}
+                  </button>
+                  <button
+                    onClick={() => handleAddCell('markdown')}
+                    className={nbBtn}
+                  >
+                    {t('+ Add Markdown Cell')}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="h-20" />
+          </div>
         </div>
-      </div>
+      </NotebookPinchContext.Provider>
     </div>
   );
 };

@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { t } from '../../i18n';
+import { listenForNotebookPinch, NotebookPinchContext } from './notebookZoom';
 
 /**
  * Renders untrusted notebook `text/html` output inside a sandboxed iframe.
@@ -56,6 +57,12 @@ export const SandboxedHtmlOutput: React.FC<{ html: string; className?: string }>
   className,
 }) => {
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const onPinch = useContext(NotebookPinchContext);
+  const [frameDocument, setFrameDocument] = useState<Document | null>(null);
+
+  useEffect(() => {
+    if (frameDocument && onPinch) return listenForNotebookPinch(frameDocument, onPinch);
+  }, [frameDocument, onPinch]);
   const [height, setHeight] = useState(24);
 
   const srcDoc = useMemo(
@@ -68,7 +75,8 @@ export const SandboxedHtmlOutput: React.FC<{ html: string; className?: string }>
 
   const handleLoad = useCallback(() => {
     cleanupRef.current?.();
-    const frameDoc = frameRef.current?.contentDocument;
+    const frameDoc = frameRef.current?.contentDocument ?? null;
+    setFrameDocument(frameDoc);
     if (!frameDoc) return;
 
     applyTheme(frameDoc);
