@@ -10,7 +10,8 @@ import { LOCAL_JUPYTER_SERVER_ID, type JupyterServerConfig } from './types/jupyt
 import { lazy, Suspense, useState, useMemo, useRef, useCallback, useEffect, type SetStateAction } from 'react';
 import {
   Plus,
-  RefreshCw,
+  Plug,
+  Unplug,
   Pencil,
   X,
   ChevronDown,
@@ -556,9 +557,10 @@ function App() {
                             reconnect(server.config.id);
                           }}
                           title={t('Reconnect')}
+                          aria-label={t('Reconnect')}
                           disabled={isConnecting}
                         >
-                          <RefreshCw size={12} />
+                          <Plug size={12} />
                         </button>
                       )}
                       <button
@@ -569,7 +571,7 @@ function App() {
                           e.stopPropagation();
                           if (editingConfig?.id === server.config.id) setEditingConfig(null);
                           if (server.status === 'connected') {
-                            disconnect(server.config.id);
+                            void disconnect(server.config.id);
                           } else {
                             void forget(server.config.id);
                           }
@@ -584,7 +586,7 @@ function App() {
                             : t('Forget')
                         }
                       >
-                        <X size={12} />
+                        {server.status === 'connected' ? <Unplug size={12} /> : <X size={12} />}
                       </button>
                     </div>
                   </div>
