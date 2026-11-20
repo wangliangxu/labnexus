@@ -15,7 +15,7 @@ import { NotebookToolbar } from './NotebookToolbar';
 import {
   DEFAULT_NOTEBOOK_ZOOM,
   NOTEBOOK_ZOOM_STEP,
-  NotebookPinchContext,
+  NotebookZoomContext,
   clampNotebookZoom,
   listenForNotebookPinch,
   notebookZoomShortcut,
@@ -988,7 +988,10 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         </div>
       )}
 
-      <NotebookPinchContext.Provider value={isActiveTab ? applyPinchZoom : null}>
+      <NotebookZoomContext.Provider value={{
+        scale: notebookZoom / 100,
+        onPinch: isActiveTab ? applyPinchZoom : null,
+      }}>
         <div className="flex-1 min-h-0 overflow-auto">
           <div
             className="w-full max-w-[1180px] mx-auto px-7 pt-[22px] max-[760px]:px-2.5 max-[760px]:pt-3.5"
@@ -1064,7 +1067,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
             <div className="h-20" />
           </div>
         </div>
-      </NotebookPinchContext.Provider>
+      </NotebookZoomContext.Provider>
     </div>
   );
 };

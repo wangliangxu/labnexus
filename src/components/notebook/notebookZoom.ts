@@ -6,7 +6,10 @@ export const MAX_NOTEBOOK_ZOOM = 200;
 export const NOTEBOOK_ZOOM_STEP = 10;
 
 export type NotebookZoomAction = 'in' | 'out' | 'reset';
-export const NotebookPinchContext = createContext<((factor: number) => void) | null>(null);
+export const NotebookZoomContext = createContext<{
+  scale: number;
+  onPinch: ((factor: number) => void) | null;
+}>({ scale: 1, onPinch: null });
 
 export function clampNotebookZoom(zoom: number): number {
   return Math.min(MAX_NOTEBOOK_ZOOM, Math.max(MIN_NOTEBOOK_ZOOM, zoom));

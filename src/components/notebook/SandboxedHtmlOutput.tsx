@@ -1,7 +1,7 @@
-import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { t } from '../../i18n';
-import { listenForNotebookPinch, NotebookPinchContext } from './notebookZoom';
+import { listenForNotebookPinch, NotebookZoomContext } from './notebookZoom';
 
 /**
  * Renders untrusted notebook `text/html` output inside a sandboxed iframe.
@@ -16,7 +16,7 @@ const THEME_VARIABLES = [
   '--text-primary',
   '--text-secondary',
   '--text-link',
-  '--bg-editor',
+  '--color-nb-cell',
   '--bg-panel',
   '--bg-hover',
   '--border-subtle',
@@ -24,9 +24,13 @@ const THEME_VARIABLES = [
 ];
 
 const FRAME_STYLES = `
-  :root { color-scheme: light dark; }
-  html, body { margin: 0; padding: 0; background: transparent; }
+  html, body { margin: 0; padding: 0; }
+  html {
+    overflow: hidden;
+    background: var(--color-nb-cell, Canvas);
+  }
   body {
+    display: flow-root;
     color: var(--text-primary, #1f2328);
     font: 12px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     overflow-x: auto;
@@ -35,6 +39,8 @@ const FRAME_STYLES = `
   a { color: var(--text-link, #0969da); }
   img, svg { max-width: 100%; height: auto; }
   table { border-collapse: collapse; font-variant-numeric: tabular-nums; margin: 2px 0; }
+  table.dataframe { max-width: 100%; }
+  .dataframe th, .dataframe td { min-width: 4ch; overflow-wrap: anywhere; }
   th, td { border: 1px solid var(--border-subtle, #d0d7de); padding: 3px 8px; text-align: right; }
   th { font-weight: 600; background: var(--bg-panel, #f6f8fa); }
   tbody tr:nth-child(odd) td { background: color-mix(in srgb, var(--bg-hover, #f6f8fa) 50%, transparent); }
@@ -57,13 +63,26 @@ export const SandboxedHtmlOutput: React.FC<{ html: string; className?: string }>
   className,
 }) => {
   const frameRef = useRef<HTMLIFrameElement>(null);
-  const onPinch = useContext(NotebookPinchContext);
+  const { scale, onPinch } = useContext(NotebookZoomContext);
   const [frameDocument, setFrameDocument] = useState<Document | null>(null);
 
   useEffect(() => {
     if (frameDocument && onPinch) return listenForNotebookPinch(frameDocument, onPinch);
   }, [frameDocument, onPinch]);
-  const [height, setHeight] = useState(24);
+  const [height, setHeight] = useState(0);
+
+  const measure = useCallback((body: HTMLElement) => {
+    // The document's scroll height is at least the current iframe height.
+    // Measuring the body lets short outputs and rewrapped tables shrink again.
+    setHeight(Math.ceil(body.getBoundingClientRect().height));
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!frameDocument) return;
+    // Zoom the output inside its document so the iframe itself has a 1:1 viewport.
+    frameDocument.body.style.zoom = String(scale);
+    measure(frameDocument.body);
+  }, [frameDocument, measure, scale]);
 
   const srcDoc = useMemo(
     () =>
@@ -80,14 +99,9 @@ export const SandboxedHtmlOutput: React.FC<{ html: string; className?: string }>
     if (!frameDoc) return;
 
     applyTheme(frameDoc);
-    const measure = () => {
-      const next = Math.ceil(frameDoc.documentElement.scrollHeight);
-      setHeight((prev) => (prev === next ? prev : next));
-    };
-    measure();
-
-    const resizeObserver = new ResizeObserver(measure);
-    resizeObserver.observe(frameDoc.body);
+    const resizeObserver = new ResizeObserver(() => measure(frameDoc.body));
+    // Observe the border box to include any horizontal scrollbar.
+    resizeObserver.observe(frameDoc.body, { box: 'border-box' });
 
     const themeObserver = new MutationObserver(() => applyTheme(frameDoc));
     themeObserver.observe(document.documentElement, {
@@ -111,7 +125,7 @@ export const SandboxedHtmlOutput: React.FC<{ html: string; className?: string }>
       themeObserver.disconnect();
       frameDoc.removeEventListener('click', handleClick);
     };
-  }, []);
+  }, [measure]);
 
   useEffect(() => () => cleanupRef.current?.(), []);
 
@@ -123,7 +137,14 @@ export const SandboxedHtmlOutput: React.FC<{ html: string; className?: string }>
       srcDoc={srcDoc}
       onLoad={handleLoad}
       className={className}
-      style={{ width: '100%', height, border: 0, display: 'block', background: 'transparent' }}
+      style={{
+        width: '100%',
+        height,
+        border: 0,
+        display: 'block',
+        background: 'var(--color-nb-cell)',
+        zoom: 1 / scale,
+      }}
     />
   );
 };
