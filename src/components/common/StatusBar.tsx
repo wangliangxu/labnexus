@@ -4,6 +4,7 @@ import { t, localizeStatus } from '../../i18n';
  */
 
 import { Sparkles, Cpu, Server } from 'lucide-react';
+import { version as appVersion } from '../../../package.json';
 import type { ServerConnection } from '../../types/jupyter';
 import './StatusBar.css';
 
@@ -86,7 +87,7 @@ export function StatusBar({
           <span>{t('AI Agent')}</span>
         </button>
 
-        <span className="statusbar__brand">LabNexus v0.5</span>
+        <span className="statusbar__brand">LabNexus v{appVersion}</span>
       </div>
     </>
   );
