@@ -1,5 +1,4 @@
-import { t } from './i18n';
-import { useLocale } from './i18n';
+import { localizeStatus, t, useLocale } from './i18n';
 /**
  * LabNexus — Main application entry point.
  * Integrated with multi-tab workbench, remote terminals, dynamic theme system, and AI Agent.
@@ -517,7 +516,12 @@ function App() {
                       }
                     }}
                   >
-                    <span className={`status-dot ${server.status}`} />
+                    <span
+                      className={`status-dot ${server.status}`}
+                      role="img"
+                      aria-label={localizeStatus(server.status)}
+                      title={server.error_message ?? localizeStatus(server.status)}
+                    />
                     <div className="server-item__info">
                       <div className="server-item__name truncate">
                         {server.config.name}

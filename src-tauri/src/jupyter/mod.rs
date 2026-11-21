@@ -5,6 +5,7 @@
 //! - `types` — Type definitions for Notebook, cells, outputs, and protocol messages
 
 pub mod client;
+pub mod health;
 pub mod terminal_ws;
 pub mod types;
 pub mod ws;

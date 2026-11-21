@@ -8,6 +8,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::error::AppError;
 use crate::jupyter::client::{build_http_client, JupyterClient};
+use crate::jupyter::health::ConnectionMonitor;
 use crate::jupyter::types::*;
 use crate::jupyter::{remote, ssh::SshTunnel};
 use crate::state::{AppState, ManagedConnection};
@@ -183,16 +184,7 @@ async fn connect_server(
 
     // Test the connection by fetching server info
     let server_info = match client.get_server_info().await {
-        Ok(info) => {
-            let _ = app.emit(
-                "jupyter:connection",
-                serde_json::json!({
-                    "server_id": &config.id,
-                    "status": "connected",
-                }),
-            );
-            Some(info)
-        }
+        Ok(info) => Some(info),
         Err(e) => {
             let error_msg = e.to_string();
             let _ = app.emit(
@@ -216,6 +208,7 @@ async fn connect_server(
                     server_info: None,
                     config: config.clone(),
                     ssh: None,
+                    monitor: None,
                     error_message: Some(error_msg.clone()),
                 },
             );
@@ -224,31 +217,29 @@ async fn connect_server(
         }
     };
 
-    // Store the successful connection
-    let connection_info = ServerConnection {
-        config: config.clone(),
+    let mut connection = ManagedConnection {
+        client: Some(client),
         status: ConnectionStatus::Connected,
-        server_info: server_info.clone(),
+        server_info,
+        config,
+        ssh,
+        monitor: None,
         error_message: None,
     };
-
+    let connection_info = connection.info();
+    let id = connection.config.id.clone();
     let mut connections = state.connections.write().await;
-    connections.insert(
-        config.id.clone(),
-        ManagedConnection {
-            client: Some(client),
-            status: ConnectionStatus::Connected,
-            server_info,
-            config: config.clone(),
-            ssh,
-            error_message: None,
-        },
+    connection.monitor = ConnectionMonitor::start(&state, app.clone(), &connection);
+    connections.insert(id.clone(), connection);
+    let _ = app.emit(
+        "jupyter:connection",
+        serde_json::json!({ "server_id": &id, "status": "connected" }),
     );
 
     // Set as active server if it's the first connection
     let mut active_id = state.active_server_id.write().await;
     if active_id.is_none() {
-        *active_id = Some(config.id.clone());
+        *active_id = Some(id);
     }
 
     Ok(connection_info)
@@ -342,6 +333,11 @@ pub async fn jupyter_start_remote(
                 Ok(Ok(_))
             )
         {
+            let connection = if connection.status == ConnectionStatus::Disconnected {
+                connect_server(state.clone(), app, connection.config, Some(ssh)).await?
+            } else {
+                connection
+            };
             *state.active_server_id.write().await = Some(id);
             return Ok(connection);
         }

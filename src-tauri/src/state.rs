@@ -9,6 +9,7 @@ use tokio::sync::{oneshot, Mutex, RwLock};
 
 use crate::error::AppError;
 use crate::jupyter::client::JupyterClient;
+use crate::jupyter::health::ConnectionMonitor;
 use crate::jupyter::ssh::SshTunnel;
 use crate::jupyter::terminal_ws::TerminalWsManager;
 use crate::jupyter::types::*;
@@ -52,6 +53,7 @@ pub struct ManagedConnection {
     /// The server configuration used to create this connection.
     pub config: JupyterServerConfig,
     pub ssh: Option<Arc<SshTunnel>>,
+    pub monitor: Option<ConnectionMonitor>,
     /// Error message if connection failed.
     pub error_message: Option<String>,
 }
@@ -182,7 +184,10 @@ impl AppState {
     /// Get a specific server's client by ID.
     pub async fn get_client(&self, server_id: &str) -> Option<JupyterClient> {
         let connections = self.connections.read().await;
-        connections.get(server_id).and_then(|c| c.client.clone())
+        connections
+            .get(server_id)
+            .filter(|connection| connection.status != ConnectionStatus::Disconnected)
+            .and_then(|connection| connection.client.clone())
     }
 
     /// Get connection info for all servers (serializable for frontend).
