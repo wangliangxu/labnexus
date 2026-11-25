@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import type { Cell, CellType } from '../../types/jupyter';
 import { CellOutputView } from './CellOutputView';
-import { renderSanitizedMarkdown } from '../../utils/sanitizeHtml';
+import { renderNotebookMarkdown } from './notebookMarkdown';
 
 /* ── Shared button class tokens ──────────────────────────────────── */
 const cellBtn =
@@ -160,7 +160,7 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
     if (!isMarkdown) return '';
     const raw = draftSource.trim();
     if (!raw) return `<p class="nb-md-placeholder">${t('Double-click to edit…')}</p>`;
-    return renderSanitizedMarkdown(raw, { allowImages: true, allowSvg: true, allowStyles: false });
+    return renderNotebookMarkdown(raw);
   }, [isMarkdown, draftSource, locale]);
 
   const extensions = useMemo(() => {

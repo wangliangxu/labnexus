@@ -1,3 +1,5 @@
+@import "katex/dist/katex.min.css";
+
 /* Notebook colors and CodeMirror share the global light/dark palette. */
 
 /* Cell actions overlay the top-right corner without reserving layout space. */
@@ -310,6 +312,12 @@ button.nb-toc-tree__twisty:hover {
   color: var(--color-nb-text);
   word-wrap: break-word;
   min-height: 28px;
+}
+
+.nb-markdown-rendered .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 0.15em;
 }
 
 /* Placeholder text */

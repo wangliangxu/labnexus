@@ -2,7 +2,8 @@ import { t } from '../../i18n';
 import React, { useState } from 'react';
 import { Check, ChevronDown, ChevronUp, Copy } from 'lucide-react';
 import type { CellOutput } from '../../types/jupyter';
-import { renderSanitizedMarkdown, sanitizeRichHtml } from '../../utils/sanitizeHtml';
+import { sanitizeRichHtml } from '../../utils/sanitizeHtml';
+import { renderNotebookMarkdown } from './notebookMarkdown';
 import { SandboxedHtmlOutput } from './SandboxedHtmlOutput';
 
 interface CellOutputViewProps {
@@ -155,11 +156,7 @@ export const CellOutputView: React.FC<CellOutputViewProps> = ({ outputs }) => {
           }
 
           if (data['text/markdown']) {
-            const mdHtml = renderSanitizedMarkdown(dataToString(data['text/markdown']), {
-              allowImages: true,
-              allowSvg: true,
-              allowStyles: false,
-            });
+            const mdHtml = renderNotebookMarkdown(dataToString(data['text/markdown']));
             return (
               <div
                 key={index}

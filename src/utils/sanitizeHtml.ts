@@ -4,6 +4,7 @@ import { marked } from 'marked';
 export interface SanitizeHtmlOptions {
   allowImages?: boolean;
   allowSvg?: boolean;
+  allowMathMl?: boolean;
   allowStyles?: boolean;
 }
 
@@ -95,7 +96,7 @@ export function sanitizeRichHtml(
   if (!allowSvg) forbidTags.push('svg');
 
   return instance.sanitize(rawHtml, {
-    USE_PROFILES: allowSvg ? { html: true, svg: true, svgFilters: true } : { html: true },
+    USE_PROFILES: { html: true, svg: allowSvg, svgFilters: allowSvg, mathMl: options.allowMathMl },
     FORBID_TAGS: forbidTags,
     FORBID_ATTR: ['srcdoc'],
     ALLOW_DATA_ATTR: false,
