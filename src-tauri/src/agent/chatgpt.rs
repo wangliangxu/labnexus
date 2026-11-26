@@ -202,7 +202,7 @@ pub async fn status() -> Result<Status, String> {
                 label: format!(
                     "{} · {}",
                     p.email.as_deref().unwrap_or("ChatGPT account"),
-                    &p.id.chars().take(8).collect::<String>()
+                    p.id.chars().take(8).collect::<String>()
                 ),
                 connected: p.access_token.is_some() && has_plan(p),
             })

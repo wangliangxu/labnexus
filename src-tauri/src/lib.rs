@@ -13,7 +13,9 @@ use state::AppState;
 
 #[cfg(desktop)]
 fn app_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
-    use tauri::menu::{AboutMetadataBuilder, Menu, PredefinedMenuItem};
+    use tauri::menu::Menu;
+    #[cfg(target_os = "macos")]
+    use tauri::menu::{AboutMetadataBuilder, PredefinedMenuItem};
 
     let menu = Menu::default(app)?;
 

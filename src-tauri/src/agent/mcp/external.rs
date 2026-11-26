@@ -64,7 +64,7 @@ pub struct ExternalMcpClient {
 }
 
 enum McpConnection {
-    Stdio(McpProcess),
+    Stdio(Box<McpProcess>),
     Http(HttpMcpSession),
 }
 
@@ -695,7 +695,7 @@ async fn ensure_connected(
         } else {
             let mut process = McpProcess::spawn(config).await?;
             process.initialize().await?;
-            *connection = Some(McpConnection::Stdio(process));
+            *connection = Some(McpConnection::Stdio(Box::new(process)));
         }
     }
     Ok(())
