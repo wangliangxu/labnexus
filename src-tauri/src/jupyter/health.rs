@@ -54,10 +54,10 @@ impl ConnectionMonitor {
             };
             // A manual disconnect or a newer connection supersedes this check.
             if connection.status != ConnectionStatus::Connected
-                || !connection
+                || connection
                     .monitor
                     .as_ref()
-                    .is_some_and(|monitor| monitor.0.id() == tokio::task::id())
+                    .is_none_or(|monitor| monitor.0.id() != tokio::task::id())
             {
                 return;
             }
