@@ -165,7 +165,7 @@ pub async fn launch(installation: &LocalInstallation) -> Result<LocalServer, App
     let stderr = child.stderr.take().expect("piped stderr");
     let logs = std::sync::Arc::new(std::sync::Mutex::new(std::collections::VecDeque::new()));
     let log_buffer = logs.clone();
-    tokio::spawn(async move {
+    let mut log_reader = tokio::spawn(async move {
         use tokio::io::AsyncReadExt;
         let mut stderr = stderr;
         let mut chunk = [0; 1024];
@@ -218,6 +218,15 @@ pub async fn launch(installation: &LocalInstallation) -> Result<LocalServer, App
     .await;
     if let Err(error) = result {
         let _ = child.kill().await;
+        // A process can exit before the stderr reader has drained its final bytes.
+        // Bound the wait in case a descendant keeps the pipe open.
+        if tokio::time::timeout(Duration::from_secs(1), &mut log_reader)
+            .await
+            .is_err()
+        {
+            log_reader.abort();
+            let _ = log_reader.await;
+        }
         let bytes: Vec<u8> = logs.lock().unwrap().iter().copied().collect();
         let detail = String::from_utf8_lossy(&bytes).replace(&token, "[redacted]");
         return Err(AppError::JupyterConnection(format!(
