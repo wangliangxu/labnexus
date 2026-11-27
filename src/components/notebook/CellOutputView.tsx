@@ -5,6 +5,7 @@ import type { CellOutput } from '../../types/jupyter';
 import { sanitizeRichHtml } from '../../utils/sanitizeHtml';
 import { renderNotebookMarkdown } from './notebookMarkdown';
 import { SandboxedHtmlOutput } from './SandboxedHtmlOutput';
+import { ZoomableImageOutput } from './ZoomableImageOutput';
 
 interface CellOutputViewProps {
   outputs: CellOutput[];
@@ -36,9 +37,6 @@ const outText =
 
 const outRich =
   `${outBase} border border-nb-output-border bg-nb-cell text-nb-text max-w-full whitespace-normal notebook-output-rich`;
-
-const outImage =
-  `${outBase} border border-nb-output-border flex items-center justify-center bg-nb-cell`;
 
 const outError =
   `${outBase} border border-nb-error-border bg-nb-error text-nb-error-text whitespace-pre-wrap`;
@@ -146,13 +144,7 @@ export const CellOutputView: React.FC<CellOutputViewProps> = ({ outputs }) => {
               allowSvg: true,
               allowStyles: true,
             });
-            return (
-              <div
-                key={index}
-                className={outImage}
-                dangerouslySetInnerHTML={{ __html: svgContent }}
-              />
-            );
+            return <ZoomableImageOutput key={index} svg={svgContent} />;
           }
 
           if (data['text/markdown']) {
@@ -166,30 +158,10 @@ export const CellOutputView: React.FC<CellOutputViewProps> = ({ outputs }) => {
             );
           }
 
-          if (data['image/png']) {
-            const base64Png = dataToString(data['image/png']).trim();
-            return (
-              <div key={index} className={outImage}>
-                <img
-                  src={`data:image/png;base64,${base64Png}`}
-                  alt={t('Plot output')}
-                  className="max-w-full max-h-[520px] object-contain"
-                />
-              </div>
-            );
-          }
-
-          if (data['image/jpeg']) {
-            const base64Jpeg = dataToString(data['image/jpeg']).trim();
-            return (
-              <div key={index} className={outImage}>
-                <img
-                  src={`data:image/jpeg;base64,${base64Jpeg}`}
-                  alt={t('Plot output')}
-                  className="max-w-full max-h-[520px] object-contain"
-                />
-              </div>
-            );
+          const imageMimeType = data['image/png'] ? 'image/png' : data['image/jpeg'] ? 'image/jpeg' : null;
+          if (imageMimeType) {
+            const base64 = dataToString(data[imageMimeType]).trim();
+            return <ZoomableImageOutput key={index} src={`data:${imageMimeType};base64,${base64}`} />;
           }
 
           if (data['application/json']) {

@@ -25,11 +25,13 @@ export function notebookZoomShortcut(event: KeyboardEvent): NotebookZoomAction |
 
 export function listenForNotebookPinch(
   target: HTMLElement | Document,
-  onScale: (factor: number) => void
+  onScale: (factor: number) => void,
+  shouldHandle?: (event: Event) => boolean,
 ): () => void {
   let gestureScale: number | undefined;
 
   const handleGestureStart = (event: Event) => {
+    if (shouldHandle && !shouldHandle(event)) return;
     event.preventDefault();
     gestureScale = 1;
   };
@@ -47,7 +49,7 @@ export function listenForNotebookPinch(
   };
   const handleWheel = (event: WheelEvent) => {
     // Chromium and other webviews report trackpad pinch as Ctrl + wheel.
-    if (!event.ctrlKey) return;
+    if (!event.ctrlKey || (shouldHandle && !shouldHandle(event))) return;
     event.preventDefault();
     if (gestureScale !== undefined) return;
     const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16

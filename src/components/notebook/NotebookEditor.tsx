@@ -688,7 +688,9 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   useEffect(() => {
     const notebook = notebookRef.current;
     if (!notebook || !isActiveTab) return;
-    const stopListening = listenForNotebookPinch(notebook, applyPinchZoom);
+    const stopListening = listenForNotebookPinch(notebook, applyPinchZoom, (event) =>
+      !(event.target instanceof Element && event.target.closest('[data-notebook-image-zoom]'))
+    );
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || document.querySelector('dialog[open]')) return;
       const target = event.target;
