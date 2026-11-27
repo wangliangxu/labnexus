@@ -95,6 +95,7 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
   /* ── Markdown edit/render mode (JupyterLab style) ────────────── */
   const [isEditingMarkdown, setIsEditingMarkdown] = useState(false);
   const cellRef = useRef<HTMLDivElement>(null);
+  const markdownEditScroll = useRef<{ scroller: HTMLElement; scrollTop: number } | null>(null);
 
   // When cell type changes to markdown, go to rendered mode
   useEffect(() => {
@@ -132,10 +133,40 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
   }, [isActive, isEditingMarkdown]);
 
   const handleMarkdownDoubleClick = useCallback(() => {
-    if (isMarkdown && !isEditingMarkdown) {
-      setIsEditingMarkdown(true);
+    if (!isMarkdown || isEditingMarkdown) return;
+
+    const cellElement = cellRef.current;
+    const scroller = cellElement?.closest<HTMLElement>('.notebook-scroll');
+    if (!canMoveDown && cellElement && scroller) {
+      const viewportBottom = scroller.getBoundingClientRect().top + scroller.clientHeight;
+      if (cellElement.getBoundingClientRect().bottom <= viewportBottom + 1) {
+        markdownEditScroll.current = { scroller, scrollTop: scroller.scrollTop };
+      }
     }
-  }, [isMarkdown, isEditingMarkdown]);
+    setIsEditingMarkdown(true);
+  }, [canMoveDown, isMarkdown, isEditingMarkdown]);
+
+  const handleCreateEditor = useCallback((view: EditorView) => {
+    const previousScroll = markdownEditScroll.current;
+    markdownEditScroll.current = null;
+    if (!previousScroll) return;
+
+    // CodeMirror measures wrapped lines on mount. Use the editor's laid-out height.
+    requestAnimationFrame(() => {
+      if (!view.dom.isConnected) return;
+      const { scroller, scrollTop } = previousScroll;
+      const viewportTop = scroller.getBoundingClientRect().top;
+      const editorBounds = view.dom.getBoundingClientRect();
+      const cellBottom = cellRef.current?.getBoundingClientRect().bottom ?? editorBounds.bottom;
+      const overflow = Math.ceil(cellBottom - viewportTop - scroller.clientHeight);
+      scroller.scrollTop = Math.max(scrollTop, scroller.scrollTop + Math.max(0, overflow));
+
+      // With the first line above the viewport, start typing at the visible end.
+      if (view.dom.getBoundingClientRect().top < viewportTop) {
+        view.dispatch({ selection: { anchor: view.state.doc.length } });
+      }
+    });
+  }, []);
 
   /* ── Dark theme detection for CodeMirror ─────────────────────── */
   const [isDarkTheme, setIsDarkTheme] = useState(() => {
@@ -343,6 +374,7 @@ const CellEditorComponent: React.FC<CellEditorProps> = ({
                 extensions={extensions}
                 onChange={handleEditorChange}
                 onUpdate={handleEditorUpdate}
+                onCreateEditor={handleCreateEditor}
                 theme={isDarkTheme ? 'dark' : 'light'}
                 basicSetup={basicSetup}
                 autoFocus={isMarkdown && isEditingMarkdown}

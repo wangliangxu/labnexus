@@ -2,7 +2,13 @@
 
 **LabNexus** 是一款基于 **Tauri v2 (Rust)** 与 **React 19 (TypeScript)** 构建的原生桌面端远程 JupyterLab 客户端与科学计算 AI Agent 工作台。它专为连接远程算力集群、内网 GPU 服务器以及本地科学计算环境而设计，将多标签页 Notebook/代码编辑、SSH/SOCKS5 隧道穿透、远程终端与支持 MCP 协议的 ReAct 智能体深度融合在轻量级原生桌面应用中。
 
-> **Current Version**: `v0.6.6`
+> **Current Version**: `v0.6.7`
+
+### v0.6.7 更新
+
+- 修复双击 Notebook 底部最后一个 Markdown 单元格后末行被遮挡的问题。
+- 改进 Markdown 行内 LaTeX 公式的渲染，兼容公式两端的空格。
+- 详细变更见 [v0.6.7 版本说明](docs/releases/v0.6.7.md)。
 
 ### v0.6.6 更新
 
@@ -236,9 +242,9 @@ npm run tauri build
 
 ```bash
 # 确认版本更新已提交并推送后，为当前提交创建标签
-# 当前版本为 0.6.6，后续发布请替换为新的版本号
-git tag v0.6.6
-git push origin v0.6.6
+# 当前版本为 0.6.7，后续发布请替换为新的版本号
+git tag v0.6.7
+git push origin v0.6.7
 ```
 
 工作流使用 GitHub 自动提供的 `GITHUB_TOKEN`，无需额外配置个人访问令牌。当前产物未配置开发者证书签名，macOS 产物也未公证，安装时系统可能提示来源未验证；面向正式分发时应另行配置 Apple / Windows 代码签名。打包不包含 Python 或 Jupyter 环境，使用本地 Jupyter 功能仍需自行安装。

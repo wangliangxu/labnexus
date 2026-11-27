@@ -1,6 +1,6 @@
 [package]
 name = "labnexus"
-version = "0.6.6"
+version = "0.6.7"
 description = "LabNexus — Remote JupyterLab Client with AI Agent"
 authors = ["wangliangxu"]
 edition = "2021"

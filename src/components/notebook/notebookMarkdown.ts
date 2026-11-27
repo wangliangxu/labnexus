@@ -4,7 +4,10 @@ import markedCjkFriendly from 'marked-cjk-friendly';
 import { sanitizeRichHtml } from '../../utils/sanitizeHtml';
 
 function renderMath({ text, displayMode }: Tokens.Generic): string {
-  return katex.renderToString(text, { displayMode, throwOnError: false, trust: false });
+  // A notebook generated from a string literal can contain a tab in place of
+  // the start of \text. Marked can expand that tab to spaces inside a list.
+  const tex = text.replace(/([ \t]+)ext(?=\{)/g, '$1\\text').trim();
+  return katex.renderToString(tex, { displayMode, throwOnError: false, trust: false });
 }
 
 const markdown = new Marked({ gfm: true, breaks: true }, markedCjkFriendly(), {
@@ -29,12 +32,15 @@ const markdown = new Marked({ gfm: true, breaks: true }, markedCjkFriendly(), {
         return src.indexOf('$');
       },
       tokenizer(src) {
-        // A single dollar hugs the formula on both sides, so prices such as "$5 to $10" stay literal.
         const displayMode = src.startsWith('$$');
         const match = displayMode
           ? /^\$\$((?:\\[^\n]|[^\\$\n])+)\$\$/.exec(src)
-          : /^\$(?!\s)((?:\\[^\n]|[^\\$\n])+)(?<!\s)\$(?!\d)/.exec(src);
-        if (match) return { type: 'inlineMath', raw: match[0], text: match[1], displayMode };
+          : /^\$((?:\\[^\n]|[^\\$\n])+)\$(?!\d)/.exec(src);
+        if (!match) return;
+        const text = match[1];
+        // Permit padding around TeX commands while keeping prose with prices literal.
+        if (!displayMode && text !== text.trim() && !/(?:\\[a-z]|[ \t]ext\{)/i.test(text)) return;
+        return { type: 'inlineMath', raw: match[0], text, displayMode };
       },
       renderer: renderMath,
     },

@@ -992,7 +992,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         scale: notebookZoom / 100,
         onPinch: isActiveTab ? applyPinchZoom : null,
       }}>
-        <div className="flex-1 min-h-0 overflow-auto">
+        <div className="notebook-scroll flex-1 min-h-0 overflow-auto">
           <div
             className="w-full max-w-[1180px] mx-auto px-7 pt-[22px] max-[760px]:px-2.5 max-[760px]:pt-3.5"
             style={{ zoom: notebookZoom / 100 }}

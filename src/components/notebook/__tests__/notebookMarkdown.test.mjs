@@ -10,6 +10,17 @@ assert.match(formulas, /mathvariant="script">V/);
 assert.match(formulas, /<msub>/);
 assert.doesNotMatch(formulas, /katex-error|<em>/);
 
+const padded = renderNotebookMarkdown(String.raw`3. 违反 $ \text{SH2O} \le \text{SMC} $、违反 $\text{SMC} \le \text{MAXSMC}$。`);
+const legacySource = String.raw`3. 违反 $\text{SH2O} \le \text{SMC} $、违反 $\text{SMC} \le \text{MAXSMC}$。`
+  .replaceAll('\\text', '\text');
+const legacy = renderNotebookMarkdown(legacySource);
+for (const html of [padded, legacy]) {
+  assert.equal(html.match(/class="katex"/g)?.length, 2);
+  assert.match(html, /<mtext>SH2O<\/mtext><mo>≤<\/mo><mtext>SMC<\/mtext>/);
+  assert.match(html, /<mtext>SMC<\/mtext><mo>≤<\/mo><mtext>MAXSMC<\/mtext>/);
+  assert.doesNotMatch(html, /katex-error/);
+}
+
 const display = renderNotebookMarkdown('推导如下\n$$\nA = \\frac{x_1}{y}\n$$\n因此 $$A y = x_1$$。');
 assert.equal(display.match(/class="katex-display"/g)?.length, 2);
 assert.match(display, /<mfrac>/);
